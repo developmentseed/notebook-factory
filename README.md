@@ -1,3 +1,5 @@
+**Note**: This is currently a "vibe-coded" experiment - the below README and most of the code was AI-generated.
+
 # Montandon Notebook Factory
 
 A thin Django application that **indexes parameterized analysis notebooks, orchestrates their
