@@ -1,0 +1,14 @@
+{% extends "web/base.html" %}
+{% block title %}Log in{% endblock %}
+{% block content %}
+<div class="panel narrow">
+  <h1>Log in</h1>
+  <form method="post">{% csrf_token %}
+    {% if form.errors %}<p class="error">Invalid username or password.</p>{% endif %}
+    <label>Username <input type="text" name="username" autofocus required></label>
+    <label>Password <input type="password" name="password" required></label>
+    <input type="hidden" name="next" value="{{ next }}">
+    <button class="btn primary">Log in</button>
+  </form>
+</div>
+{% endblock %}

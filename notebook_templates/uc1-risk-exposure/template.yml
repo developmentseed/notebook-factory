@@ -1,0 +1,138 @@
+title: Population & infrastructure risk exposure
+summary: How many people and which facilities are exposed to a hazard, before any event — a baseline for
+  preparedness.
+description: '**Use Case 1 · Risk · before the event.** Compares a hazard layer against a threshold to
+  build a hazard mask,
+
+  overlays population and facilities, and aggregates exposed population and facility counts per subdivision.
+
+
+  > The hazard and population grids in this version are **synthetic** so the pipeline can be exercised
+  without large
+
+  > downloads. Swap the loaders for STORM / Aqueduct / GEM / GlobFire rasters and WorldPop / GHSL to make
+  it real;
+
+  > the method (mask → overlay → zonal statistics) stays the same.'
+use_case: uc1
+hazards:
+- flood
+- cyclone
+- earthquake
+- wildfire
+- heatwave
+version: '0.2'
+requires_area: true
+estimated_runtime_minutes: 3
+parameters:
+  type: object
+  properties:
+    hazard:
+      type: string
+      title: Hazard
+      enum:
+      - flood
+      - cyclone
+      - earthquake
+      - wildfire
+      - heatwave
+      default: flood
+      x-enum-labels:
+        flood: Riverine flood
+        cyclone: Tropical cyclone
+        earthquake: Earthquake
+        wildfire: Wildfire
+        heatwave: Heatwave
+    intensity_threshold:
+      type: number
+      title: Hazard intensity threshold
+      default: 0.5
+      minimum: 0
+      maximum: 1
+      multipleOf: 0.05
+      description: Normalised 0–1 in this illustrative version (e.g. flood depth, wind speed, shaking
+        intensity).
+    return_period:
+      type: integer
+      title: Event return period (years)
+      enum:
+      - 10
+      - 25
+      - 50
+      - 100
+      - 250
+      default: 100
+      description: For floods and cyclones.
+    climate_scenario:
+      type: string
+      title: Climate scenario
+      enum:
+      - current
+      - rcp45
+      - rcp85
+      default: current
+      x-widget: radio
+      x-enum-labels:
+        current: Current
+        rcp45: RCP 4.5
+        rcp85: RCP 8.5
+    aggregation_level:
+      type: integer
+      title: Aggregation subdivisions
+      enum:
+      - 1
+      - 2
+      - 3
+      default: 2
+      x-enum-labels:
+        '1': Admin level 1
+        '2': Admin level 2
+        '3': Admin level 3
+      description: Admin level used for zonal statistics.
+    population_source:
+      type: string
+      title: Population data
+      enum:
+      - worldpop_100m
+      - worldpop_1km
+      - ghsl_100m
+      default: worldpop_100m
+      x-enum-labels:
+        worldpop_100m: WorldPop · 100 m
+        worldpop_1km: WorldPop · 1 km
+        ghsl_100m: GHSL · 100 m
+    age_group:
+      type: string
+      title: Age disaggregation
+      enum:
+      - all
+      - under_18
+      - under_5
+      - over_65
+      default: all
+      x-enum-labels:
+        all: Total population
+        under_18: Children (under 18)
+        under_5: Under 5
+        over_65: Elderly (65+)
+    infrastructure_layers:
+      type: array
+      title: Infrastructure layers
+      items:
+        type: string
+        enum:
+        - schools
+        - hospitals
+        - airports
+        - roads
+        x-enum-labels:
+          schools: Schools
+          hospitals: Hospitals
+          airports: Airports
+          roads: Primary roads
+      default:
+      - schools
+      - hospitals
+  required:
+  - hazard
+  - intensity_threshold

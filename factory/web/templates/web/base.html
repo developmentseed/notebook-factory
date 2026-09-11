@@ -1,0 +1,41 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ SITE_NAME }}{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'web/app.css' %}">
+  <script src="https://unpkg.com/htmx.org@2.0.4" crossorigin="anonymous"></script>
+  {% block head %}{% endblock %}
+</head>
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+<header class="topbar">
+  <a class="brand" href="{% url 'web:browse' %}"><span class="brand-mark">M</span><span>{{ SITE_NAME }}</span></a>
+  <nav>
+    <a href="{% url 'web:browse' %}" class="{% if request.resolver_match.url_name == 'browse' %}active{% endif %}">Analyses</a>
+    <a href="{% url 'web:template-list' %}" class="{% if 'template' in request.resolver_match.url_name %}active{% endif %}">Templates</a>
+    <a href="{% url 'web:event-list' %}" class="{% if 'event' in request.resolver_match.url_name %}active{% endif %}">Events</a>
+    <a href="{% url 'api:docs' %}">API</a>
+  </nav>
+  <div class="topbar-right">
+    {% if user.is_authenticated %}
+      <a class="bell" href="{% url 'web:notifications' %}" title="Notifications">🔔{% if unread_notifications %}<span class="badge">{{ unread_notifications }}</span>{% endif %}</a>
+      <span class="user">{{ user.get_username }}</span>
+      {% if user.is_staff %}<a href="{% url 'admin:index' %}">Admin</a>{% endif %}
+      <form method="post" action="{% url 'web:logout' %}" class="inline">{% csrf_token %}<button class="link">Log out</button></form>
+    {% else %}
+      <a href="{% url 'web:login' %}?next={{ request.path }}">Log in</a>
+    {% endif %}
+  </div>
+</header>
+<main class="container">
+  {% if messages %}<div class="messages">{% for m in messages %}<div class="msg {{ m.tags }}">{{ m }}</div>{% endfor %}</div>{% endif %}
+  {% block content %}{% endblock %}
+</main>
+<footer class="footer">
+  <span>{{ SITE_NAME }} · reproducible, discoverable disaster analytics.</span>
+  {% if eager_mode %}<span class="pill muted" title="No Celery broker configured; runs execute in-process.">local mode</span>{% endif %}
+</footer>
+{% block scripts %}{% endblock %}
+</body>
+</html>

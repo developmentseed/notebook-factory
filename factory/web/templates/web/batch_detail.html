@@ -1,0 +1,10 @@
+{% extends "web/base.html" %}
+{% block title %}Batch · {{ batch.notebook.title }}{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="{% url 'web:browse' %}">Analyses</a> › <a href="{{ batch.notebook.get_absolute_url }}">{{ batch.notebook.title }}</a> › Batch <code>{{ batch.id|stringformat:"s"|slice:":8" }}</code></p>
+<h1>{{ batch.notebook.title }} · {{ batch.description }}</h1>
+<p class="lead">{{ total }} runs fanned out from one request · {{ batch.get_trigger_display }} · {{ batch.created_at|date:"Y-m-d H:i" }}</p>
+<div id="batch-runs" hx-get="{{ batch.get_absolute_url }}" hx-trigger="every 3s" hx-swap="innerHTML">
+  {% include "web/partials/batch_runs.html" %}
+</div>
+{% endblock %}

@@ -1,0 +1,31 @@
+title: 'Demo: area map'
+summary: 'A fast smoke test: maps the selected area and its subdivisions with lonboard and writes a small
+  table.'
+description: Use this template to check that the pipeline (papermill → MyST → storage) works end to end.
+  It takes a few seconds, needs no external data, and shows an interactive lonboard map plus a widget
+  in the published page.
+use_case: other
+version: '0.1'
+requires_area: true
+estimated_runtime_minutes: 1
+parameters:
+  type: object
+  properties:
+    label:
+      type: string
+      title: Label
+      default: Hello from the Notebook Factory
+      description: Free text shown in the output
+    buffer_km:
+      type: number
+      title: Buffer (km)
+      default: 5
+      minimum: 0
+      maximum: 100
+      description: Buffer drawn around the area outline
+    show_subdivisions:
+      type: boolean
+      title: Show subdivisions
+      default: true
+  required:
+  - label

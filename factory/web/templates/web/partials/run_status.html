@@ -1,0 +1,65 @@
+{% load humanize web_extras %}
+<div id="run-status" {% if not run.is_terminal %}hx-get="{{ run.get_absolute_url }}" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+<div class="page-head">
+  <div>
+    <span class="pill status {{ run.status|status_class }}">{{ run.get_status_display }}</span>
+    <h1>{{ run.title }}</h1>
+    <p class="lead">{{ run.subtitle }}</p>
+  </div>
+  <div class="actions">
+    {% if run.status == 'published' %}
+      <a class="btn primary" href="{% url 'web:run-view' run.id %}">Open result →</a>
+      <a class="btn" href="{{ run.output_url }}" target="_blank" rel="noopener">Direct link</a>
+      <a class="btn" href="{{ run.notebook_url }}">Download .ipynb</a>
+    {% endif %}
+    {% if user.is_authenticated %}
+      {% if not run.is_terminal %}<form method="post" action="{% url 'web:run-cancel' run.id %}">{% csrf_token %}<button class="btn danger">Cancel</button></form>{% endif %}
+      {% if run.status == 'failed' or run.status == 'cancelled' %}<form method="post" action="{% url 'web:run-retry' run.id %}">{% csrf_token %}<button class="btn">Retry</button></form>{% endif %}
+    {% endif %}
+  </div>
+</div>
+<div class="two-col">
+  <div>
+    <ol class="stepper">
+      {% for s in run.stages %}
+      <li class="{{ s.state }}">
+        <span class="dot">{% if s.state == 'done' %}✓{% elif s.state == 'failed' %}✕{% elif s.state == 'active' %}●{% else %}○{% endif %}</span>
+        <div><strong>{{ s.label }}</strong>
+          {% if s.state == 'active' and run.progress.message %}<br><span class="muted small">{{ run.progress.message }}</span>{% endif %}
+          {% if s.key == 'queued' and run.created_at %}<br><span class="muted small">accepted {{ run.created_at|date:"H:i" }}</span>{% endif %}
+        </div>
+      </li>
+      {% endfor %}
+    </ol>
+    {% if run.status == 'executing' and run.progress.total %}
+    <progress max="{{ run.progress.total }}" value="{{ run.progress.cell|default:0 }}"></progress>
+    {% endif %}
+    {% if run.error %}<pre class="error-box">{{ run.error }}</pre>{% endif %}
+    {% if run.writeback_status != 'none' %}
+      <p><strong>Write-back:</strong> {{ run.get_writeback_status_display }}{% if run.writeback_ref %} · <code>{{ run.writeback_ref }}</code>{% endif %}{% if run.writeback_error %}<br><span class="error">{{ run.writeback_error }}</span>{% endif %}</p>
+    {% endif %}
+    <h2>run.log</h2>
+    <pre class="log">{% for e in log %}[{{ e.created_at|date:"H:i:s" }}] {% if e.level == 'error' %}✕ {% endif %}{{ e.message }}
+{% endfor %}{% if not run.is_terminal %}▌{% endif %}</pre>
+  </div>
+  <aside class="side">
+    <div class="panel">
+      <div class="muted small">RUN DETAILS</div>
+      <dl class="facts">
+        <dt>Run id</dt><dd><code>{{ run.id }}</code></dd>
+        <dt>Template</dt><dd><a href="{{ run.notebook.get_absolute_url }}">{{ run.notebook.title }}</a>{% if run.notebook.version %} · v{{ run.notebook.version }}{% endif %}</dd>
+        {% if run.area %}<dt>Area</dt><dd>{{ run.area.breadcrumb }}<br><span class="muted small">{{ run.area.display_level }} · {{ run.area.code }}</span></dd>{% endif %}
+        {% if run.event %}<dt>Event</dt><dd><a href="{{ run.event.get_absolute_url }}">{{ run.event.title }}</a><br><code class="small">{{ run.event.monty_corr_id }}</code></dd>{% endif %}
+        {% if run.hazard %}<dt>Hazard</dt><dd>{{ run.hazard.icon }} {{ run.hazard.label }}</dd>{% endif %}
+        <dt>Params</dt><dd class="small">{% for k, v in run.parameters.items %}<div><span class="muted">{{ k }}</span> {{ v }}</div>{% empty %}—{% endfor %}</dd>
+        <dt>Triggered by</dt><dd>{% if run.triggered_by %}{{ run.triggered_by.email|default:run.triggered_by.username }}{% else %}{{ run.get_trigger_display }}{% endif %}{% if run.trigger_rule %}<br><span class="muted small">rule: {{ run.trigger_rule.name }}</span>{% endif %}</dd>
+        <dt>Started</dt><dd>{{ run.started_at|date:"Y-m-d H:i:s"|default:"—" }}</dd>
+        <dt>Finished</dt><dd>{{ run.finished_at|date:"Y-m-d H:i:s"|default:"—" }}{% if run.duration %} <span class="muted small">({{ run.duration }})</span>{% endif %}</dd>
+        {% if run.batch %}<dt>Batch</dt><dd><a href="{{ run.batch.get_absolute_url }}">{{ run.batch.description }}</a></dd>{% endif %}
+        {% if run.artifacts %}<dt>Artifacts</dt><dd class="small">{% for name, url in run.artifacts.items %}<a href="{{ url }}">{{ name }}</a><br>{% endfor %}</dd>{% endif %}
+      </dl>
+      {% if not run.is_terminal and run.notify_emails %}<p class="muted small">✉ A link will be emailed to {{ run.notify_emails|join:", " }} when it's ready.</p>{% endif %}
+    </div>
+  </aside>
+</div>
+</div>

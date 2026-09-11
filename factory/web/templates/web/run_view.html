@@ -1,0 +1,15 @@
+{% extends "web/base.html" %}
+{% block title %}{{ run.title }}{% endblock %}
+{% block content %}
+<div class="viewer-bar">
+  <div>
+    <a href="{{ run.get_absolute_url }}">‹ Run details</a> ·
+    <strong>{{ run.title }}</strong> <span class="muted">{{ run.subtitle }} · {{ run.created_at|date:"Y-m-d" }}</span>
+  </div>
+  <div class="actions">
+    <a class="btn small" href="{{ run.output_url }}" target="_blank" rel="noopener">Open in new tab ↗</a>
+    <a class="btn small" href="{{ run.notebook_url }}">Download .ipynb</a>
+  </div>
+</div>
+<iframe class="viewer" src="{{ run.output_url }}" title="{{ run.title }}" loading="lazy"></iframe>
+{% endblock %}

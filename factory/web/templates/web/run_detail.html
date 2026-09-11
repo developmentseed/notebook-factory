@@ -1,0 +1,6 @@
+{% extends "web/base.html" %}
+{% block title %}Run {{ run.short_id }} · {{ run.title }}{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="{% url 'web:browse' %}">Analyses</a> › <a href="{{ run.notebook.get_absolute_url }}">{{ run.notebook.title }}</a> › Run <code>{{ run.short_id }}</code></p>
+{% include "web/partials/run_status.html" %}
+{% endblock %}

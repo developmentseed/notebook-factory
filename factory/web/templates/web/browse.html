@@ -1,0 +1,49 @@
+{% extends "web/base.html" %}
+{% block title %}Analyses · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Analyses</h1>
+    <p class="lead">Every generated analysis is indexed here. Filter by country, hazard or use case, then open the published page.</p>
+  </div>
+  <a class="btn primary" href="{% url 'web:template-list' %}">＋ New analysis</a>
+</div>
+<div class="browse">
+  <form class="filters" method="get" hx-get="{% url 'web:browse' %}" hx-target="#results" hx-trigger="change, keyup changed delay:400ms from:#q" hx-push-url="true">
+    <input id="q" type="search" name="q" placeholder="Search analyses, countries, events…" value="{{ filters.q }}">
+    <fieldset><legend>Country</legend>
+      <label><input type="radio" name="country" value="" {% if not filters.country %}checked{% endif %}> All</label>
+      {% for c in countries %}<label><input type="radio" name="country" value="{{ c.iso3 }}" {% if filters.country == c.iso3 %}checked{% endif %}> {{ c.name }}</label>{% endfor %}
+    </fieldset>
+    <fieldset><legend>Hazard</legend>
+      <label><input type="radio" name="hazard" value="" {% if not filters.hazard %}checked{% endif %}> All</label>
+      {% for h in hazards %}<label><input type="radio" name="hazard" value="{{ h.key }}" {% if filters.hazard == h.key %}checked{% endif %}> {{ h.icon }} {{ h.label }}</label>{% endfor %}
+    </fieldset>
+    <fieldset><legend>Use case</legend>
+      <label><input type="radio" name="use_case" value="" {% if not filters.use_case %}checked{% endif %}> All</label>
+      {% for key, label in use_cases %}<label><input type="radio" name="use_case" value="{{ key }}" {% if filters.use_case == key %}checked{% endif %}> {{ key|upper }} · {{ label }}</label>{% endfor %}
+    </fieldset>
+    <fieldset><legend>Date</legend>
+      <label><input type="radio" name="period" value="30" {% if filters.period == '30' %}checked{% endif %}> Last 30 days</label>
+      <label><input type="radio" name="period" value="90" {% if filters.period == '90' %}checked{% endif %}> Last 90 days</label>
+      <label><input type="radio" name="period" value="" {% if not filters.period %}checked{% endif %}> All time</label>
+    </fieldset>
+    <fieldset><legend>Status</legend>
+      <label><input type="radio" name="status" value="published" {% if filters.status == 'published' %}checked{% endif %}> Published</label>
+      <label><input type="radio" name="status" value="active" {% if filters.status == 'active' %}checked{% endif %}> In progress</label>
+      <label><input type="radio" name="status" value="failed" {% if filters.status == 'failed' %}checked{% endif %}> Failed</label>
+      <label><input type="radio" name="status" value="all" {% if filters.status == 'all' %}checked{% endif %}> All</label>
+    </fieldset>
+    <label class="sort">Sort
+      <select name="sort">
+        <option value="-created_at" {% if filters.sort == '-created_at' %}selected{% endif %}>Newest</option>
+        <option value="created_at" {% if filters.sort == 'created_at' %}selected{% endif %}>Oldest</option>
+        <option value="area__name" {% if filters.sort == 'area__name' %}selected{% endif %}>Area</option>
+        <option value="notebook__title" {% if filters.sort == 'notebook__title' %}selected{% endif %}>Template</option>
+      </select>
+    </label>
+    <noscript><button class="btn">Apply</button></noscript>
+  </form>
+  <section id="results">{% include "web/partials/run_cards.html" %}</section>
+</div>
+{% endblock %}

@@ -1,0 +1,8 @@
+{% load web_extras %}
+<div class="counts">
+  <span class="pill status ok">{{ counts.published }} published</span>
+  <span class="pill status active">{{ counts.executing|add:counts.fetching|add:counts.rendering|add:counts.publishing }} running</span>
+  <span class="pill status muted">{{ counts.queued }} queued</span>
+  <span class="pill status err">{{ counts.failed }} failed</span>
+</div>
+{% include "web/partials/run_table.html" with runs=runs %}

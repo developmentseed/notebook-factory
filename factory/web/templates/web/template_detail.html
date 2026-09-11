@@ -1,0 +1,46 @@
+{% extends "web/base.html" %}
+{% load web_extras humanize %}
+{% block title %}{{ nb.title }} · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="{% url 'web:template-list' %}">Templates</a> › {{ nb.title }}</p>
+<div class="two-col">
+  <div>
+    <span class="pill uc {{ nb.use_case }}">{{ nb.get_use_case_display }}</span>
+    <h1>{{ nb.title }}</h1>
+    <p class="lead">{{ nb.summary }}</p>
+    <div class="prose">{{ nb.description|markdown }}</div>
+    <h2>Parameters <span class="muted small">schema · {{ fields|length }} fields</span></h2>
+    <table class="table">
+      <thead><tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+      <tbody>
+      {% for f in fields %}
+        <tr><td><strong>{{ f.title }}</strong><br><code>{{ f.name }}</code></td>
+            <td>{{ f.type }}{% if f.choices %} · {{ f.choices|length }} options{% endif %}</td>
+            <td>{{ f.default|default:"—" }}</td><td>{{ f.description }}</td></tr>
+      {% empty %}<tr><td colspan="4" class="muted">This template takes no user parameters.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% if rules %}
+    <h2>Automatic triggers</h2>
+    <ul class="list">{% for r in rules %}<li><strong>{{ r.name }}</strong> — watches {{ r.collections|join:", " }}{% if not r.enabled %} <span class="pill muted">disabled</span>{% endif %}{% if r.last_triggered_at %} · last fired {{ r.last_triggered_at|naturaltime }}{% endif %}</li>{% endfor %}</ul>
+    {% endif %}
+    <h2>Recent runs <span class="muted small">{{ run_count }} total</span></h2>
+    {% include "web/partials/run_table.html" with runs=runs %}
+  </div>
+  <aside class="side">
+    <div class="panel">
+      <dl class="facts">
+        <dt>Source</dt><dd>{% if nb.source_repo %}<a href="{{ nb.source_repo }}">{{ nb.source_repo|cut:"https://" }}</a>{% else %}local templates dir{% endif %}<br><code>{{ nb.notebook_path }}</code></dd>
+        <dt>Version</dt><dd>{{ nb.version|default:"—" }}{% if nb.source_ref %} · {{ nb.source_ref }}{% endif %}</dd>
+        <dt>Hazards</dt><dd>{% for h in nb.hazards.all %}<span class="pill hz" style="--hz: {{ h.color|default:'#6B7280' }}">{{ h.icon }} {{ h.label }}</span> {% empty %}any{% endfor %}</dd>
+        <dt>Inputs</dt><dd>{% if nb.requires_area %}Admin area{% if nb.area_levels %} (levels {{ nb.area_levels|join:", " }}){% endif %}{% endif %}{% if nb.requires_event %}{% if nb.requires_area %} + {% endif %}Montandon event{% endif %}{% if not nb.requires_area and not nb.requires_event %}parameters only{% endif %}</dd>
+        {% if nb.supports_writeback %}<dt>Write-back</dt><dd>Publishes a STAC collection to Montandon</dd>{% endif %}
+        <dt>Est. runtime</dt><dd>{% if nb.estimated_runtime_minutes %}~{{ nb.estimated_runtime_minutes }} min{% else %}—{% endif %}</dd>
+        <dt>Updated</dt><dd>{{ nb.updated_at|date:"Y-m-d" }}</dd>
+      </dl>
+      <a class="btn primary block" href="{% url 'web:run-new' nb.slug %}">Run this analysis →</a>
+    </div>
+  </aside>
+</div>
+{% endblock %}

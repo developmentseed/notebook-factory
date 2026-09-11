@@ -1,0 +1,17 @@
+{% load humanize web_extras %}
+<table class="table runs">
+  <thead><tr><th>Run</th><th>Target</th><th>Parameters</th><th>Status</th><th>Created</th><th></th></tr></thead>
+  <tbody>
+  {% for r in runs %}
+  <tr>
+    <td><a href="{{ r.get_absolute_url }}"><code>{{ r.short_id }}</code></a><br><span class="muted small">{{ r.notebook.title }}</span></td>
+    <td>{% if r.area %}{{ r.area.name }}<br><span class="muted small">{{ r.area.country.name }} · {{ r.area.display_level }}</span>{% elif r.event %}{{ r.event.title|truncatechars:40 }}{% else %}—{% endif %}</td>
+    <td class="small">{{ r.parameter_summary|truncatechars:80 }}</td>
+    <td><span class="pill status {{ r.status|status_class }}">{{ r.get_status_display }}</span></td>
+    <td class="small">{{ r.created_at|naturaltime }}<br><span class="muted">{{ r.get_trigger_display }}</span></td>
+    <td>{% if r.status == 'published' %}<a class="btn small" href="{% url 'web:run-view' r.id %}">Open</a>{% endif %}</td>
+  </tr>
+  {% empty %}<tr><td colspan="6" class="muted">No runs yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>

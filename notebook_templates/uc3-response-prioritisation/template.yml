@@ -1,0 +1,83 @@
+title: Operational response prioritisation
+summary: Which affected areas to prioritise in the first 24–72 hours — exposure, impact, Montandon history
+  and operational data, written back to Montandon as a STAC collection.
+description: '**Use Case 3 · Action · first 24–72 hours.** Normalises component signals (observed severity,
+  vulnerability &
+
+  coping capacity, historical burden, operational gap) to 0–1, combines them into a transparent composite
+  index,
+
+  attaches a confidence score and a plain-language rationale per area, and publishes the ranking as a
+
+  `response-prioritisation` STAC collection tied to the event by `monty:corr_id`.
+
+
+  > Component signals are **illustrative** here (synthetic severity / vulnerability; Montandon history
+  is queried
+
+  > when a token is available). The composite, confidence and write-back contract are real.'
+use_case: uc3
+hazards:
+- flood
+- cyclone
+- earthquake
+- wildfire
+version: '0.2'
+requires_area: true
+requires_event: true
+supports_writeback: true
+estimated_runtime_minutes: 3
+parameters:
+  type: object
+  properties:
+    weighting:
+      type: string
+      title: Aggregation
+      enum:
+      - geometric
+      - weighted
+      default: geometric
+      x-widget: radio
+      x-enum-labels:
+        geometric: INFORM-style geometric mean
+        weighted: Weighted arithmetic mean
+    w_severity:
+      type: number
+      title: Weight · observed severity
+      default: 0.4
+      minimum: 0
+      maximum: 1
+      multipleOf: 0.05
+    w_vulnerability:
+      type: number
+      title: Weight · vulnerability & coping capacity
+      default: 0.3
+      minimum: 0
+      maximum: 1
+      multipleOf: 0.05
+    w_history:
+      type: number
+      title: Weight · historical burden
+      default: 0.2
+      minimum: 0
+      maximum: 1
+      multipleOf: 0.05
+    w_gap:
+      type: number
+      title: Weight · operational gap & accessibility
+      default: 0.1
+      minimum: 0
+      maximum: 1
+      multipleOf: 0.05
+    top_n:
+      type: integer
+      title: Areas to flag
+      default: 10
+      minimum: 1
+      maximum: 100
+    extent_radius_km:
+      type: number
+      title: Stand-in extent radius (km)
+      default: 60
+      minimum: 1
+      maximum: 500

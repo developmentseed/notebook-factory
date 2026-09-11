@@ -1,0 +1,26 @@
+{
+  "type": "Feature",
+  "stac_version": "1.0.0",
+  "id": "example-event-npl-earthquake-2026",
+  "collection": "reference-events",
+  "geometry": {"type": "Point", "coordinates": [84.73, 28.23]},
+  "bbox": [84.73, 28.23, 84.73, 28.23],
+  "properties": {
+    "title": "Earthquake in Nepal (Gorkha region) — example event",
+    "description": "Illustrative M6.8 earthquake near Gorkha used to exercise the event-triggered pipeline.",
+    "datetime": "2026-09-01T06:11:26Z",
+    "start_datetime": "2026-09-01T06:11:26Z",
+    "end_datetime": "2026-09-01T06:11:26Z",
+    "roles": ["event"],
+    "source": "example",
+    "monty:corr_id": "20260901-NPL-GEO-EAR-GRO-1-GCDB",
+    "monty:hazard_codes": ["nat-geo-ear-gro"],
+    "monty:country_codes": ["NPL"],
+    "monty:episode_number": 1,
+    "updated": "2026-09-01T08:00:00Z"
+  },
+  "links": [
+    {"rel": "self", "href": "https://montandon-eoapi-stage.ifrc.org/stac/collections/reference-events/items/example-event-npl-earthquake-2026", "type": "application/geo+json"}
+  ],
+  "assets": {}
+}

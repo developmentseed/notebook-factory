@@ -1,0 +1,12 @@
+{% extends "web/base.html" %}
+{% load humanize %}
+{% block title %}Notifications{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Notifications</h1><form method="post">{% csrf_token %}<button class="btn">Mark all read</button></form></div>
+<ul class="list notifications">
+  {% for n in notifications %}
+  <li class="{% if not n.is_read %}unread{% endif %}"><a href="{% url 'web:notification-open' n.pk %}">{{ n.subject }}</a><br><span class="muted small">{{ n.created_at|naturaltime }}{% if n.sent_at %} · emailed to {{ n.email }}{% endif %}</span></li>
+  {% empty %}<li class="muted">Nothing yet. You'll be notified here (and by email) when a run you requested finishes.</li>
+  {% endfor %}
+</ul>
+{% endblock %}

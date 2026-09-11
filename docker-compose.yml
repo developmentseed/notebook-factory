@@ -1,0 +1,65 @@
+# Full stack: PostGIS, Redis, MinIO (S3-compatible object storage), web, worker, beat.
+#   docker compose up --build
+#   docker compose run --rm web python manage.py seed_demo --countries NPL
+#   docker compose run --rm web python manage.py createsuperuser
+services:
+  db:
+    image: postgis/postgis:17-3.5
+    environment:
+      POSTGRES_DB: notebook_factory
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U postgres"], interval: 5s, timeout: 3s, retries: 20 }
+
+  redis:
+    image: redis:7-alpine
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio12345
+    ports: ["${MINIO_PORT:-9000}:9000", "${MINIO_CONSOLE_PORT:-9001}:9001"]
+    volumes: ["minio:/data"]
+    healthcheck: { test: ["CMD", "mc", "ready", "local"], interval: 5s, timeout: 3s, retries: 20 }
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on: { minio: { condition: service_healthy } }
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minio minio12345 &&
+      mc mb --ignore-existing local/notebooks &&
+      mc anonymous set download local/notebooks"
+
+  web:
+    build: .
+    image: notebook-factory:local
+    command: web
+    env_file: docker/compose.env
+    ports: ["${WEB_PORT:-8000}:8000"]
+    volumes: ["./notebook_templates:/app/notebook_templates:ro", "workdata:/app/data"]
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_started }
+      minio-init: { condition: service_completed_successfully }
+
+  worker:
+    image: notebook-factory:local
+    command: worker
+    env_file: docker/compose.env
+    volumes: ["./notebook_templates:/app/notebook_templates:ro", "workdata:/app/data"]
+    depends_on: [web]
+
+  beat:
+    image: notebook-factory:local
+    command: beat
+    env_file: docker/compose.env
+    depends_on: [web]
+
+volumes:
+  pgdata:
+  minio:
+  workdata:

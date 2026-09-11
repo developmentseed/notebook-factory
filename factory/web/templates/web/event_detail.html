@@ -1,0 +1,28 @@
+{% extends "web/base.html" %}
+{% block title %}{{ event.title }}{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="{% url 'web:event-list' %}">Events</a> › {{ event.title|truncatechars:60 }}</p>
+<div class="two-col">
+  <div>
+    <h1>{{ event.title }}</h1>
+    <p class="lead">{{ event.description|truncatechars:400 }}</p>
+    <h2>Analyses for this event</h2>
+    {% include "web/partials/run_table.html" with runs=runs %}
+    {% if user.is_authenticated and templates %}
+    <h3>Run an analysis</h3>
+    <p>{% for t in templates %}<a class="btn" href="{% url 'web:run-new' t.slug %}?event={{ event.pk }}">{{ t.title }}</a> {% endfor %}</p>
+    {% endif %}
+  </div>
+  <aside class="side"><div class="panel"><dl class="facts">
+    <dt>Collection</dt><dd><code>{{ event.collection }}</code></dd>
+    <dt>Item</dt><dd><a href="{{ event.stac_url }}"><code>{{ event.stac_id }}</code></a></dd>
+    <dt>monty:corr_id</dt><dd><code>{{ event.monty_corr_id|default:"—" }}</code></dd>
+    <dt>Hazard</dt><dd>{% if event.hazard %}{{ event.hazard.icon }} {{ event.hazard.label }}{% endif %} <span class="muted small">{{ event.hazard_codes|join:", " }}</span></dd>
+    <dt>Countries</dt><dd>{{ event.countries_display }}</dd>
+    <dt>Roles</dt><dd>{{ event.roles|join:", " }}</dd>
+    <dt>Source</dt><dd>{{ event.source|default:"—" }}</dd>
+    <dt>When</dt><dd>{{ event.occurred_at|date:"Y-m-d H:i"|default:"—" }}{% if event.ended_at %} → {{ event.ended_at|date:"Y-m-d H:i" }}{% endif %}</dd>
+    <dt>First seen</dt><dd>{{ event.first_seen_at|date:"Y-m-d H:i" }}</dd>
+  </dl></div></aside>
+</div>
+{% endblock %}

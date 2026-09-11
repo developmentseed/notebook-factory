@@ -1,0 +1,110 @@
+{% extends "web/base.html" %}
+{% load web_extras static %}
+{% block title %}New run · {{ nb.title }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="{% url 'web:template-list' %}">Templates</a> › <a href="{{ nb.get_absolute_url }}">{{ nb.title }}</a> › New run</p>
+<h1>New run · {{ nb.title }}</h1>
+{% if form.non_field_errors %}<div class="msg error">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+<form method="post" id="run-form" class="wizard" data-requires-area="{{ nb.requires_area|yesno:'1,0' }}" data-area-levels="{{ nb.area_levels|join:',' }}">
+  {% csrf_token %}
+  <input type="hidden" name="area_ids" id="area_ids" value="{{ selected_area_ids }}">
+
+  {% if nb.requires_area %}
+  <section class="step">
+    <h2><span class="num">1</span> Area</h2>
+    <p class="muted">Pick the target admin area on the map — a single area, several, or every area at a level.</p>
+    <div class="area-controls">
+      <label>Country
+        <select name="country" id="country">
+          <option value="">— choose —</option>
+          {% for c in countries %}<option value="{{ c.iso3 }}" {% if form.country.value == c.iso3 or form.country.value.pk == c.iso3 %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Admin level
+        <select name="level" id="level">
+          {% for l in levels %}<option value="{{ l }}" {% if form.level.value|stringformat:"s" == l|stringformat:"s" %}selected{% endif %}>{% if l == 0 %}Country{% else %}Admin {{ l }}{% endif %}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" name="all_at_level" id="all_at_level" {% if form.all_at_level.value %}checked{% endif %}> Run for every area at this level <span class="muted" id="all-count"></span></label>
+    </div>
+    <div id="map" class="map"></div>
+    <div id="selection" class="selection muted">No area selected.</div>
+    {% if form.area_ids.errors or form.country.errors %}<p class="error">{{ form.area_ids.errors|join:" " }} {{ form.country.errors|join:" " }}</p>{% endif %}
+  </section>
+  {% endif %}
+
+  {% if nb.requires_event %}
+  <section class="step">
+    <h2><span class="num">{% if nb.requires_area %}2{% else %}1{% endif %}</span> Event</h2>
+    <label>Montandon event
+      <select name="event" id="event" required>
+        <option value="">— choose —</option>
+        {% for e in recent_events %}<option value="{{ e.pk }}" {% if form.event.value|stringformat:"s" == e.pk|stringformat:"s" or event and event.pk == e.pk %}selected{% endif %}>{{ e.title|truncatechars:70 }} · {{ e.countries_display }} · {{ e.occurred_at|date:"Y-m-d" }}</option>{% endfor %}
+      </select>
+    </label>
+    {% if form.event.errors %}<p class="error">{{ form.event.errors|join:" " }}</p>{% endif %}
+    <p class="muted small">Events arrive through the Montandon poller. See <a href="{% url 'web:event-list' %}">Events</a>.</p>
+  </section>
+  {% endif %}
+
+  <section class="step">
+    <h2><span class="num">{% if nb.requires_area and nb.requires_event %}3{% elif nb.requires_area or nb.requires_event %}2{% else %}1{% endif %}</span> Parameters</h2>
+    {% if not fields %}<p class="muted">This template has no user parameters.</p>{% endif %}
+    <div class="param-grid">
+    {% for f in fields %}
+      {% with value=values|get:f.name error=param_errors|get:f.name %}
+      <div class="field {% if error %}has-error{% endif %}" data-param="{{ f.name }}" data-title="{{ f.title }}">
+        <label for="p_{{ f.name }}">{{ f.title }}{% if f.required %} <span class="req">*</span>{% endif %}</label>
+        {% if f.widget == 'select' %}
+          <select name="{{ f.name }}" id="p_{{ f.name }}">
+            {% if not f.required %}<option value="">—</option>{% endif %}
+            {% for v, label in f.choices %}<option value="{{ v }}" {% if value|stringformat:"s" == v|stringformat:"s" %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        {% elif f.widget == 'radio' %}
+          <div class="choices">{% for v, label in f.choices %}<label class="check"><input type="radio" name="{{ f.name }}" value="{{ v }}" {% if value|stringformat:"s" == v|stringformat:"s" %}checked{% endif %}> {{ label }}</label>{% endfor %}</div>
+        {% elif f.widget == 'checkboxes' %}
+          <div class="choices">{% for v, label in f.choices %}<label class="check"><input type="checkbox" name="{{ f.name }}" value="{{ v }}" {% if v in value %}checked{% endif %}> {{ label }}</label>{% endfor %}</div>
+        {% elif f.widget == 'checkbox' %}
+          <label class="check"><input type="checkbox" name="{{ f.name }}" id="p_{{ f.name }}" value="true" {% if value %}checked{% endif %}> {{ f.description|default:"Enabled" }}</label>
+        {% elif f.widget == 'slider' %}
+          <input type="range" name="{{ f.name }}" id="p_{{ f.name }}" value="{{ value|default:f.minimum }}" min="{{ f.minimum }}" max="{{ f.maximum }}" step="{{ f.step|default:1 }}" oninput="this.nextElementSibling.textContent=this.value"><output>{{ value|default:f.minimum }}</output>
+        {% elif f.widget == 'textarea' %}
+          <textarea name="{{ f.name }}" id="p_{{ f.name }}" rows="3">{{ value|default:"" }}</textarea>
+        {% else %}
+          <input type="{{ f.input_type }}" name="{{ f.name }}" id="p_{{ f.name }}" value="{{ value|default_if_none:'' }}" {% if f.minimum is not None %}min="{{ f.minimum }}"{% endif %} {% if f.maximum is not None %}max="{{ f.maximum }}"{% endif %} {% if f.step %}step="{{ f.step }}"{% elif f.type == 'number' %}step="any"{% endif %} {% if f.required %}required{% endif %}>
+        {% endif %}
+        {% if f.description and f.widget != 'checkbox' %}<small class="muted">{{ f.description }}</small>{% endif %}
+        {% if error %}<small class="error">{{ error }}</small>{% endif %}
+      </div>
+      {% endwith %}
+    {% endfor %}
+    </div>
+  </section>
+
+  <section class="step">
+    <h2><span class="num">{% if nb.requires_area and nb.requires_event %}4{% elif nb.requires_area or nb.requires_event %}3{% else %}2{% endif %}</span> Run</h2>
+    <label>Also notify (emails, comma separated) <input type="text" name="notify_emails" value="{{ form.notify_emails.value|default:'' }}" placeholder="colleague@example.org"></label>
+    {% if form.notify_emails.errors %}<p class="error">{{ form.notify_emails.errors|join:" " }}</p>{% endif %}
+    <div class="review panel">
+      <div class="muted small">YOU'RE ABOUT TO RUN</div>
+      <div id="summary" class="summary">{{ nb.title }}</div>
+      {% if nb.estimated_runtime_minutes %}<div class="muted small">Est. run time ~{{ nb.estimated_runtime_minutes }} min per area</div>{% endif %}
+    </div>
+    <button class="btn primary large" type="submit">Run analysis →</button>
+  </section>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+  window.RUN_FORM = {
+    geojsonUrl: "{% url 'api:area-geojson' %}",
+    areasUrl: "{% url 'api:area-list' %}",
+    template: "{{ nb.title|escapejs }}",
+  };
+</script>
+<script src="{% static 'web/run_form.js' %}"></script>
+{% endblock %}

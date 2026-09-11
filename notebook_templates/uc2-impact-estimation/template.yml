@@ -1,0 +1,70 @@
+title: Post-disaster impact estimation
+summary: Who and what fall inside the observed extent of an actual disaster, from Copernicus EMS products,
+  hours to days after it strikes.
+description: '**Use Case 2 · Impact · during / just after.** Takes the observed impact zone for an event,
+  intersects it with
+
+  population and infrastructure, and aggregates per zone with a time dimension as new products arrive.
+
+
+  > In this version the observed extent is a **buffer around the event location** and population is synthetic.
+
+  > Replace the extent with the CEMS / Charter vector product linked to the event in Montandon.'
+use_case: uc2
+hazards:
+- flood
+- cyclone
+- earthquake
+- wildfire
+version: '0.2'
+requires_area: true
+requires_event: true
+estimated_runtime_minutes: 3
+parameters:
+  type: object
+  properties:
+    extent_radius_km:
+      type: number
+      title: Stand-in extent radius (km)
+      default: 80
+      minimum: 1
+      maximum: 500
+      description: Used only until a CEMS extent is available for the event.
+    population_source:
+      type: string
+      title: Population data
+      enum:
+      - worldpop_100m
+      - ghsl_100m
+      default: worldpop_100m
+      x-enum-labels:
+        worldpop_100m: WorldPop · 100 m
+        ghsl_100m: GHSL · 100 m
+    age_group:
+      type: string
+      title: Age disaggregation
+      enum:
+      - all
+      - under_5
+      - under_18
+      - over_65
+      default: all
+    infrastructure_layers:
+      type: array
+      title: Infrastructure layers
+      items:
+        type: string
+        enum:
+        - schools
+        - hospitals
+        - roads
+      default:
+      - schools
+      - hospitals
+    timesteps:
+      type: integer
+      title: Product time steps
+      default: 3
+      minimum: 1
+      maximum: 10
+      description: Number of successive extent products to compare (illustrative).

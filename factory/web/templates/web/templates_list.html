@@ -1,0 +1,20 @@
+{% extends "web/base.html" %}
+{% block title %}Templates · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Analysis templates</h1><p class="lead">A template is a recipe: a notebook that declares its parameters. Pick one, choose an area and parameters, and run it.</p></div></div>
+<div class="cards">
+  {% for nb in templates %}
+  <a class="card" href="{{ nb.get_absolute_url }}">
+    <div class="card-top"><span class="pill uc {{ nb.use_case }}">{{ nb.get_use_case_display }}</span>{% if nb.version %}<span class="muted small">v{{ nb.version }}</span>{% endif %}</div>
+    <h3>{{ nb.title }}</h3>
+    <p class="meta">{{ nb.summary }}</p>
+    <div class="card-foot">
+      <span>{% for h in nb.hazards.all %}<span class="pill hz" style="--hz: {{ h.color|default:'#6B7280' }}">{{ h.icon }} {{ h.label }}</span> {% endfor %}</span>
+      <span class="muted small">{{ nb.parameter_count }} parameters · {{ nb.run_count }} runs</span>
+    </div>
+  </a>
+  {% empty %}
+  <div class="empty"><p>No templates loaded. Run <code>python manage.py sync_templates</code>.</p></div>
+  {% endfor %}
+</div>
+{% endblock %}
