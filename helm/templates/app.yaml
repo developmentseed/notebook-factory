@@ -1,0 +1,105 @@
+{{- /* web, worker and beat: one image, entrypoint picks the process (docker/entrypoint.sh). */ -}}
+{{- $root := . }}
+{{- range $process := list "web" "worker" "beat" }}
+{{- $cfg := index $root.Values $process }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $root.Release.Name }}-{{ $process }}
+  labels:
+    {{- include "nf.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ $process }}
+spec:
+  {{- if eq $process "beat" }}
+  replicas: 1 # never two schedulers
+  strategy: { type: Recreate }
+  {{- else }}
+  replicas: {{ $cfg.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "nf.selector" $root | nindent 6 }}
+      app.kubernetes.io/component: {{ $process }}
+  template:
+    metadata:
+      labels:
+        {{- include "nf.selector" $root | nindent 8 }}
+        app.kubernetes.io/component: {{ $process }}
+      annotations:
+        reloader.stakater.com/auto: "true"
+    spec:
+      serviceAccountName: {{ $root.Release.Name }}
+      containers:
+        - name: {{ $process }}
+          image: "{{ $root.Values.image.repository }}:{{ $root.Values.image.tag | default $root.Chart.AppVersion }}"
+          args: [{{ $process }}]
+          envFrom:
+            - secretRef:
+                name: {{ $root.Values.existingSecret }}
+          env:
+            - { name: ALLOWED_HOSTS, value: "{{ $root.Values.host }},localhost" }
+            - { name: CSRF_TRUSTED_ORIGINS, value: "https://{{ $root.Values.host }}" }
+            - { name: PUBLIC_BASE_URL, value: "https://{{ $root.Values.host }}" }
+            - { name: PUBLISHED_PUBLIC_BASE_URL, value: "https://{{ $root.Values.host }}{{ trimSuffix "/" $root.Values.publishedProxy.path }}" }
+            - { name: CELERY_BROKER_URL, value: "redis://{{ include "nf.redis" $root }}:6379/0" }
+            {{- range $k, $v := $root.Values.env }}
+            - { name: {{ $k }}, value: {{ $v | quote }} }
+            {{- end }}
+          {{- if eq $process "web" }}
+          ports:
+            - { name: http, containerPort: 8000 }
+          # /healthz queries the DB. Host header must be in ALLOWED_HOSTS, not the pod IP.
+          startupProbe:
+            httpGet: { path: /healthz, port: http, httpHeaders: [{ name: Host, value: localhost }] }
+            periodSeconds: 5
+            failureThreshold: 60 # migrate + collectstatic on start
+          readinessProbe:
+            httpGet: { path: /healthz, port: http, httpHeaders: [{ name: Host, value: localhost }] }
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: http } # not /healthz: a DB blip should not restart pods
+            periodSeconds: 20
+          {{- end }}
+          resources: {{ toYaml $cfg.resources | nindent 12 }}
+          volumeMounts:
+            - { name: data, mountPath: /app/data }
+            {{- if $root.Values.secretProviderClass.enabled }}
+            - { name: secrets-store, mountPath: /mnt/secrets-store, readOnly: true }
+            {{- end }}
+      volumes:
+        - name: data # run workdirs, MyST theme cache, beat schedule
+          emptyDir: {}
+        {{- if $root.Values.secretProviderClass.enabled }}
+        # Mounting is what makes the CSI driver sync existingSecret.
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: {{ $root.Release.Name }}
+        {{- end }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-web
+  labels:
+    {{- include "nf.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "nf.selector" . | nindent 4 }}
+    app.kubernetes.io/component: web
+  ports:
+    - { name: http, port: 80, targetPort: http }
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- include "nf.labels" . | nindent 4 }}
+  {{- with .Values.serviceAccount.annotations }}
+  annotations: {{ toYaml . | nindent 4 }}
+  {{- end }}

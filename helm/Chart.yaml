@@ -1,0 +1,7 @@
+apiVersion: v2
+name: notebook-factory
+description: Montandon Notebook Factory — web, Celery worker, Celery beat and a Redis broker
+type: application
+version: 0.1.0
+# Default image tag (values: image.tag overrides it).
+appVersion: dev-097041e-basemap

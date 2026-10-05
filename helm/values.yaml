@@ -1,0 +1,71 @@
+image:
+  repository: ghcr.io/developmentseed/notebook-factory
+  tag: "" # defaults to .Chart.AppVersion
+
+# Secret with DATABASE_URL, SECRET_KEY and the storage credentials
+# (S3_ACCESS_KEY/S3_SECRET_KEY or AZURE_ACCOUNT_KEY); optionally MONTANDON_API_TOKEN.
+# Create it yourself, or let secretProviderClass sync it from Azure Key Vault.
+existingSecret: notebook-factory-secrets
+
+# Public hostname. Drives the ingress, ALLOWED_HOSTS, CSRF_TRUSTED_ORIGINS and PUBLIC_BASE_URL.
+host: notebooks.example.org
+
+ingress:
+  className: ""
+  annotations: {}
+  tlsSecretName: notebook-factory-tls
+
+# Plain env for web, worker and beat (see config/settings.py), e.g. GUNICORN_WORKERS,
+# CELERY_CONCURRENCY, S3_* or AZURE_*. Broker URL and host-derived settings are set by the chart.
+env:
+  DEBUG: "false"
+  PUBLISHED_STORAGE_BACKEND: s3
+
+web:
+  replicas: 1 # migrations run on web start; more replicas would run them concurrently
+  resources:
+    requests: { cpu: 100m, memory: 512Mi }
+    limits: { memory: 1Gi }
+
+worker:
+  replicas: 1
+  resources:
+    requests: { cpu: 500m, memory: 1Gi }
+    limits: { memory: 3Gi }
+
+beat:
+  resources:
+    requests: { cpu: 10m, memory: 192Mi }
+    limits: { memory: 384Mi }
+
+redis:
+  image: redis:7-alpine
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { memory: 256Mi }
+
+# nginx serving the bucket at https://<host><path>/ (see templates/published-proxy.yaml).
+publishedProxy:
+  path: /published
+  # Bucket root as an anonymous reader sees it, e.g. https://<bucket>.s3.<region>.io.cloud.ovh.net
+  # or https://<account>.blob.core.windows.net/<container>
+  upstream: ""
+  image: nginx:1.29-alpine
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { memory: 128Mi }
+
+serviceAccount:
+  annotations: {} # e.g. azure.workload.identity/client-id for Key Vault access
+
+# Azure Key Vault → existingSecret, via the Secrets Store CSI driver.
+secretProviderClass:
+  enabled: false
+  clientID: ""
+  tenantId: ""
+  keyvaultName: ""
+  # Key Vault secret name → key in existingSecret
+  objects:
+    DATABASE-URL: DATABASE_URL
+    SECRET-KEY: SECRET_KEY
+    AZURE-ACCOUNT-KEY: AZURE_ACCOUNT_KEY
