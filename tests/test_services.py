@@ -1,8 +1,18 @@
+from datetime import timedelta
+
 import pytest
+from django.utils import timezone
 
 from factory.catalog.models import AdminArea
 from factory.notebooks.models import NotebookRun, RunStatus, TriggerKind
-from factory.notebooks.services import RunRequestError, cancel_run, create_batch, create_run, retry_run
+from factory.notebooks.services import (
+    RunRequestError,
+    cancel_run,
+    create_batch,
+    create_run,
+    fail_stale_runs,
+    retry_run,
+)
 
 
 def test_create_run_validates_and_resolves_hazard(template, nepal, user):
@@ -57,3 +67,14 @@ def test_stages_view_model(template, nepal):
     )
     run.set_status(RunStatus.FAILED, failed_stage="executing")
     assert {s["key"]: s["state"] for s in run.stages()}["executing"] == "failed"
+
+
+def test_fail_stale_runs_skips_queued(template, nepal):
+    queued = create_run(template, {"hazard": "flood"}, area=nepal["a1"])
+    started = create_run(template, {"hazard": "flood"}, area=nepal["a1"])
+    started.set_status(RunStatus.EXECUTING, "cell 1", cell=1, total=3)
+    NotebookRun.objects.update(updated_at=timezone.now() - timedelta(hours=7))
+    assert fail_stale_runs(6) == 1
+    queued.refresh_from_db()
+    started.refresh_from_db()
+    assert queued.status == RunStatus.QUEUED and started.status == RunStatus.FAILED
