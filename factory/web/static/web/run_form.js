@@ -98,8 +98,8 @@
 
   if (requiresArea && document.getElementById("map") && window.L) {
     map = L.map("map", { worldCopyJump: true }).setView([20, 0], 2);
-    // Carto's raster tiles now need an API key (they serve an "API KEY REQUIRED" image); the vector style doesn't.
-    L.maplibreGL({ style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json", attribution: "© OpenStreetMap © CARTO" }).addTo(map);
+    // Carto's raster tiles require an API key; its vector style does not. Attribution comes from the style.
+    L.maplibreGL({ style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json" }).addTo(map);
     if (allowedLevels.length && levelEl) {
       Array.from(levelEl.options).forEach((o) => { if (!allowedLevels.includes(Number(o.value))) o.disabled = true; });
       if (levelEl.selectedOptions[0]?.disabled) levelEl.value = String(allowedLevels[0]);
