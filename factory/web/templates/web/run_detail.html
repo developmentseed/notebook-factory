@@ -4,3 +4,23 @@
 <p class="crumbs"><a href="{% url 'web:browse' %}">Analyses</a> › <a href="{{ run.notebook.get_absolute_url }}">{{ run.notebook.title }}</a> › Run <code>{{ run.short_id }}</code></p>
 {% include "web/partials/run_status.html" %}
 {% endblock %}
+{% block scripts %}
+<script>
+  // #run-status is re-rendered every 2s, which resets run.log to the top. Follow the tail
+  // unless the reader has scrolled up, in which case keep their position.
+  (() => {
+    const log = () => document.querySelector("#run-status .log");
+    let follow = true, pos = 0;
+    document.body.addEventListener("htmx:beforeSwap", () => {
+      const el = log();
+      if (el) { pos = el.scrollTop; follow = el.scrollHeight - el.scrollTop - el.clientHeight < 24; }
+    });
+    document.body.addEventListener("htmx:afterSettle", () => {
+      const el = log();
+      if (el) el.scrollTop = follow ? el.scrollHeight : pos;
+    });
+    const el = log();
+    if (el) el.scrollTop = el.scrollHeight;
+  })();
+</script>
+{% endblock %}
