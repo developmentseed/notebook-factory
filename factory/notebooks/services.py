@@ -198,8 +198,10 @@ def stale_runs(max_age_hours: float):
 
 
 def fail_stale_runs(max_age_hours: float) -> int:
+    """Fail started runs that stopped making progress. Queued runs are left alone: a run waiting
+    behind a long backlog is not updated while it waits, and its task is still in the broker."""
     n = 0
-    for run in stale_runs(max_age_hours):
+    for run in stale_runs(max_age_hours).exclude(status=RunStatus.QUEUED):
         run.error = f"No progress for more than {max_age_hours:g} h; the worker probably died."
         run.save(update_fields=["error"])
         run.set_status(RunStatus.FAILED, "Stale", failed_stage=run.status)
