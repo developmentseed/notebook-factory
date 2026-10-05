@@ -1,5 +1,16 @@
-# Celery broker. No persistence: queued runs lost on restart are recovered with
-# `manage.py stale_runs --requeue`.
+# Celery broker. The append-only file on a volume keeps queued runs across restarts.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "nf.redis" . }}
+  labels:
+    {{- include "nf.labels" . | nindent 4 }}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: {{ .Values.redis.storage }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -9,6 +20,8 @@ metadata:
     app.kubernetes.io/component: redis
 spec:
   replicas: 1
+  # Stop the old pod before starting the new one: the volume is ReadWriteOnce.
+  strategy: { rollingUpdate: { maxSurge: 0, maxUnavailable: 1 } }
   selector:
     matchLabels:
       {{- include "nf.selector" . | nindent 6 }}
@@ -22,13 +35,19 @@ spec:
       containers:
         - name: redis
           image: {{ .Values.redis.image }}
-          args: ["--save", "", "--appendonly", "no"]
+          args: ["--save", "", "--appendonly", "yes"]
           ports:
             - { name: redis, containerPort: 6379 }
           readinessProbe:
             exec: { command: [redis-cli, ping] }
             periodSeconds: 10
           resources: {{ toYaml .Values.redis.resources | nindent 12 }}
+          volumeMounts:
+            - { name: data, mountPath: /data }
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "nf.redis" . }}
 ---
 apiVersion: v1
 kind: Service
