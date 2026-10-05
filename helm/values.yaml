@@ -59,14 +59,11 @@ publishedProxy:
 serviceAccount:
   annotations: {} # e.g. azure.workload.identity/client-id for Key Vault access
 
-# Azure Key Vault → existingSecret, via the Secrets Store CSI driver.
+# Azure Key Vault to existingSecret, via the Secrets Store CSI driver.
 secretProviderClass:
   enabled: false
   clientID: ""
   tenantId: ""
   keyvaultName: ""
-  # Key Vault secret name → key in existingSecret
-  objects:
-    DATABASE-URL: DATABASE_URL
-    SECRET-KEY: SECRET_KEY
-    AZURE-ACCOUNT-KEY: AZURE_ACCOUNT_KEY
+  # Keys to put in existingSecret. Each is read from the Key Vault secret of the same name with "_" as "-".
+  keys: [DATABASE_URL, SECRET_KEY, AZURE_ACCOUNT_KEY]

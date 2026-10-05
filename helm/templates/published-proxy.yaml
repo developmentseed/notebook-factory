@@ -22,7 +22,8 @@ server {
     # The upstream hostname is resolved once at startup; add a `resolver` if its IPs change.
     proxy_pass {{ $up.scheme }}://{{ $up.host }};
     proxy_ssl_server_name on;
-    # The app's session cookie must not reach the storage provider.
+    # Keep the app's session cookie and API token away from the storage provider.
+    # It would also try to verify a forwarded Authorization header as its own and reject the request.
     proxy_set_header Cookie "";
     proxy_set_header Authorization "";
     gzip on;
