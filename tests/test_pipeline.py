@@ -1,4 +1,7 @@
 import json
+import os
+import sys
+import threading
 from pathlib import Path
 
 import nbformat
@@ -168,3 +171,38 @@ def test_prepare_notebook_collapses_code_cells(tmp_path):
     assert out.cells[2].metadata["tags"] == ["show-input"]
     _prepare_notebook(src, dest, hide_code=False)
     assert nbformat.read(dest, as_version=4).cells[1].metadata["tags"] == ["parameters"]
+
+
+def test_concurrent_first_builds_share_the_theme_download(tmp_path):
+    """Two builds on an empty theme cache: one downloads, the other must not read it half-written."""
+    from factory.notebooks.pipeline.renderer import _run_myst
+
+    # Stand-in for `myst build`: downloads the theme in two steps unless it is complete,
+    # and fails like MyST does when it finds a half-written theme.
+    fake_myst = tmp_path / "fake_myst.py"
+    fake_myst.write_text(
+        "import os, sys, time\n"
+        "theme = os.path.join(os.environ['CACHE'], 'theme')\n"
+        "done = os.path.join(theme, 'server.js')\n"
+        "if os.path.exists(theme) and not os.path.exists(done): sys.exit('half-written theme')\n"
+        "if not os.path.exists(done):\n"
+        "    os.makedirs(theme)\n"
+        "    time.sleep(0.5)\n"
+        "    open(done, 'w').close()\n"
+    )
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    env = {**os.environ, "CACHE": str(cache)}
+    codes = []
+
+    def build():
+        proc = _run_myst([sys.executable, str(fake_myst)], tmp_path, env, cache, "book-theme", 30)
+        codes.append(proc.returncode)
+
+    threads = [threading.Thread(target=build) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert codes == [0, 0]
+    assert (cache / ".book-theme.ready").exists()
