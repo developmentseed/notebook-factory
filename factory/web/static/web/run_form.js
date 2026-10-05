@@ -98,7 +98,8 @@
 
   if (requiresArea && document.getElementById("map") && window.L) {
     map = L.map("map", { worldCopyJump: true }).setView([20, 0], 2);
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", { attribution: "© OpenStreetMap © CARTO", maxZoom: 18 }).addTo(map);
+    // Carto's raster tiles now need an API key (they serve an "API KEY REQUIRED" image); the vector style doesn't.
+    L.maplibreGL({ style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json", attribution: "© OpenStreetMap © CARTO" }).addTo(map);
     if (allowedLevels.length && levelEl) {
       Array.from(levelEl.options).forEach((o) => { if (!allowedLevels.includes(Number(o.value))) o.disabled = true; });
       if (levelEl.selectedOptions[0]?.disabled) levelEl.value = String(allowedLevels[0]);
