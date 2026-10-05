@@ -16,14 +16,11 @@ flowchart LR
     redis[(redis<br/>append-only file on a PVC)]
     worker[worker<br/>Celery: papermill, MyST, upload]
     beat[beat<br/>Celery scheduler, 1 replica]
-    secret[[Secret<br/>existingSecret]]
-    spc[SecretProviderClass<br/>optional]
   end
 
   db[(PostGIS)]
   bucket[(Object storage<br/>S3 or Azure Blob)]
   stac[(Montandon STAC)]
-  kv[(Azure Key Vault)]
 
   user --> ing
   ing -- "/" --> web
@@ -36,10 +33,6 @@ flowchart LR
   worker -- "read events, UC3 write-back" --> stac
   web --> db
   worker --> db
-  kv -. "CSI driver" .-> spc -.-> secret
-  secret -. envFrom .-> web
-  secret -. envFrom .-> worker
-  secret -. envFrom .-> beat
 ```
 
 ## How a run moves through it

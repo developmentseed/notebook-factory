@@ -26,8 +26,6 @@ flowchart LR
         app[web, worker, beat,<br/>redis, published-proxy]
       end
       pg[(postgis<br/>postgis.yaml)]
-      s1[[Secret notebook-factory-secrets<br/>secrets.sh]]
-      s2[[Secret notebook-factory-postgis<br/>secrets.sh]]
     end
   end
 
@@ -35,11 +33,8 @@ flowchart LR
 
   user --> dns --> nginx --> app
   cm -. "TLS certificate" .-> nginx
-  app -- "DATABASE_URL" --> pg
-  app -- "S3 API: upload" --> bucket
-  app -- "anonymous GET, virtual-host URL" --> bucket
-  s1 -. envFrom .-> app
-  s2 -. "POSTGRES_PASSWORD" .-> pg
+  app -- "SQL" --> pg
+  app -- "upload and read runs" --> bucket
 
   style chart stroke-dasharray: 5 5
 ```
