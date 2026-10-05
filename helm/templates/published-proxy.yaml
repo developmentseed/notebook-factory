@@ -3,10 +3,36 @@ Serves published runs from the bucket at https://<host><path>/. The MyST app nav
 its base path (runs/<id>/) on load and object storage has no directory index, so a
 trailing-slash request is mapped to index.html.
 */ -}}
-{{- with .Values.publishedProxy }}
-{{- $up := urlParse (required "publishedProxy.upstream" .upstream) }}
+{{- define "nf.proxyConf" -}}
+{{- $up := urlParse (required "publishedProxy.upstream" .Values.publishedProxy.upstream) }}
 {{- $prefix := trimSuffix "/" $up.path }}
-{{- $path := trimSuffix "/" .path }}
+{{- $path := trimSuffix "/" .Values.publishedProxy.path }}
+server {
+  listen 8080;
+  absolute_redirect off;  # Location: /path, not http://<pod host>:8080/path
+  location = /healthz { access_log off; return 200; }
+
+  # A run's root without its trailing slash (runs/ is the app's NOTEBOOK_PUBLISH_PREFIX).
+  location ~ ^{{ $path }}/runs/[^/]+$ { return 301 $uri/; }
+
+  location {{ $path }}/ {
+    limit_except GET { deny all; }  # GET implies HEAD
+    rewrite ^{{ $path }}/(.*/)?$ {{ $prefix }}/$1index.html break;
+    rewrite ^{{ $path }}/(.*)$ {{ $prefix }}/$1 break;
+    # The upstream hostname is resolved once at startup; add a `resolver` if its IPs change.
+    proxy_pass {{ $up.scheme }}://{{ $up.host }};
+    proxy_ssl_server_name on;
+    # The app's session cookie must not reach the storage provider.
+    proxy_set_header Cookie "";
+    proxy_set_header Authorization "";
+    gzip on;
+    gzip_proxied any;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+  }
+}
+{{- end }}
+
+{{- with .Values.publishedProxy }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -15,29 +41,7 @@ metadata:
     {{- include "nf.labels" $ | nindent 4 }}
 data:
   default.conf: |
-    server {
-      listen 8080;
-      absolute_redirect off;  # Location: /path, not http://<pod host>:8080/path
-      location = /healthz { access_log off; return 200; }
-
-      # A run's root without its trailing slash (runs/ is the app's NOTEBOOK_PUBLISH_PREFIX).
-      location ~ ^{{ $path }}/runs/[^/]+$ { return 301 $uri/; }
-
-      location {{ $path }}/ {
-        limit_except GET { deny all; }  # GET implies HEAD
-        rewrite ^{{ $path }}/(.*/)?$ {{ $prefix }}/$1index.html break;
-        rewrite ^{{ $path }}/(.*)$ {{ $prefix }}/$1 break;
-        # The upstream hostname is resolved once at startup; add a `resolver` if its IPs change.
-        proxy_pass {{ $up.scheme }}://{{ $up.host }};
-        proxy_ssl_server_name on;
-        # The app's session cookie must not reach the storage provider.
-        proxy_set_header Cookie "";
-        proxy_set_header Authorization "";
-        gzip on;
-        gzip_proxied any;
-        gzip_types text/css application/javascript application/json image/svg+xml;
-      }
-    }
+    {{- include "nf.proxyConf" $ | nindent 4 }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -58,7 +62,7 @@ spec:
         {{- include "nf.selector" $ | nindent 8 }}
         app.kubernetes.io/component: published-proxy
       annotations:
-        checksum/config: {{ toJson . | sha256sum }}  # restart on config change
+        checksum/config: {{ include "nf.proxyConf" $ | sha256sum }}  # restart nginx when its config changes
     spec:
       containers:
         - name: nginx
