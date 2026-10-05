@@ -17,7 +17,11 @@ data:
   default.conf: |
     server {
       listen 8080;
+      absolute_redirect off;  # Location: /path, not http://<pod host>:8080/path
       location = /healthz { access_log off; return 200; }
+
+      # A run's root without its trailing slash (runs/ is the app's NOTEBOOK_PUBLISH_PREFIX).
+      location ~ ^{{ $path }}/runs/[^/]+$ { return 301 $uri/; }
 
       location {{ $path }}/ {
         limit_except GET { deny all; }  # GET implies HEAD
