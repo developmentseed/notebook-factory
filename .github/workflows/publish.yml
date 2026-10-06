@@ -1,0 +1,54 @@
+# Builds the image and the Helm chart on every push to main.
+# The chart's appVersion is the image tag, so a chart version pins one image:
+#   ghcr.io/developmentseed/notebook-factory:<short sha>
+#   oci://ghcr.io/developmentseed/charts/notebook-factory:<Chart.yaml version>-g<short sha>
+name: Publish
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - id: tag
+        run: echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/developmentseed/notebook-factory:${{ steps.tag.outputs.sha }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - uses: azure/setup-helm@v4
+
+      # "g" keeps the prerelease part valid semver when the short sha is all digits.
+      - name: Push chart
+        env:
+          SHA: ${{ steps.tag.outputs.sha }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="$(helm show chart helm | awk '/^version:/ {print $2}')-g$SHA"
+          helm package helm --version "$version" --app-version "$SHA"
+          echo "$TOKEN" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          helm push "notebook-factory-$version.tgz" oci://ghcr.io/developmentseed/charts
+          echo "Chart notebook-factory $version, image tag $SHA" >> "$GITHUB_STEP_SUMMARY"

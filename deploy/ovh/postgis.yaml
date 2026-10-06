@@ -1,0 +1,62 @@
+# Test-only PostGIS for the OVH cluster. Not part of the chart: IFRC uses Azure PG.
+# Password comes from Secret notebook-factory-postgis (see secrets.sh).
+#   kubectl -n notebook-factory apply -f deploy/ovh/postgis.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgis
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgis
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # RWO volume
+  selector:
+    matchLabels: { app: postgis }
+  template:
+    metadata:
+      labels: { app: postgis }
+    spec:
+      containers:
+        - name: postgis
+          image: postgis/postgis:17-3.5
+          env:
+            - { name: POSTGRES_DB, value: notebook_factory }
+            - { name: POSTGRES_USER, value: notebook_factory }
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: notebook-factory-postgis, key: POSTGRES_PASSWORD }
+            # Cinder volumes have lost+found at the root; initdb needs an empty dir.
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+          ports:
+            - containerPort: 5432
+          readinessProbe:
+            exec:
+              command: [pg_isready, -U, notebook_factory, -d, notebook_factory]
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 1Gi }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgis
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgis
+spec:
+  selector: { app: postgis }
+  ports:
+    - port: 5432

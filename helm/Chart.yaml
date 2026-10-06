@@ -1,0 +1,7 @@
+apiVersion: v2
+name: notebook-factory
+description: Montandon Notebook Factory, with its Celery worker, Celery beat and Redis broker
+type: application
+version: 0.1.0
+# Default image tag (values: image.tag overrides it). The publish workflow sets it to the commit's image.
+appVersion: dev-097041e-basemap

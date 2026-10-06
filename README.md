@@ -84,8 +84,17 @@ Web on <http://localhost:8000>, MinIO console on <http://localhost:9001> (minio 
 Published notebooks go to the `notebooks` bucket and are served from `http://localhost:9000/notebooks/…`.
 Override host ports with `WEB_PORT`, `MINIO_PORT`, `MINIO_CONSOLE_PORT`.
 
-The same image runs `web`, `worker` and `beat` (see `docker/entrypoint.sh`), which maps directly
-onto Kubernetes Deployments; configuration is entirely through environment variables.
+The same image runs `web`, `worker` and `beat` (see `docker/entrypoint.sh`); configuration is
+entirely through environment variables.
+
+## Kubernetes
+
+[`helm/`](helm/) holds a chart that runs `web`, `worker`, `beat`, a Redis broker and an nginx proxy
+that serves published runs from the bucket under `/published/`. PostGIS and object storage are
+external. Every push to `main` publishes the image to `ghcr.io/developmentseed/notebook-factory` and
+the chart to `oci://ghcr.io/developmentseed/charts`; IFRC deploys it with ArgoCD from
+[go-deploy](https://github.com/IFRCGo/go-deploy). [`helm/README.md`](helm/README.md) has the
+architecture diagram and values; [`deploy/ovh/`](deploy/ovh/) is a test deployment.
 
 ## Configuration
 
@@ -174,6 +183,8 @@ factory/web/            HTMX views, templates, static
 notebook_templates/     the notebook templates (one folder each)
 examples/events/        sample STAC items for local testing
 tests/                  pytest (needs the PostGIS database)
+helm/                   Helm chart
+deploy/ovh/             test deployment on devseed's OVH cluster
 ```
 
 ## Known sharp edges
