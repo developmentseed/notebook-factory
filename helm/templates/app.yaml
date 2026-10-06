@@ -26,6 +26,9 @@ spec:
       labels:
         {{- include "nf.selector" $root | nindent 8 }}
         app.kubernetes.io/component: {{ $process }}
+        {{- with $root.Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       annotations:
         reloader.stakater.com/auto: "true"
     spec:
