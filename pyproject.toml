@@ -42,6 +42,7 @@ dependencies = [
     # 47+ wheels SIGILL on some arm64 VMs (Colima); see README "Known sharp edges"
     "cryptography>=42,<47",
     "manywidgets[lonboard]>=0.1.0",
+    "azure-identity>=1.19",
 ]
 
 [dependency-groups]

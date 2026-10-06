@@ -3,7 +3,8 @@ image:
   tag: "" # defaults to .Chart.AppVersion
 
 # Secret with DATABASE_URL, SECRET_KEY and the storage credentials
-# (S3_ACCESS_KEY/S3_SECRET_KEY or AZURE_ACCOUNT_KEY); optionally MONTANDON_API_TOKEN.
+# (S3_ACCESS_KEY/S3_SECRET_KEY, or AZURE_ACCOUNT_KEY unless the pods use workload identity);
+# optionally MONTANDON_API_TOKEN.
 # Create it yourself, or let secretProviderClass sync it from Azure Key Vault.
 existingSecret: notebook-factory-secrets
 
@@ -57,7 +58,11 @@ publishedProxy:
     limits: { memory: 128Mi }
 
 serviceAccount:
-  annotations: {} # e.g. azure.workload.identity/client-id for Key Vault access
+  annotations: {} # e.g. azure.workload.identity/client-id for Key Vault and Blob access
+
+# Labels for the web, worker and beat pods, e.g. azure.workload.identity/use: "true" so Azure
+# injects the identity's token. With it and no AZURE_ACCOUNT_KEY, the app uses the identity for Blob.
+podLabels: {}
 
 # Azure Key Vault to existingSecret, via the Secrets Store CSI driver.
 secretProviderClass:

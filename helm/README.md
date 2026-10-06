@@ -67,7 +67,7 @@ Beat only schedules: the Montandon poll and the hourly cleanup run on the worker
 | `publishedProxy.upstream` | Bucket root as an anonymous reader sees it, for example `https://<account>.blob.core.windows.net/<container>`. Objects must be publicly readable. |
 | `ingress.className`, `ingress.annotations`, `ingress.tlsSecretName` | Ingress controller and certificate. |
 | `secretProviderClass.*` | Key Vault name, tenant, workload identity client ID, and `keys`: the Secret keys to sync. Each is read from the Key Vault secret of the same name with `_` replaced by `-`. |
-| `serviceAccount.annotations` | For example `azure.workload.identity/client-id`. |
+| `serviceAccount.annotations`, `podLabels` | For Azure workload identity: the `azure.workload.identity/client-id` annotation and the `azure.workload.identity/use: "true"` label. With both and no `AZURE_ACCOUNT_KEY`, the app writes to Blob as that identity. |
 | `image.tag` | Defaults to the chart's `appVersion`. |
 
 See [`values.yaml`](values.yaml) for resources and the rest.
