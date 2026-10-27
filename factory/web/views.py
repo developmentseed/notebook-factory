@@ -6,7 +6,8 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.paginator import Paginator
-from django.db.models import Count, ProtectedError, Q
+from django.db.models import Count, ProtectedError, Q, Value
+from django.db.models.functions import Coalesce, NullIf
 from django.http import HttpResponse, HttpResponseNotFound, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -22,9 +23,10 @@ from factory.notebooks import parameters as P
 from factory.notebooks.models import AnalysisNotebook, NotebookRun, RunBatch, RunStatus, TriggerKind
 from factory.notebooks.parameters import ParameterError
 from factory.notebooks.services import RunRequestError, cancel_run, create_batch, create_run, retry_run
+from factory.notebooks.uploads import UploadError, as_archive, create_upload, inspect_archive
 
 from . import stac_picker
-from .forms import FacetForm, FacetOptionFormSet, RunRequestForm, StacCatalogForm
+from .forms import FacetForm, FacetOptionFormSet, RunDetailsForm, RunRequestForm, StacCatalogForm, UploadForm
 
 staff_required = user_passes_test(lambda u: u.is_active and u.is_staff, login_url="web:login")
 
@@ -65,6 +67,9 @@ def _posted_tags(post, facet_list) -> dict[str, list[str]]:
 # ---------------------------------------------------------------------------
 
 
+UPLOADED = "_upload"  # the browse "template" filter value for uploaded notebooks
+
+
 def _filtered_runs(request):
     qs = NotebookRun.objects.with_related()
     g = request.GET
@@ -79,6 +84,9 @@ def _filtered_runs(request):
     if f["q"]:
         qs = qs.filter(
             Q(notebook__title__icontains=f["q"])
+            | Q(display_title__icontains=f["q"])
+            | Q(summary__icontains=f["q"])
+            | Q(description__icontains=f["q"])
             | Q(area__name__icontains=f["q"])
             | Q(area__country__name__icontains=f["q"])
             | Q(stac_item__title__icontains=f["q"])
@@ -90,7 +98,9 @@ def _filtered_runs(request):
             Q(area__country_id=f["country"]) | Q(stac_item__country_codes__contains=[f["country"]])
         )
     qs = facets.filter_queryset(qs, g)
-    if f["template"]:
+    if f["template"] == UPLOADED:
+        qs = qs.filter(notebook__isnull=True)
+    elif f["template"]:
         qs = qs.filter(notebook__slug=f["template"])
     if f["status"] == "published":
         qs = qs.filter(status=RunStatus.PUBLISHED)
@@ -100,7 +110,9 @@ def _filtered_runs(request):
         qs = qs.filter(status=RunStatus.FAILED)
     if f["period"] in {"30", "90", "365"}:
         qs = qs.filter(created_at__gte=timezone.now() - timezone.timedelta(days=int(f["period"])))
-    if f["sort"] in {"-created_at", "created_at", "notebook__title", "area__name"}:
+    if f["sort"] == "notebook__title":
+        qs = qs.order_by(Coalesce(NullIf("display_title", Value("")), "notebook__title"))
+    elif f["sort"] in {"-created_at", "created_at", "area__name"}:
         qs = qs.order_by(f["sort"])
     return qs, f
 
@@ -115,6 +127,7 @@ def browse(request):
         "countries": Country.objects.filter(Q(areas__runs__isnull=False)).distinct().order_by("name"),
         "facet_filters": _browse_facets(request.GET),
         "templates": AnalysisNotebook.objects.filter(is_active=True),
+        "uploaded": UPLOADED,
         "total": paginator.count,
     }
     if request.htmx:
@@ -257,6 +270,7 @@ def run_detail(request, pk):
     if request.htmx:
         return render(request, "web/partials/run_status.html", ctx)
     ctx["tags"] = _run_tags_ctx(request, run)
+    ctx["can_edit"] = _can_edit_tags(request.user, run)
     return render(request, "web/run_detail.html", ctx)
 
 
@@ -287,6 +301,24 @@ def run_tags(request, pk):
         run.log(f"tags edited by {request.user.get_username()}")
         return render(request, "web/partials/run_tags.html", _run_tags_ctx(request, run))
     return render(request, "web/partials/run_tags.html", _run_tags_ctx(request, run, editing=True))
+
+
+@login_required
+def run_details(request, pk):
+    """Show / edit a run's title, summary and description (HTMX partial)."""
+    run = get_object_or_404(NotebookRun.objects.with_related(), pk=pk)
+    if not _can_edit_tags(request.user, run):
+        return HttpResponse("Only the requester or staff can edit details.", status=403)
+    form = RunDetailsForm(request.POST or None, instance=run)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        run.log(f"details edited by {request.user.get_username()}")
+        return render(request, "web/partials/run_details.html", {"run": run, "can_edit": True})
+    return render(
+        request,
+        "web/partials/run_details.html",
+        {"run": run, "can_edit": True, "editing": True, "form": form},
+    )
 
 
 def run_status_json(request, pk):
@@ -334,6 +366,68 @@ def batch_detail(request, pk):
     if request.htmx:
         return render(request, "web/partials/batch_runs.html", ctx)
     return render(request, "web/batch_detail.html", ctx)
+
+
+# ---------------------------------------------------------------------------
+# Uploads (already executed notebooks)
+# ---------------------------------------------------------------------------
+
+
+@staff_required
+def upload_new(request):
+    all_facets = list(Facet.objects.prefetch_related("options"))
+    tags = _posted_tags(request.POST, all_facets) if request.method == "POST" else {}
+    form = UploadForm(request.POST or None, request.FILES or None)
+    if request.method == "POST" and form.is_valid():
+        d = form.cleaned_data
+        try:
+            run = create_upload(
+                d["archive"],
+                notebook_path=form.manifest.notebook,
+                title=d["title"],
+                summary=d["summary"],
+                description=d["description"],
+                area=d["area"],
+                stac_item=d["stac_item"],
+                filters=tags,
+                user=request.user,
+            )
+        except UploadError as exc:
+            form.add_error("file", str(exc))
+        else:
+            messages.success(request, "Notebook uploaded; it is being rendered.")
+            return redirect(run)
+    ctx = {
+        "form": form,
+        "detail_fields": [form["title"], form["summary"], form["description"]],
+        "manifest": form.manifest,
+        "countries": Country.objects.filter(areas__isnull=False).distinct().order_by("name"),
+        "levels": sorted(set(AdminArea.objects.values_list("level", flat=True).distinct())),
+        "selected_area_ids": request.POST.get("area_ids", ""),
+        "tag_fields": _tag_fields(all_facets, tags),
+        "stac_open": bool(request.POST.get("stac_item_id")),
+        "picker": stac_picker.build(None, request.POST) if request.POST.get("stac_item_id") else None,
+    }
+    return render(request, "web/upload_new.html", ctx)
+
+
+@staff_required
+@require_POST
+def upload_inspect(request):
+    """Describe the chosen file as soon as it is picked: its notebooks, title and warnings (HTMX)."""
+    upload = request.FILES.get("file")
+    ctx = {"manifest": None, "error": "", "selected": request.POST.get("notebook_path", "")}
+    if upload is not None:
+        try:
+            ctx["manifest"] = inspect_archive(as_archive(upload, upload.name), ctx["selected"])
+        except UploadError as exc:
+            ctx["error"] = str(exc)
+    return render(request, "web/partials/upload_inspect.html", ctx)
+
+
+@staff_required
+def upload_stac_picker(request):
+    return render(request, "web/partials/stac_picker.html", {"picker": stac_picker.build(None, request.GET)})
 
 
 # ---------------------------------------------------------------------------

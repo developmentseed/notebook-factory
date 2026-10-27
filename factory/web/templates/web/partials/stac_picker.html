@@ -1,6 +1,6 @@
 {% with p=picker %}
 <div id="stac-picker" class="stac-picker"
-     hx-get="{% url 'web:stac-picker' p.nb.slug %}"
+     hx-get="{{ p.url }}"
      hx-trigger="change"
      hx-include="#stac-picker"
      hx-target="this" hx-swap="outerHTML">
@@ -28,7 +28,7 @@
   {% if p.collection %}
   <div class="inline-filters">
     <input type="search" name="stac_q" id="stac_q" value="{{ p.query }}" placeholder="Find by item id">
-    <button class="btn" type="button" id="stac_search" hx-get="{% url 'web:stac-picker' p.nb.slug %}" hx-include="#stac-picker" hx-target="#stac-picker" hx-swap="outerHTML">Search</button>
+    <button class="btn" type="button" id="stac_search" hx-get="{{ p.url }}" hx-include="#stac-picker" hx-target="#stac-picker" hx-swap="outerHTML">Search</button>
   </div>
   <ul class="list stac-items">
     {% for it in p.items %}

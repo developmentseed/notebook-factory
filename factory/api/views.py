@@ -5,9 +5,11 @@ from django.views.decorators.cache import cache_page
 from django_filters import rest_framework as filters
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import (
     SAFE_METHODS,
     BasePermission,
+    IsAdminUser,
     IsAuthenticated,
     IsAuthenticatedOrReadOnly,
 )
@@ -20,6 +22,7 @@ from factory.events.stac_client import StacClientError
 from factory.notebooks.models import AnalysisNotebook, NotebookRun, RunBatch, TriggerKind
 from factory.notebooks.parameters import ParameterError
 from factory.notebooks.services import RunRequestError, cancel_run, create_batch, create_run, retry_run
+from factory.notebooks.uploads import UploadError, create_upload
 
 from . import serializers as S
 
@@ -151,6 +154,9 @@ class NotebookRunViewSet(
     filterset_class = RunFilter
     search_fields = [
         "notebook__title",
+        "display_title",
+        "summary",
+        "description",
         "area__name",
         "stac_item__title",
         "stac_item__item_id",
@@ -162,6 +168,8 @@ class NotebookRunViewSet(
     def get_serializer_class(self):
         if self.action == "create":
             return S.RunCreateSerializer
+        if self.action == "upload":
+            return S.UploadCreateSerializer
         if self.action == "retrieve":
             return S.NotebookRunDetailSerializer
         return S.NotebookRunSerializer
@@ -197,6 +205,36 @@ class NotebookRunViewSet(
             return Response({"parameters": exc.errors}, status=400)
         except RunRequestError as exc:
             return Response({"detail": str(exc)}, status=400)
+        return Response(
+            S.NotebookRunSerializer(run, context={"request": request}).data, status=status.HTTP_202_ACCEPTED
+        )
+
+    @action(
+        detail=False,
+        methods=["post"],
+        permission_classes=[IsAdminUser],
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def upload(self, request):
+        """Publish an already executed notebook (staff only); it is rendered, not executed."""
+        ser = S.UploadCreateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+        try:
+            run = create_upload(
+                d["file"],
+                filename=d["file"].name,
+                notebook_path=d.get("notebook_path", ""),
+                title=d.get("title", ""),
+                summary=d.get("summary", ""),
+                description=d.get("description", ""),
+                area=d.get("area"),
+                stac_item=d.get("stac_item"),
+                filters=d["filters"],
+                user=request.user,
+            )
+        except UploadError as exc:
+            return Response({"file": [str(exc)]}, status=400)
         return Response(
             S.NotebookRunSerializer(run, context={"request": request}).data, status=status.HTTP_202_ACCEPTED
         )

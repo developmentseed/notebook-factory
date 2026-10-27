@@ -39,28 +39,6 @@ def local_template(settings, tmp_path, template):
     return template
 
 
-@pytest.fixture
-def local_storage(settings, tmp_path):
-    from django.core.files.storage import storages
-
-    settings.STORAGES = {
-        **settings.STORAGES,
-        "published": {
-            "BACKEND": "django.core.files.storage.FileSystemStorage",
-            "OPTIONS": {"location": str(tmp_path / "published"), "base_url": "/published/"},
-        },
-    }
-
-    def reset():
-        storages.__dict__.pop("backends", None)  # cached_property
-        storages._backends = None
-        storages._storages = {}
-
-    reset()
-    yield tmp_path / "published"
-    reset()
-
-
 def test_prepare_inputs_writes_area_and_subdivisions(template, nepal, tmp_path, settings):
     settings.NOTEBOOK_FACTORY["WORK_DIR"] = tmp_path
     run = create_run(template, {"hazard": "flood"}, area=nepal["root"])

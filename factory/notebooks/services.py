@@ -163,6 +163,10 @@ def cancel_run(run: NotebookRun) -> bool:
 
 def retry_run(run: NotebookRun, user=None) -> NotebookRun:
     """Create a fresh run with the same inputs."""
+    if run.is_upload:
+        from .uploads import retry_upload
+
+        return retry_upload(run, user=user)
     return create_run(
         run.notebook,
         run.parameters,

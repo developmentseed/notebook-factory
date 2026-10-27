@@ -5,6 +5,29 @@ from factory.events.matching import fetch_item
 from factory.events.models import StacCatalog, StacItem
 from factory.events.stac_client import StacClientError
 from factory.notebooks import parameters as P
+from factory.notebooks.models import NotebookRun
+from factory.notebooks.uploads import UploadError, as_archive, inspect_archive
+
+
+def resolve_stac_item(data) -> StacItem | None:
+    """A picked (catalog, collection, item id) is fetched live and stored; else a pre-selected StacItem."""
+    catalog, collection = data.get("stac_catalog"), (data.get("stac_collection") or "").strip()
+    item_id = (data.get("stac_item_id") or "").strip()
+    if catalog and collection and item_id:
+        existing = data.get("stac_item")
+        if existing and (existing.catalog_id, existing.collection, existing.item_id) == (
+            catalog.pk,
+            collection,
+            item_id,
+        ):
+            return existing
+        try:
+            return fetch_item(catalog, collection, item_id)
+        except StacClientError as exc:
+            raise forms.ValidationError(f"Could not fetch {item_id} from {catalog}: {exc}") from exc
+    if item_id and not (catalog and collection):
+        raise forms.ValidationError("Pick a catalog and a collection for the STAC item.")
+    return data.get("stac_item")
 
 
 class RunRequestForm(forms.Form):
@@ -55,7 +78,7 @@ class RunRequestForm(forms.Form):
                 bad = [a for a in areas if a.level not in nb.area_levels]
                 if bad:
                     raise forms.ValidationError(f"This template accepts admin levels {nb.area_levels} only.")
-        data["stac_item"] = self._resolve_stac_item(data)
+        data["stac_item"] = resolve_stac_item(data)
         if nb.requires_stac_item and not data["stac_item"]:
             raise forms.ValidationError(
                 "This template needs a STAC item: pick a catalog, collection and item."
@@ -63,25 +86,63 @@ class RunRequestForm(forms.Form):
         data["areas"] = areas
         return data
 
-    def _resolve_stac_item(self, data) -> StacItem | None:
-        """A picked (catalog, collection, item id) is fetched live and stored; else a pre-selected StacItem."""
-        catalog, collection = data.get("stac_catalog"), (data.get("stac_collection") or "").strip()
-        item_id = (data.get("stac_item_id") or "").strip()
-        if catalog and collection and item_id:
-            existing = data.get("stac_item")
-            if existing and (existing.catalog_id, existing.collection, existing.item_id) == (
-                catalog.pk,
-                collection,
-                item_id,
-            ):
-                return existing
+
+class UploadForm(forms.Form):
+    """An already executed notebook (zip or .ipynb) with its metadata. Filter tags are posted separately."""
+
+    file = forms.FileField(
+        label="Notebook archive",
+        help_text="A .zip with the notebook and the files it links to, or a single .ipynb",
+    )
+    notebook_path = forms.CharField(required=False, max_length=300, label="Notebook to publish")
+    title = forms.CharField(
+        required=False, max_length=200, help_text="Defaults to the notebook's first heading"
+    )
+    summary = forms.CharField(required=False, max_length=300, help_text="One line, shown on cards")
+    description = forms.CharField(
+        required=False, widget=forms.Textarea(attrs={"rows": 4}), help_text="Markdown allowed"
+    )
+    country = forms.ModelChoiceField(queryset=Country.objects.none(), required=False)
+    level = forms.IntegerField(required=False, min_value=0, max_value=5)
+    area_ids = forms.CharField(required=False, widget=forms.HiddenInput)
+    stac_catalog = forms.ModelChoiceField(queryset=StacCatalog.objects.filter(is_active=True), required=False)
+    stac_collection = forms.CharField(required=False, max_length=120)
+    stac_item_id = forms.CharField(required=False, max_length=200)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["country"].queryset = Country.objects.filter(areas__isnull=False).distinct()
+        self.manifest = None
+
+    def clean(self):
+        data = super().clean()
+        ids = [int(x) for x in (data.get("area_ids") or "").split(",") if x.strip().isdigit()]
+        if len(ids) > 1:
+            raise forms.ValidationError("An uploaded notebook can be about one area at most.")
+        data["area"] = AdminArea.objects.light().filter(pk__in=ids).first() if ids else None
+        data["stac_item"] = resolve_stac_item(data)
+        upload = data.get("file")
+        if upload is not None:
             try:
-                return fetch_item(catalog, collection, item_id)
-            except StacClientError as exc:
-                raise forms.ValidationError(f"Could not fetch {item_id} from {catalog}: {exc}") from exc
-        if item_id and not (catalog and collection):
-            raise forms.ValidationError("Pick a catalog and a collection for the STAC item.")
-        return data.get("stac_item")
+                data["archive"] = as_archive(upload, upload.name)
+                self.manifest = inspect_archive(data["archive"], data.get("notebook_path") or "")
+            except UploadError as exc:
+                self.add_error("file", str(exc))
+                return data
+            if self.manifest.notebook is None:
+                self.add_error(
+                    "notebook_path",
+                    "The archive holds several notebooks; pick one: " + ", ".join(self.manifest.notebooks),
+                )
+        return data
+
+
+class RunDetailsForm(forms.ModelForm):
+    class Meta:
+        model = NotebookRun
+        fields = ["display_title", "summary", "description"]
+        labels = {"display_title": "Title"}
+        widgets = {"description": forms.Textarea(attrs={"rows": 4})}
 
 
 class StacCatalogForm(forms.ModelForm):

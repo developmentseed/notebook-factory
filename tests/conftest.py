@@ -150,6 +150,28 @@ def user(db):
     return get_user_model().objects.create_user("ana", "ana@example.org", "pw")
 
 
+@pytest.fixture
+def local_storage(settings, tmp_path):
+    from django.core.files.storage import storages
+
+    settings.STORAGES = {
+        **settings.STORAGES,
+        "published": {
+            "BACKEND": "django.core.files.storage.FileSystemStorage",
+            "OPTIONS": {"location": str(tmp_path / "published"), "base_url": "/published/"},
+        },
+    }
+
+    def reset():
+        storages.__dict__.pop("backends", None)  # cached_property
+        storages._backends = None
+        storages._storages = {}
+
+    reset()
+    yield tmp_path / "published"
+    reset()
+
+
 @pytest.fixture(autouse=True)
 def _no_enqueue(settings, monkeypatch):
     """Never start real pipelines from tests; assert on the queued runs instead."""
