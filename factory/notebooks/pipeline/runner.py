@@ -40,8 +40,10 @@ def run_pipeline(run_id: str) -> NotebookRun:
         injected = inputs.prepare_inputs(run, ctx)
         if run.area_id:
             run.log(f"inputs: area {run.area.name} (L{run.area.level}) + subdivisions written to inputs/")
-        if run.event_id:
-            run.log(f"inputs: event {run.event.monty_corr_id or run.event.stac_id} written to inputs/")
+        if run.stac_item_id:
+            run.log(
+                f"inputs: STAC item {run.stac_item.short_ref} ({run.stac_item.catalog.name}) written to inputs/"
+            )
 
         stage = RunStatus.EXECUTING
         run.set_status(RunStatus.EXECUTING, "Executing notebook with papermill")

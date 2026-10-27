@@ -1,0 +1,49 @@
+{% with p=picker %}
+<div id="stac-picker" class="stac-picker"
+     hx-get="{% url 'web:stac-picker' p.nb.slug %}"
+     hx-trigger="change"
+     hx-include="#stac-picker"
+     hx-target="this" hx-swap="outerHTML">
+  {% for note in p.notes %}<p class="muted small">{{ note }}</p>{% endfor %}
+  {% if not p.catalogs %}
+    <p class="muted">No STAC catalogs configured.{% if user.is_staff %} <a href="{% url 'web:catalog-new' %}">Add one</a>.{% else %} Ask an administrator to add one.{% endif %}</p>
+  {% else %}
+  <div class="area-controls">
+    <label>Catalog
+      <select name="stac_catalog">
+        {% for c in p.catalogs %}<option value="{{ c.pk }}" {% if p.catalog and c.pk == p.catalog.pk %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Collection
+      <select name="stac_collection">
+        <option value="">— choose —</option>
+        {% for c in p.collections %}<option value="{{ c.id }}" {% if c.id == p.collection %}selected{% endif %}>{{ c.title }}{% if c.title != c.id %} ({{ c.id }}){% endif %}</option>{% endfor %}
+      </select>
+    </label>
+    {% if p.hints %}
+    <label class="check"><input type="checkbox" name="stac_show_all" id="stac_show_all" value="1" {% if p.show_all %}checked{% endif %}> Show all catalogs &amp; collections</label>
+    {% endif %}
+  </div>
+  {% if p.error %}<p class="error">{{ p.error }}</p>{% endif %}
+  {% if p.collection %}
+  <div class="inline-filters">
+    <input type="search" name="stac_q" id="stac_q" value="{{ p.query }}" placeholder="Find by item id">
+    <button class="btn" type="button" id="stac_search" hx-get="{% url 'web:stac-picker' p.nb.slug %}" hx-include="#stac-picker" hx-target="#stac-picker" hx-swap="outerHTML">Search</button>
+  </div>
+  <ul class="list stac-items">
+    {% for it in p.items %}
+    <li class="{% if it.id == p.item_id %}selected{% endif %}">
+      <button type="button" class="link" data-stac-item="{{ it.id }}">{{ it.title|default:it.id|truncatechars:80 }}</button>
+      <br><span class="muted small"><code>{{ it.id }}</code>{% if it.datetime %} · {{ it.datetime|slice:":16" }}{% endif %}{% if it.roles %} · {{ it.roles|join:", " }}{% endif %}</span>
+    </li>
+    {% empty %}<li class="muted small">{% if p.query %}No item with id “{{ p.query }}”.{% else %}No items found.{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% if p.hidden_by_roles %}<p class="muted small">{{ p.hidden_by_roles }} item(s) hidden: the template expects roles {{ p.hints.roles|join:", " }}. Tick “show all” to see them.</p>{% endif %}
+  {% endif %}
+  <label>Item id
+    <input type="text" name="stac_item_id" id="stac_item_id" value="{{ p.item_id }}" placeholder="Pick from the list or paste an item id">
+  </label>
+  {% endif %}
+</div>
+{% endwith %}

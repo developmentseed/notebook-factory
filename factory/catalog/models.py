@@ -1,25 +1,60 @@
 """
-Reference data used to parameterise and index notebook runs: hazards, countries
-and administrative areas. Geometries are stored so the app can offer a map
-picker and export boundaries to notebooks; the analysis itself never runs here.
+Reference data used to parameterise and index notebook runs: filters (facets
+such as hazard or use case, with their options), countries and administrative
+areas. Geometries are stored so the app can offer a map picker and export
+boundaries to notebooks; the analysis itself never runs here.
 """
 
 from django.contrib.gis.db import models as gis_models
+from django.core.exceptions import ValidationError
 from django.db import models
 
+# Query parameters the browse page and the API already use; a facet key must not shadow them.
+RESERVED_FACET_KEYS = {
+    "q",
+    "country",
+    "status",
+    "period",
+    "sort",
+    "template",
+    "page",
+    "catalog",
+    "notebook",
+    "area",
+    "trigger",
+    "batch",
+    "since",
+    "until",
+    "search",
+    "ordering",
+    "format",
+    "stac_item",
+}
 
-class Hazard(models.Model):
-    """A hazard type, mapped onto Montandon hazard codes (UNDRR-ISC classification prefixes)."""
 
-    key = models.SlugField(max_length=40, unique=True)
-    label = models.CharField(max_length=80)
-    icon = models.CharField(max_length=8, blank=True, help_text="Emoji shown in the UI")
-    color = models.CharField(max_length=7, blank=True, help_text="Hex colour used for badges")
-    monty_codes = models.JSONField(
-        default=list,
-        blank=True,
-        help_text="Montandon hazard code prefixes that map to this hazard, e.g. ['nat-hyd-flo'].",
+def validate_facet_key(value: str) -> None:
+    if value in RESERVED_FACET_KEYS:
+        raise ValidationError(f"'{value}' is reserved for other filters; pick another key.")
+
+
+class Facet(models.Model):
+    """A filter dimension (e.g. Hazard, Use case, Sector) that templates, runs and STAC items are tagged with."""
+
+    key = models.SlugField(
+        max_length=40,
+        unique=True,
+        validators=[validate_facet_key],
+        help_text="Used in URLs (?hazard=flood) and as the template parameter name it maps from",
     )
+    label = models.CharField(max_length=80)
+    description = models.CharField(max_length=300, blank=True)
+    multiple = models.BooleanField(default=False, help_text="A run may carry several options of this filter")
+    stac_property = models.CharField(
+        max_length=120,
+        blank=True,
+        help_text="STAC item property whose values map onto options via their match codes, e.g. monty:hazard_codes",
+    )
+    show_in_browse = models.BooleanField(default=True, help_text="Offer this filter on the browse page")
     order = models.PositiveSmallIntegerField(default=100)
 
     class Meta:
@@ -28,20 +63,35 @@ class Hazard(models.Model):
     def __str__(self) -> str:
         return self.label
 
-    def matches_code(self, code: str) -> bool:
-        code = (code or "").lower()
-        return any(code.startswith(prefix.lower()) for prefix in self.monty_codes or [])
 
-    @classmethod
-    def for_codes(cls, codes) -> "Hazard | None":
-        """Return the first hazard whose prefixes match any of the given Montandon codes."""
-        codes = [c for c in (codes or []) if c]
-        if not codes:
-            return None
-        for hazard in cls.objects.all():
-            if any(hazard.matches_code(c) for c in codes):
-                return hazard
-        return None
+class FacetOption(models.Model):
+    """One value of a facet (e.g. Hazard → Flood)."""
+
+    facet = models.ForeignKey(Facet, on_delete=models.CASCADE, related_name="options")
+    key = models.SlugField(max_length=60)
+    label = models.CharField(max_length=80)
+    icon = models.CharField(max_length=8, blank=True, help_text="Emoji shown in the UI")
+    color = models.CharField(max_length=7, blank=True, help_text="Hex colour used for badges")
+    match_codes = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Code prefixes in the facet's STAC property that map to this option, e.g. ['nat-hyd-flo']",
+    )
+    order = models.PositiveSmallIntegerField(default=100)
+
+    class Meta:
+        ordering = ["facet__order", "order", "label"]
+        constraints = [models.UniqueConstraint(fields=["facet", "key"], name="uniq_facetoption_facet_key")]
+
+    def __str__(self) -> str:
+        return f"{self.facet.label}: {self.label}"
+
+    def matches(self, value) -> bool:
+        """True when a STAC property value is this option's key or starts with one of its match codes."""
+        value = str(value or "").lower()
+        if not value:
+            return False
+        return value == self.key.lower() or any(value.startswith(p.lower()) for p in self.match_codes or [])
 
 
 class Country(models.Model):

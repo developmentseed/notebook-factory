@@ -15,13 +15,6 @@ from django.urls import reverse
 from django.utils import timezone
 
 
-class UseCase(models.TextChoices):
-    UC1 = "uc1", "Risk exposure"
-    UC2 = "uc2", "Impact estimation"
-    UC3 = "uc3", "Response prioritisation"
-    OTHER = "other", "Other"
-
-
 class SourceKind(models.TextChoices):
     LOCAL = "local", "Local templates directory"
     GIT = "git", "Git repository"
@@ -34,8 +27,12 @@ class AnalysisNotebook(models.Model):
     title = models.CharField(max_length=200)
     summary = models.CharField(max_length=300, blank=True, help_text="One-line description for cards")
     description = models.TextField(blank=True, help_text="Markdown allowed")
-    use_case = models.CharField(max_length=10, choices=UseCase.choices, default=UseCase.OTHER)
-    hazards = models.ManyToManyField("catalog.Hazard", blank=True, related_name="notebooks")
+    facet_options = models.ManyToManyField(
+        "catalog.FacetOption",
+        blank=True,
+        related_name="notebooks",
+        help_text="Filter options this template applies to (e.g. its hazards and use case)",
+    )
 
     source_kind = models.CharField(max_length=10, choices=SourceKind.choices, default=SourceKind.LOCAL)
     source_repo = models.URLField(blank=True, help_text="Git URL when source_kind=git")
@@ -55,9 +52,14 @@ class AnalysisNotebook(models.Model):
     area_levels = models.JSONField(
         default=list, blank=True, help_text="Allowed admin levels, e.g. [1, 2]; empty = any"
     )
-    requires_event = models.BooleanField(default=False, help_text="Run needs a Montandon event")
+    requires_stac_item = models.BooleanField(default=False, help_text="Run needs a STAC item")
+    stac_hints = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Soft picker hints: {profile, collections, roles}. Never enforced.",
+    )
     supports_writeback = models.BooleanField(
-        default=False, help_text="Notebook produces a STAC collection to write back"
+        default=False, help_text="Notebook produces a STAC collection to write back to the item's catalog"
     )
     estimated_runtime_minutes = models.PositiveIntegerField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
@@ -65,13 +67,20 @@ class AnalysisNotebook(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["use_case", "title"]
+        ordering = ["title"]
 
     def __str__(self) -> str:
         return self.title
 
     def get_absolute_url(self) -> str:
         return reverse("web:template-detail", args=[self.slug])
+
+    @property
+    def facet_groups(self):
+        """[(facet, [options])] for pills; prefetch `facet_options__facet` when listing."""
+        from factory.catalog.facets import group_options
+
+        return group_options(self.facet_options.all())
 
     @property
     def parameter_count(self) -> int:
@@ -106,7 +115,7 @@ STAGE_ORDER = [
 class TriggerKind(models.TextChoices):
     MANUAL = "manual", "Manual (UI)"
     API = "api", "API"
-    AUTO = "auto", "Automatic (event)"
+    AUTO = "auto", "Automatic (trigger rule)"
     CLI = "cli", "Command line"
 
 
@@ -154,8 +163,14 @@ class NotebookRunQuerySet(models.QuerySet):
 
     def with_related(self):
         return self.select_related(
-            "notebook", "area", "area__country", "hazard", "event", "triggered_by", "batch"
-        )
+            "notebook",
+            "area",
+            "area__country",
+            "stac_item",
+            "stac_item__catalog",
+            "triggered_by",
+            "batch",
+        ).prefetch_related("run_facets__option__facet")
 
 
 class NotebookRun(models.Model):
@@ -172,11 +187,12 @@ class NotebookRun(models.Model):
     area = models.ForeignKey(
         "catalog.AdminArea", null=True, blank=True, on_delete=models.SET_NULL, related_name="runs"
     )
-    hazard = models.ForeignKey(
-        "catalog.Hazard", null=True, blank=True, on_delete=models.SET_NULL, related_name="runs"
+    stac_item = models.ForeignKey(
+        "events.StacItem", null=True, blank=True, on_delete=models.SET_NULL, related_name="runs"
     )
-    event = models.ForeignKey(
-        "events.Event", null=True, blank=True, on_delete=models.SET_NULL, related_name="runs"
+
+    facet_options = models.ManyToManyField(
+        "catalog.FacetOption", through="RunFacet", blank=True, related_name="runs"
     )
 
     trigger = models.CharField(max_length=10, choices=TriggerKind.choices, default=TriggerKind.MANUAL)
@@ -188,7 +204,7 @@ class NotebookRun(models.Model):
         related_name="notebook_runs",
     )
     trigger_rule = models.ForeignKey(
-        "events.EventTriggerRule", null=True, blank=True, on_delete=models.SET_NULL, related_name="runs"
+        "events.TriggerRule", null=True, blank=True, on_delete=models.SET_NULL, related_name="runs"
     )
     notify_emails = models.JSONField(default=list, blank=True)
 
@@ -207,7 +223,7 @@ class NotebookRun(models.Model):
         max_length=10, choices=WritebackStatus.choices, default=WritebackStatus.NONE
     )
     writeback_ref = models.CharField(
-        max_length=400, blank=True, help_text="Collection id / URL written to Montandon"
+        max_length=400, blank=True, help_text="Collection id written to the item's catalog"
     )
     writeback_error = models.TextField(blank=True)
 
@@ -237,8 +253,8 @@ class NotebookRun(models.Model):
         bits = [self.notebook.title]
         if self.area_id:
             bits.append(self.area.name)
-        elif self.event_id:
-            bits.append(self.event.title)
+        elif self.stac_item_id:
+            bits.append(str(self.stac_item))
         return " · ".join(bits)
 
     @property
@@ -246,11 +262,28 @@ class NotebookRun(models.Model):
         bits = []
         if self.area_id:
             bits.append(f"{self.area.country.name} · {self.area.display_level}")
-        elif self.event_id and self.event.country_codes:
-            bits.append(", ".join(self.event.country_codes))
-        if self.hazard_id:
-            bits.append(self.hazard.label)
+        elif self.stac_item_id:
+            bits.append(
+                self.stac_item.countries_display
+                if self.stac_item.country_codes
+                else self.stac_item.collection
+            )
+        bits.extend(o.label for _, options in self.facet_groups for o in options)
         return " · ".join(bits)
+
+    @property
+    def facet_groups(self):
+        """[(facet, [options])] for pills; `with_related()` prefetches what this needs."""
+        from factory.catalog.facets import group_options
+
+        return group_options(rf.option for rf in self.run_facets.all())
+
+    @property
+    def filter_values(self) -> dict[str, list[str]]:
+        """{facet_key: [option_key]} as injected into notebooks."""
+        from factory.catalog.facets import option_keys
+
+        return option_keys(rf.option for rf in self.run_facets.all())
 
     @property
     def is_terminal(self) -> bool:
@@ -334,6 +367,27 @@ class NotebookRun(models.Model):
 
     def log(self, message: str, level: str = "info") -> None:
         RunLogEntry.objects.create(run=self, message=message[:4000], level=level)
+
+
+class FacetSource(models.TextChoices):
+    PARAMETER = "parameter", "Template parameter"
+    TEMPLATE = "template", "Template"
+    STAC_ITEM = "stac_item", "STAC item"
+    MANUAL = "manual", "Set by a user"
+
+
+class RunFacet(models.Model):
+    """A filter option on a run, and where it came from (so derived tags can be recomputed)."""
+
+    run = models.ForeignKey(NotebookRun, on_delete=models.CASCADE, related_name="run_facets")
+    option = models.ForeignKey("catalog.FacetOption", on_delete=models.CASCADE, related_name="run_facets")
+    source = models.CharField(max_length=10, choices=FacetSource.choices)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["run", "option"], name="uniq_runfacet_run_option")]
+
+    def __str__(self) -> str:
+        return f"{self.run_id} · {self.option} ({self.source})"
 
 
 class RunLogEntry(models.Model):

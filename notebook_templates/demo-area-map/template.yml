@@ -4,7 +4,9 @@ summary: 'A fast smoke test: maps the selected area and its subdivisions with lo
 description: Use this template to check that the pipeline (papermill → MyST → storage) works end to end.
   It takes a few seconds, needs no external data, and shows an interactive lonboard map plus a widget
   in the published page.
-use_case: other
+filters:
+  use_case:
+  - other
 version: '0.1'
 requires_area: true
 estimated_runtime_minutes: 1

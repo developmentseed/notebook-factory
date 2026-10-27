@@ -237,9 +237,11 @@ CELERY_TASK_TIME_LIMIT = env.int("CELERY_TASK_TIME_LIMIT", default=60 * 60 * 3)
 CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": CELERY_TASK_TIME_LIMIT + 60 * 60}
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULE = {
-    "poll-montandon": {
-        "task": "factory.events.tasks.poll_montandon",
-        "schedule": env.int("MONTANDON_POLL_INTERVAL_SECONDS", default=600),
+    "poll-stac-catalogs": {
+        "task": "factory.events.tasks.poll_catalogs",
+        "schedule": env.int(
+            "STAC_POLL_INTERVAL_SECONDS", default=env.int("MONTANDON_POLL_INTERVAL_SECONDS", default=600)
+        ),
     },
     "cleanup-workdirs": {
         "task": "factory.notebooks.tasks.cleanup_workdirs",
@@ -287,15 +289,28 @@ NOTEBOOK_FACTORY = {
     "AREA_SIMPLIFY_TOLERANCE": env.float("AREA_SIMPLIFY_TOLERANCE", default=0.005),
 }
 
-# Montandon (STAC API) integration
-MONTANDON = {
-    "STAC_URL": env("MONTANDON_STAC_URL", default="https://montandon-eoapi-stage.ifrc.org/stac"),
-    "API_TOKEN": env("MONTANDON_API_TOKEN", default=""),
-    "POLL_OVERLAP_MINUTES": env.int("MONTANDON_POLL_OVERLAP_MINUTES", default=30),
-    "POLL_LOOKBACK_DAYS": env.int("MONTANDON_POLL_LOOKBACK_DAYS", default=7),
-    "POLL_PAGE_SIZE": env.int("MONTANDON_POLL_PAGE_SIZE", default=100),
+# STAC catalogs: the catalogs themselves (URL, API key, profile) live in the database.
+# The MONTANDON_* names are still read as fallbacks for older .env files.
+STAC = {
+    "TIMEOUT": env.int("STAC_TIMEOUT", default=env.int("MONTANDON_TIMEOUT", default=60)),
+    "POLL_OVERLAP_MINUTES": env.int(
+        "STAC_POLL_OVERLAP_MINUTES", default=env.int("MONTANDON_POLL_OVERLAP_MINUTES", default=30)
+    ),
+    "POLL_LOOKBACK_DAYS": env.int(
+        "STAC_POLL_LOOKBACK_DAYS", default=env.int("MONTANDON_POLL_LOOKBACK_DAYS", default=7)
+    ),
+    "POLL_PAGE_SIZE": env.int(
+        "STAC_POLL_PAGE_SIZE", default=env.int("MONTANDON_POLL_PAGE_SIZE", default=100)
+    ),
+    # Seconds to cache a catalog's collection list for the run-form picker.
+    "COLLECTIONS_CACHE_SECONDS": env.int("STAC_COLLECTIONS_CACHE_SECONDS", default=600),
+}
+
+# Used only by `seed_demo` (and the 0004 data migration) to create the Montandon catalog.
+MONTANDON_SEED = {
+    "URL": env("MONTANDON_STAC_URL", default="https://montandon-eoapi-stage.ifrc.org/stac"),
+    "API_KEY": env("MONTANDON_API_TOKEN", default=""),
     "WRITEBACK_ENABLED": env.bool("MONTANDON_WRITEBACK_ENABLED", default=False),
-    "TIMEOUT": env.int("MONTANDON_TIMEOUT", default=60),
 }
 
 # ---------------------------------------------------------------------------
@@ -318,7 +333,11 @@ REST_FRAMEWORK = {
 }
 SPECTACULAR_SETTINGS = {
     "TITLE": "Montandon Notebooks API",
-    "DESCRIPTION": "Index of analysis notebook templates and their published runs; orchestration of new runs.",
+    "DESCRIPTION": (
+        "Index of analysis notebook templates and their published runs; orchestration of new runs. "
+        "Runs can take an item from any registered STAC catalog and are tagged with configurable "
+        "filters (e.g. hazard, use case); the template, run and STAC item lists accept ?<filter key>=<option>."
+    ),
     "VERSION": "0.1.0",
     "SERVE_INCLUDE_SCHEMA": False,
 }

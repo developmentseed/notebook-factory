@@ -6,7 +6,7 @@ from factory.events.poller import poll
 
 
 class Command(BaseCommand):
-    help = "Poll Montandon once for new events and fire matching trigger rules."
+    help = "Poll every STAC catalog with enabled trigger rules once and fire matching rules."
 
     def add_arguments(self, parser):
         parser.add_argument(

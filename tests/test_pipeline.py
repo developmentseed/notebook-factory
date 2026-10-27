@@ -7,7 +7,7 @@ from pathlib import Path
 import nbformat
 import pytest
 
-from factory.events.matching import upsert_event
+from factory.events.matching import upsert_item
 from factory.events.writeback import collect_stac, write_back
 from factory.notebooks.models import RunStatus, WritebackStatus
 from factory.notebooks.pipeline import inputs, publisher
@@ -25,11 +25,11 @@ def local_template(settings, tmp_path, template):
     nb.metadata["kernelspec"] = {"name": "python3", "display_name": "Python 3", "language": "python"}
     nb.cells = [
         nbformat.v4.new_code_cell(
-            "hazard='flood'\nthreshold=0.5\nlayers=[]\nverbose=False\narea={}\narea_geojson=''\nsubdivisions_geojson=''\noutput_dir='.'\nrun_id=''\ninputs_dir=''\nevent={}\nevent_json=''\nmontandon_stac_url=''",
+            "hazard='flood'\nthreshold=0.5\nlayers=[]\nverbose=False\narea={}\narea_geojson=''\nsubdivisions_geojson=''\noutput_dir='.'\nrun_id=''\ninputs_dir=''\nstac_item={}\nstac_item_json=''\nstac_collection=''\nstac_api_url=''\nstac_catalog_profile=''",
             metadata={"tags": ["parameters"]},
         ),
         nbformat.v4.new_code_cell(
-            "import json, pathlib\nsubs = json.load(open(subdivisions_geojson))\nprint(area['name'], len(subs['features']))\npathlib.Path(output_dir, 'result.json').write_text(json.dumps({'n': len(subs['features']), 'hazard': hazard}))"
+            "import json, os, pathlib\nsubs = json.load(open(subdivisions_geojson))\nprint(area['name'], len(subs['features']))\npathlib.Path(output_dir, 'result.json').write_text(json.dumps({'n': len(subs['features']), 'hazard': hazard}))\npathlib.Path(output_dir, 'env.json').write_text(json.dumps({k: os.environ.get(k) for k in ('STAC_API_URL', 'STAC_API_KEY', 'NOTEBOOK_RUN_ID')}))\npathlib.Path(output_dir, 'stac.json').write_text(json.dumps({'id': stac_item.get('id'), 'collection': stac_collection, 'url': stac_api_url}))"
         ),
     ]
     nbformat.write(nb, tdir / "notebook.ipynb")
@@ -67,6 +67,7 @@ def test_prepare_inputs_writes_area_and_subdivisions(template, nepal, tmp_path, 
     ctx = RunContext.create(str(run.id))
     injected = inputs.prepare_inputs(run, ctx)
     assert injected["area"]["code"] == "NPL" and injected["hazard"] == "flood"
+    assert injected["filters"] == {"hazard": ["flood"], "use_case": ["uc1"]}
     subs = json.loads(Path(injected["subdivisions_geojson"]).read_text())
     assert len(subs["features"]) == 2  # immediate children (level 1)
     run.parameters["aggregation_level"] = 2
@@ -100,6 +101,38 @@ def test_pipeline_end_to_end_with_stub_renderer(local_template, local_storage, n
     assert run.notifications.count() == 0  # nobody to notify
 
 
+def test_pipeline_passes_stac_item_and_catalog_env_to_kernel(
+    local_template, local_storage, nepal, hazards, montandon, sample_item, monkeypatch
+):
+    """The item is injected as parameters; the catalog URL and key reach the kernel only via its env."""
+
+    def fake_render(run, ctx, base_url):
+        html = ctx.build_dir / "_build" / "html"
+        html.mkdir(parents=True)
+        (html / "index.html").write_text("<html></html>")
+        ctx.html_dir = html
+        return html
+
+    monkeypatch.setattr("factory.notebooks.pipeline.renderer.render", fake_render)
+    item, *_ = upsert_item(montandon, sample_item)
+    run = create_run(local_template, {"hazard": "flood"}, area=nepal["root"], stac_item=item)
+    run = run_pipeline(str(run.id))
+    assert run.status == RunStatus.PUBLISHED, run.error
+    out = local_storage / "runs" / str(run.id) / "outputs"
+    assert json.loads((out / "env.json").read_text()) == {
+        "STAC_API_URL": "https://montandon.example.org/stac",
+        "STAC_API_KEY": "monty-secret",
+        "NOTEBOOK_RUN_ID": str(run.id),
+    }
+    assert json.loads((out / "stac.json").read_text()) == {
+        "id": "example-event-npl-earthquake-2026",
+        "collection": "reference-events",
+        "url": "https://montandon.example.org/stac",
+    }
+    assert "monty-secret" not in (local_storage / "runs" / str(run.id) / "notebook.ipynb").read_text()
+    assert "STAC_API_KEY" not in os.environ
+
+
 def test_pipeline_failure_is_recorded(local_template, local_storage, nepal, monkeypatch):
     def boom(*a, **k):
         raise RuntimeError("no myst here")
@@ -119,11 +152,11 @@ def test_base_url_path_uses_public_base(template, nepal, settings, local_storage
     assert publisher.base_url_path(run) == f"/nb/runs/{run.id}"
 
 
-def test_writeback_skips_when_disabled_and_pushes_when_enabled(
-    settings, tmp_path, event_template, nepal, hazards, sample_item
+def test_writeback_targets_the_items_catalog_only_when_enabled(
+    tmp_path, item_template, nepal, hazards, montandon, sample_item
 ):
-    event, *_ = upsert_event(sample_item)
-    run = create_run(event_template, {}, area=nepal["root"], event=event)
+    item, *_ = upsert_item(montandon, sample_item)
+    run = create_run(item_template, {}, area=nepal["root"], stac_item=item)
     out = tmp_path / "outputs"
     (out / "stac" / "items").mkdir(parents=True)
     (out / "stac" / "collection.json").write_text(
@@ -133,8 +166,8 @@ def test_writeback_skips_when_disabled_and_pushes_when_enabled(
         json.dumps({"type": "Feature", "id": "a", "properties": {}})
     )
     assert collect_stac(out)[0]["id"] == "response-prioritisation-x"
-    settings.MONTANDON["WRITEBACK_ENABLED"] = False
     assert write_back(run, out) is None
+    assert "write-back disabled for catalog Montandon" in run.log_entries.last().message
 
     class FakeMonty:
         def __init__(self):
@@ -146,7 +179,9 @@ def test_writeback_skips_when_disabled_and_pushes_when_enabled(
         def upsert_item(self, cid, item):
             self.items.append((cid, item))
 
-    settings.MONTANDON["WRITEBACK_ENABLED"] = True
+    montandon.writeback_enabled = True
+    montandon.save()
+    run.refresh_from_db()
     client = FakeMonty()
     assert write_back(run, out, client=client) == "response-prioritisation-x"
     assert client.items[0][1]["links"][0]["rel"] == "about"

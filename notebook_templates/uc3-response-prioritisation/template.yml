@@ -16,15 +16,23 @@ description: '**Use Case 3 · Action · first 24–72 hours.** Normalises compon
   is queried
 
   > when a token is available). The composite, confidence and write-back contract are real.'
-use_case: uc3
-hazards:
-- flood
-- cyclone
-- earthquake
-- wildfire
+filters:
+  use_case:
+  - uc3
+  hazard:
+  - flood
+  - cyclone
+  - earthquake
+  - wildfire
 version: '0.2'
 requires_area: true
-requires_event: true
+requires_stac_item: true
+stac_hints:
+  profile: montandon
+  collections:
+  - reference-events
+  roles:
+  - event
 supports_writeback: true
 estimated_runtime_minutes: 3
 parameters:

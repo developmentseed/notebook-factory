@@ -5,22 +5,43 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import MultiPolygon, Polygon
 
-from factory.catalog.models import AdminArea, Country, Hazard
+from factory.catalog.models import AdminArea, Country, Facet, FacetOption
+from factory.events.models import CatalogProfile, StacCatalog
 from factory.notebooks.models import AnalysisNotebook
 
-FIXTURES = Path(__file__).resolve().parent.parent / "examples" / "events"
+FIXTURES = Path(__file__).resolve().parent.parent / "examples" / "stac_items"
 
 
 @pytest.fixture
-def hazards(db):
+def facets(db):
+    """The two seeded filters: hazard (mapped from monty:hazard_codes) and use case."""
+    # The data migration already creates both facets (and the use case options) in a fresh database.
+    hazard, _ = Facet.objects.update_or_create(
+        key="hazard", defaults={"label": "Hazard", "stac_property": "monty:hazard_codes", "order": 10}
+    )
+    use_case, _ = Facet.objects.update_or_create(key="use_case", defaults={"label": "Use case", "order": 20})
+
+    def option(facet, key, label, **extra):
+        return FacetOption.objects.update_or_create(facet=facet, key=key, defaults={"label": label, **extra})[
+            0
+        ]
+
     return {
-        "flood": Hazard.objects.create(
-            key="flood", label="Flood", icon="🌊", monty_codes=["nat-hyd-flo"], order=1
+        "hazard": hazard,
+        "use_case": use_case,
+        "flood": option(hazard, "flood", "Flood", icon="🌊", match_codes=["nat-hyd-flo"], order=1),
+        "earthquake": option(
+            hazard, "earthquake", "Earthquake", icon="🏚️", match_codes=["nat-geo-ear"], order=2
         ),
-        "earthquake": Hazard.objects.create(
-            key="earthquake", label="Earthquake", icon="🏚️", monty_codes=["nat-geo-ear"], order=2
-        ),
+        "uc1": option(use_case, "uc1", "Risk exposure", order=1),
+        "uc2": option(use_case, "uc2", "Impact estimation", order=2),
     }
+
+
+@pytest.fixture
+def hazards(facets):
+    """Hazard filter options by key."""
+    return {k: facets[k] for k in ("flood", "earthquake")}
 
 
 def _square(x, y, size=1.0):
@@ -55,11 +76,10 @@ def nepal(db):
 
 
 @pytest.fixture
-def template(db, hazards):
+def template(db, facets, hazards):
     nb = AnalysisNotebook.objects.create(
         slug="exposure",
         title="Exposure",
-        use_case="uc1",
         notebook_path="exposure/notebook.ipynb",
         parameter_schema={
             "type": "object",
@@ -83,20 +103,40 @@ def template(db, hazards):
         },
         requires_area=True,
     )
-    nb.hazards.set(hazards.values())
+    nb.facet_options.set([*hazards.values(), facets["uc1"]])
     return nb
 
 
 @pytest.fixture
-def event_template(db, hazards):
-    return AnalysisNotebook.objects.create(
+def item_template(db, facets, hazards):
+    nb = AnalysisNotebook.objects.create(
         slug="impact",
         title="Impact",
-        use_case="uc2",
         notebook_path="impact/notebook.ipynb",
         requires_area=True,
-        requires_event=True,
+        requires_stac_item=True,
+        stac_hints={"profile": "montandon", "collections": ["reference-events"], "roles": ["event"]},
         parameter_schema={"type": "object", "properties": {"radius": {"type": "number", "default": 10}}},
+    )
+    nb.facet_options.set([*hazards.values(), facets["uc2"]])
+    return nb
+
+
+@pytest.fixture
+def montandon(db):
+    return StacCatalog.objects.create(
+        name="Montandon",
+        slug="montandon",
+        url="https://montandon.example.org/stac/",
+        api_key="monty-secret",
+        profile=CatalogProfile.MONTANDON,
+    )
+
+
+@pytest.fixture
+def earth_search(db):
+    return StacCatalog.objects.create(
+        name="Earth Search", slug="earth-search", url="https://earth-search.example.org/v1"
     )
 
 

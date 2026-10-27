@@ -10,6 +10,7 @@ from pathlib import Path
 import nbformat
 import papermill as pm
 from django.conf import settings
+from jupyter_client.manager import AsyncKernelManager
 
 from ..models import NotebookRun
 from .context import RunContext
@@ -64,6 +65,31 @@ class _ProgressHandler(logging.Handler):
             log.exception("progress handler failed")
 
 
+def kernel_env(run: NotebookRun) -> dict[str, str]:
+    """Per-run variables for the kernel process: run id and the item's catalog URL / API key."""
+    catalog = run.stac_item.catalog if run.stac_item_id else None
+    return {
+        "NOTEBOOK_RUN_ID": str(run.id),
+        "STAC_API_URL": catalog.base_url if catalog else "",
+        "STAC_API_KEY": catalog.api_key if catalog else "",
+    }
+
+
+def _kernel_manager_class(extra_env: dict[str, str]) -> type[AsyncKernelManager]:
+    """A kernel manager that launches the kernel with `extra_env` on top of os.environ.
+
+    Eager mode runs notebooks on several threads in one process, so per-run
+    secrets must not go through os.environ, where runs would see each other's.
+    """
+
+    class _RunKernelManager(AsyncKernelManager):
+        async def _async_pre_start_kernel(self, **kw):
+            kw["env"] = {**os.environ, **(kw.get("env") or {}), **extra_env}
+            return await super()._async_pre_start_kernel(**kw)
+
+    return _RunKernelManager
+
+
 def execute(run: NotebookRun, ctx: RunContext, parameters: dict) -> Path:
     cfg = settings.NOTEBOOK_FACTORY
     src = ctx.template_path
@@ -73,10 +99,8 @@ def execute(run: NotebookRun, ctx: RunContext, parameters: dict) -> Path:
     kernel = nb.metadata.get("kernelspec", {}).get("name") or cfg["KERNEL_NAME"]
     ctx.executed_path = ctx.workdir / "notebook.ipynb"
 
+    # Process-wide and identical for every run; per-run values go through kernel_env().
     env_extra = {
-        "MONTANDON_API_TOKEN": settings.MONTANDON["API_TOKEN"],
-        "MONTANDON_STAC_URL": settings.MONTANDON["STAC_URL"],
-        "NOTEBOOK_RUN_ID": str(run.id),
         "PYTHONUNBUFFERED": "1",
         "DJANGO_ALLOW_ASYNC_UNSAFE": "1",  # see _ProgressHandler
     }
@@ -98,6 +122,7 @@ def execute(run: NotebookRun, ctx: RunContext, parameters: dict) -> Path:
             request_save_on_cell_execute=True,
             execution_timeout=cfg["CELL_TIMEOUT"],
             start_timeout=120,
+            kernel_manager_class=_kernel_manager_class(kernel_env(run)),
         )
     except pm.PapermillExecutionError as exc:
         raise ExecutionError(

@@ -14,13 +14,15 @@ description: '**Use Case 1 · Risk · before the event.** Compares a hazard laye
   it real;
 
   > the method (mask → overlay → zonal statistics) stays the same.'
-use_case: uc1
-hazards:
-- flood
-- cyclone
-- earthquake
-- wildfire
-- heatwave
+filters:
+  use_case:
+  - uc1
+  hazard:
+  - flood
+  - cyclone
+  - earthquake
+  - wildfire
+  - heatwave
 version: '0.2'
 requires_area: true
 estimated_runtime_minutes: 3

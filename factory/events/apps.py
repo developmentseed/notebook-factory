@@ -4,4 +4,4 @@ from django.apps import AppConfig
 class EventsConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "factory.events"
-    verbose_name = "Events (Montandon)"
+    verbose_name = "STAC catalogs & triggers"
