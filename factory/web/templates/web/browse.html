@@ -6,7 +6,10 @@
     <h1>Analyses</h1>
     <p class="lead">Every generated analysis is indexed here. Filter by country, hazard, use case or any other filter, then open the published page.</p>
   </div>
-  <a class="btn primary" href="{% url 'web:template-list' %}">＋ New analysis</a>
+  <div class="actions">
+    {% if user.is_staff %}<a class="btn" href="{% url 'web:upload-new' %}">⇪ Upload notebook</a>{% endif %}
+    <a class="btn primary" href="{% url 'web:template-list' %}">＋ New analysis</a>
+  </div>
 </div>
 <div class="browse">
   <form class="filters" method="get" hx-get="{% url 'web:browse' %}" hx-target="#results" hx-trigger="change, keyup changed delay:400ms from:#q" hx-push-url="true">
@@ -25,6 +28,11 @@
       {% endif %}
     </fieldset>
     {% endfor %}
+    <fieldset><legend>Source</legend>
+      <label><input type="radio" name="template" value="" {% if not filters.template %}checked{% endif %}> All</label>
+      {% for t in templates %}<label><input type="radio" name="template" value="{{ t.slug }}" {% if filters.template == t.slug %}checked{% endif %}> {{ t.title }}</label>{% endfor %}
+      <label><input type="radio" name="template" value="{{ uploaded }}" {% if filters.template == uploaded %}checked{% endif %}> Uploaded notebooks</label>
+    </fieldset>
     <fieldset><legend>Date</legend>
       <label><input type="radio" name="period" value="30" {% if filters.period == '30' %}checked{% endif %}> Last 30 days</label>
       <label><input type="radio" name="period" value="90" {% if filters.period == '90' %}checked{% endif %}> Last 90 days</label>
@@ -41,7 +49,7 @@
         <option value="-created_at" {% if filters.sort == '-created_at' %}selected{% endif %}>Newest</option>
         <option value="created_at" {% if filters.sort == 'created_at' %}selected{% endif %}>Oldest</option>
         <option value="area__name" {% if filters.sort == 'area__name' %}selected{% endif %}>Area</option>
-        <option value="notebook__title" {% if filters.sort == 'notebook__title' %}selected{% endif %}>Template</option>
+        <option value="notebook__title" {% if filters.sort == 'notebook__title' %}selected{% endif %}>Title</option>
       </select>
     </label>
     <noscript><button class="btn">Apply</button></noscript>

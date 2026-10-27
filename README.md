@@ -161,6 +161,24 @@ environment: staff manage them in the UI (see [STAC catalogs](#stac-catalogs) an
 Runs can be fanned out over every area at an admin level in one request (a `RunBatch`), from the UI
 (*Run for every area at this level*) or the API (`country` + `area_level`).
 
+## Uploading notebooks
+
+Staff can publish notebooks that were executed elsewhere under **Upload** (or `POST /api/runs/upload/`).
+An upload is a `NotebookRun` without a template (`trigger=upload`): it gets a title, summary, description,
+an optional area and STAC item, and filter tags, and then shows up in browse and the API like any other run
+(browse's *Source → Uploaded notebooks* lists only uploads).
+
+* Upload a `.zip` with the notebook and the files it links to (images, data), or a bare `.ipynb`. If the
+  zip holds several notebooks, pick the one to publish. Files next to it are published with it.
+* Nothing is executed. The pipeline unpacks the archive, renders it with MyST and publishes it
+  (queued → unpacking → rendering → publishing). Unexecuted code cells only produce a warning.
+* The original archive is kept as `runs/<run id>/source.zip`. *Retry* re-renders from it, which is also
+  how to pick up a new MyST theme.
+* Filter tags come from the form (manual), then the STAC item. There is no template or parameter source.
+* Limits: `NOTEBOOK_UPLOAD_MAX_BYTES` (200 MB), `NOTEBOOK_UPLOAD_MAX_UNCOMPRESSED_BYTES` (1 GB) and
+  `NOTEBOOK_UPLOAD_MAX_FILES` (2000). Paths outside the archive and symlinks are refused. Behind
+  ingress-nginx, raise `proxy-body-size` too (see `helm/values.yaml`).
+
 ## STAC catalogs
 
 A `StacCatalog` is any STAC API. Staff add catalogs on the **Catalogs** page (with a *Test connection*
@@ -251,6 +269,8 @@ POST /api/runs/  {"notebook": "uc2-impact-estimation", "area": 1, "stac_catalog"
                   "stac_collection": "reference-events", "stac_item_id": "..."}   # item fetched live (or "stac_item": <pk>)
 POST /api/runs/  {..., "filters": {"hazard": ["flood"]}}   # manual tags; they win over derived ones
 POST /api/runs/<id>/cancel/  ·  POST /api/runs/<id>/retry/
+POST /api/runs/upload/  multipart: file=@notebook.zip, title, summary, description, area, stac_item,
+                        filters='{"hazard": ["flood"]}', notebook_path   # staff only; rendered, not executed
 GET  /api/areas/geojson/?country=NPL&level=2   simplified boundaries for the map picker
 GET  /api/catalogs/  ·  /api/catalogs/<slug>/collections/  ·  /api/trigger-rules/  ·  /api/batches/
 GET  /api/stac-items/?catalog__slug=montandon&collection=reference-events&hazard=flood
@@ -293,4 +313,7 @@ deploy/ovh/             test deployment on devseed's OVH cluster
   because newer wheels raise SIGILL on some arm64 VMs (Colima on Apple Silicon). Both are in place.
 * **Write-back** uses the STAC Transactions extension (`POST/PUT /collections`, `/items`); it is off
   by default per catalog and needs an API key with write rights.
+* **Uploaded notebooks run their own HTML/JS** in readers' browsers, and published pages are served from the
+  app's host (`/published`). That is why uploads are staff only. Serve published files from a separate
+  domain (`PUBLISHED_PUBLIC_BASE_URL`) before opening uploads to other users.
 * **Catalog API keys** are stored unencrypted in the database and only support Bearer auth.

@@ -58,6 +58,8 @@ def from_parameters(notebook, params: Mapping) -> dict[Facet, list[FacetOption]]
     A parameter feeds a facet when its schema declares `x-filter: <facet key>`,
     or when its name equals a facet key (so a `hazard` parameter tags the hazard).
     """
+    if notebook is None:
+        return {}
     props = (notebook.parameter_schema or {}).get("properties", {}) or {}
     facets = {f.key: f for f in Facet.objects.all()}
     out: dict[Facet, list[FacetOption]] = {}
@@ -74,6 +76,8 @@ def from_parameters(notebook, params: Mapping) -> dict[Facet, list[FacetOption]]
 
 def parameter_facet_keys(notebook) -> set[str]:
     """Facet keys that a template parameter feeds (those are not offered as manual tags in the run form)."""
+    if notebook is None:
+        return set()
     props = (notebook.parameter_schema or {}).get("properties", {}) or {}
     facet_keys = set(Facet.objects.values_list("key", flat=True))
     return {(spec or {}).get("x-filter") or name for name, spec in props.items()} & facet_keys
@@ -81,6 +85,8 @@ def parameter_facet_keys(notebook) -> set[str]:
 
 def from_template(notebook) -> dict[Facet, list[FacetOption]]:
     """The template's option for each facet where it lists exactly one."""
+    if notebook is None:
+        return {}
     return {
         facet: opts
         for facet, opts in group_options(notebook.facet_options.select_related("facet"))

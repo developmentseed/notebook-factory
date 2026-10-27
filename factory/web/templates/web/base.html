@@ -15,6 +15,7 @@
     <a href="{% url 'web:browse' %}" class="{% if request.resolver_match.url_name == 'browse' %}active{% endif %}">Analyses</a>
     <a href="{% url 'web:template-list' %}" class="{% if 'template' in request.resolver_match.url_name %}active{% endif %}">Templates</a>
     <a href="{% url 'web:stac-item-list' %}" class="{% if 'stac-item' in request.resolver_match.url_name %}active{% endif %}">STAC items</a>
+    {% if user.is_staff %}<a href="{% url 'web:upload-new' %}" class="{% if 'upload' in request.resolver_match.url_name %}active{% endif %}">Upload</a>{% endif %}
     {% if user.is_staff %}<a href="{% url 'web:facet-list' %}" class="{% if 'facet' in request.resolver_match.url_name %}active{% endif %}">Filters</a>{% endif %}
     {% if user.is_staff %}<a href="{% url 'web:catalog-list' %}" class="{% if 'catalog' in request.resolver_match.url_name %}active{% endif %}">Catalogs</a>{% endif %}
     <a href="{% url 'api:docs' %}">API</a>

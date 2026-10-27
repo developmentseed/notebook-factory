@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from django.conf import settings
 from django.core.cache import cache
+from django.urls import reverse
 
 from factory.events.models import StacCatalog
 from factory.events.stac_client import StacClientError
@@ -60,11 +61,16 @@ def _item_row(raw: dict) -> dict:
 
 
 def build(notebook, params) -> dict:
-    """Template context for `web/partials/stac_picker.html` from GET/POST-like `params`."""
-    hints = notebook.stac_hints or {}
+    """Template context for `web/partials/stac_picker.html` from GET/POST-like `params`.
+
+    `notebook` is None for uploads: no hints, and the picker re-renders from the upload URL.
+    """
+    hints = (notebook.stac_hints if notebook else None) or {}
+    url = reverse("web:stac-picker", args=[notebook.slug]) if notebook else reverse("web:upload-stac-picker")
     show_all = params.get("stac_show_all") in {"1", "on", "true"}
     ctx: dict = {
         "nb": notebook,
+        "url": url,
         "hints": hints,
         "show_all": show_all,
         "catalogs": [],

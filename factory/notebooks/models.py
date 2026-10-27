@@ -117,6 +117,7 @@ class TriggerKind(models.TextChoices):
     API = "api", "API"
     AUTO = "auto", "Automatic (trigger rule)"
     CLI = "cli", "Command line"
+    UPLOAD = "upload", "Uploaded"
 
 
 class WritebackStatus(models.TextChoices):
@@ -174,15 +175,31 @@ class NotebookRunQuerySet(models.QuerySet):
 
 
 class NotebookRun(models.Model):
-    """One execution of a template with concrete parameters."""
+    """One execution of a template with concrete parameters, or an uploaded (already executed) notebook."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    notebook = models.ForeignKey(AnalysisNotebook, on_delete=models.PROTECT, related_name="runs")
+    notebook = models.ForeignKey(
+        AnalysisNotebook,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="runs",
+        help_text="Empty for uploaded notebooks",
+    )
     batch = models.ForeignKey(RunBatch, null=True, blank=True, on_delete=models.SET_NULL, related_name="runs")
     status = models.CharField(
         max_length=12, choices=RunStatus.choices, default=RunStatus.QUEUED, db_index=True
     )
     parameters = models.JSONField(default=dict, blank=True, help_text="User-facing parameters (validated)")
+
+    display_title = models.CharField(
+        max_length=200, blank=True, help_text="Overrides the title built from the template and target"
+    )
+    summary = models.CharField(max_length=300, blank=True, help_text="One-line description for cards")
+    description = models.TextField(blank=True, help_text="Markdown allowed")
+    upload_path = models.CharField(
+        max_length=300, blank=True, help_text="Uploads: path of the notebook inside source.zip"
+    )
 
     area = models.ForeignKey(
         "catalog.AdminArea", null=True, blank=True, on_delete=models.SET_NULL, related_name="runs"
@@ -236,9 +253,15 @@ class NotebookRun(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(notebook__isnull=False) | models.Q(trigger="upload"),
+                name="run_has_notebook_unless_upload",
+            )
+        ]
 
     def __str__(self) -> str:
-        return f"{self.notebook.title} · {self.short_id}"
+        return f"{self.title} · {self.short_id}"
 
     def get_absolute_url(self) -> str:
         return reverse("web:run-detail", args=[self.id])
@@ -249,7 +272,15 @@ class NotebookRun(models.Model):
         return str(self.id)[:8]
 
     @property
+    def is_upload(self) -> bool:
+        return self.notebook_id is None
+
+    @property
     def title(self) -> str:
+        if self.display_title:
+            return self.display_title
+        if self.notebook_id is None:
+            return "Uploaded notebook"
         bits = [self.notebook.title]
         if self.area_id:
             bits.append(self.area.name)
@@ -306,11 +337,19 @@ class NotebookRun(models.Model):
         return None
 
     @property
+    def stage_order(self) -> list[str]:
+        """Uploads are already executed, so they skip that stage."""
+        if self.is_upload:
+            return [s for s in STAGE_ORDER if s != RunStatus.EXECUTING]
+        return STAGE_ORDER
+
+    @property
     def stage_index(self) -> int:
+        order = self.stage_order
         if self.status == RunStatus.PUBLISHED:
-            return len(STAGE_ORDER)
+            return len(order)
         try:
-            return STAGE_ORDER.index(RunStatus(self.status))
+            return order.index(RunStatus(self.status))
         except ValueError:
             return -1
 
@@ -320,7 +359,7 @@ class NotebookRun(models.Model):
         if self.status == RunStatus.FAILED:
             failed_at = (self.progress or {}).get("failed_stage")
         out = []
-        for i, stage in enumerate(STAGE_ORDER):
+        for i, stage in enumerate(self.stage_order):
             if failed_at and stage == failed_at:
                 state = "failed"
             elif i < self.stage_index:
@@ -333,7 +372,7 @@ class NotebookRun(models.Model):
                 state = "done" if self.status == RunStatus.PUBLISHED else "pending"
             label = {
                 RunStatus.QUEUED: "Queued",
-                RunStatus.FETCHING: "Fetching inputs",
+                RunStatus.FETCHING: "Unpacking upload" if self.is_upload else "Fetching inputs",
                 RunStatus.EXECUTING: "Executing notebook",
                 RunStatus.RENDERING: "Rendering HTML",
                 RunStatus.PUBLISHING: "Publishing to storage",
@@ -342,7 +381,7 @@ class NotebookRun(models.Model):
         return out
 
     def parameter_summary(self) -> str:
-        schema_props = (self.notebook.parameter_schema or {}).get("properties", {})
+        schema_props = (self.notebook.parameter_schema or {}).get("properties", {}) if self.notebook else {}
         parts = []
         for key, value in (self.parameters or {}).items():
             title = schema_props.get(key, {}).get("title", key)

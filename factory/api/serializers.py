@@ -183,7 +183,8 @@ class RunLogEntrySerializer(serializers.ModelSerializer):
 
 class NotebookRunSerializer(serializers.ModelSerializer):
     notebook = serializers.SlugRelatedField(slug_field="slug", read_only=True)
-    notebook_title = serializers.CharField(source="notebook.title", read_only=True)
+    notebook_title = serializers.CharField(source="notebook.title", read_only=True, default=None)
+    is_upload = serializers.BooleanField(read_only=True)
     area = AdminAreaSerializer(read_only=True)
     filters = FiltersField()
     stac_item = StacItemSerializer(read_only=True)
@@ -200,8 +201,11 @@ class NotebookRunSerializer(serializers.ModelSerializer):
             "id",
             "notebook",
             "notebook_title",
+            "is_upload",
             "title",
             "subtitle",
+            "summary",
+            "description",
             "status",
             "parameters",
             "area",
@@ -282,10 +286,7 @@ class RunCreateSerializer(serializers.Serializer):
     )
 
     def validate_filters(self, value):
-        unknown = set(value) - set(Facet.objects.values_list("key", flat=True))
-        if unknown:
-            raise serializers.ValidationError(f"Unknown filter(s): {', '.join(sorted(unknown))}")
-        return value
+        return _validate_filter_keys(value)
 
     def validate(self, attrs):
         if attrs.get("country") and attrs.get("area_level") is not None:
@@ -296,17 +297,66 @@ class RunCreateSerializer(serializers.Serializer):
             )
             if not attrs["areas"]:
                 raise serializers.ValidationError({"country": "No areas loaded for that country/level."})
-        live = [attrs.get("stac_catalog"), attrs.get("stac_collection"), attrs.get("stac_item_id")]
-        if any(live):
-            if not all(live):
-                raise serializers.ValidationError(
-                    {"stac_item_id": "stac_catalog, stac_collection and stac_item_id go together."}
-                )
-            try:
-                attrs["stac_item"] = fetch_item(*live)
-            except StacClientError as exc:
-                raise serializers.ValidationError({"stac_item_id": str(exc)}) from exc
-        return attrs
+        return _resolve_live_stac_item(attrs)
+
+
+def _resolve_live_stac_item(attrs):
+    """Fetch and store the item named by stac_catalog + stac_collection + stac_item_id, if given."""
+    live = [attrs.get("stac_catalog"), attrs.get("stac_collection"), attrs.get("stac_item_id")]
+    if any(live):
+        if not all(live):
+            raise serializers.ValidationError(
+                {"stac_item_id": "stac_catalog, stac_collection and stac_item_id go together."}
+            )
+        try:
+            attrs["stac_item"] = fetch_item(*live)
+        except StacClientError as exc:
+            raise serializers.ValidationError({"stac_item_id": str(exc)}) from exc
+    return attrs
+
+
+def _validate_filter_keys(value):
+    unknown = set(value) - set(Facet.objects.values_list("key", flat=True))
+    if unknown:
+        raise serializers.ValidationError(f"Unknown filter(s): {', '.join(sorted(unknown))}")
+    return value
+
+
+class UploadCreateSerializer(serializers.Serializer):
+    """POST /api/runs/upload/ (multipart) — publish an already executed notebook (.zip or .ipynb)."""
+
+    file = serializers.FileField()
+    notebook_path = serializers.CharField(
+        required=False, allow_blank=True, help_text="Notebook inside the zip; needed when it holds several"
+    )
+    title = serializers.CharField(required=False, allow_blank=True, max_length=200)
+    summary = serializers.CharField(required=False, allow_blank=True, max_length=300)
+    description = serializers.CharField(required=False, allow_blank=True)
+    area = serializers.PrimaryKeyRelatedField(
+        queryset=AdminArea.objects.all(), required=False, allow_null=True
+    )
+    stac_item = serializers.PrimaryKeyRelatedField(
+        queryset=StacItem.objects.all(), required=False, allow_null=True
+    )
+    stac_catalog = serializers.SlugRelatedField(
+        slug_field="slug", queryset=StacCatalog.objects.filter(is_active=True), required=False
+    )
+    stac_collection = serializers.CharField(required=False)
+    stac_item_id = serializers.CharField(required=False)
+    filters = serializers.JSONField(
+        binary=True,
+        required=False,
+        default=dict,
+        help_text='Filter tags as a JSON object, e.g. {"hazard": ["flood"]}',
+    )
+
+    def validate_filters(self, value):
+        if not isinstance(value, dict) or not all(isinstance(v, list) for v in value.values()):
+            raise serializers.ValidationError('Expected an object of lists, e.g. {"hazard": ["flood"]}.')
+        return _validate_filter_keys(value)
+
+    def validate(self, attrs):
+        return _resolve_live_stac_item(attrs)
 
 
 class RunBatchSerializer(serializers.ModelSerializer):

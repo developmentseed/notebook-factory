@@ -4,6 +4,7 @@
   if (!form) return;
   const cfg = window.RUN_FORM || {};
   const requiresArea = form.dataset.requiresArea === "1";
+  const singleArea = form.dataset.singleArea === "1";
   const allowedLevels = (form.dataset.areaLevels || "").split(",").filter(Boolean).map(Number);
 
   const areaIds = document.getElementById("area_ids");
@@ -88,8 +89,9 @@
         l.on("click", () => {
           const id = String(f.properties.id);
           if (allEl && allEl.checked) { allEl.checked = false; }
-          if (selected.has(id)) selected.delete(id); else selected.set(id, f.properties.name);
-          l.setStyle(styleFor(id));
+          if (selected.has(id)) selected.delete(id);
+          else { if (singleArea) selected.clear(); selected.set(id, f.properties.name); }
+          if (singleArea) layer.setStyle((g) => styleFor(g.properties.id)); else l.setStyle(styleFor(id));
           renderSelection();
         });
       },
@@ -108,7 +110,7 @@
     }
     countryEl.addEventListener("change", () => { selected.clear(); loadAreas(); });
     levelEl.addEventListener("change", () => { selected.clear(); loadAreas(); });
-    allEl.addEventListener("change", () => { if (allEl.checked) { selected.clear(); if (layer) layer.setStyle((f) => styleFor(f.properties.id)); } renderSelection(); });
+    if (allEl) allEl.addEventListener("change", () => { if (allEl.checked) { selected.clear(); if (layer) layer.setStyle((f) => styleFor(f.properties.id)); } renderSelection(); });
     loadAreas();
   }
   // STAC picker (the #stac-picker partial is re-rendered by HTMX, so listeners are delegated).

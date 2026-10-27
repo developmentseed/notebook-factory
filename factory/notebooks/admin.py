@@ -49,6 +49,7 @@ class NotebookRunAdmin(admin.ModelAdmin):
     list_filter = ("status", "trigger", "notebook", "facet_options", "writeback_status")
     search_fields = (
         "id",
+        "display_title",
         "area__name",
         "stac_item__title",
         "stac_item__item_id",

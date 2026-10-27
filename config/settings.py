@@ -285,6 +285,12 @@ NOTEBOOK_FACTORY = {
     "MYST_STRIP_THEBE": env.bool("MYST_STRIP_THEBE", default=False),
     # Where published runs live inside the storage (prefix).
     "PUBLISH_PREFIX": env("NOTEBOOK_PUBLISH_PREFIX", default="runs"),
+    # Limits for uploaded notebook archives (zip or bare .ipynb).
+    "UPLOAD_MAX_BYTES": env.int("NOTEBOOK_UPLOAD_MAX_BYTES", default=200 * 1024 * 1024),
+    "UPLOAD_MAX_UNCOMPRESSED_BYTES": env.int(
+        "NOTEBOOK_UPLOAD_MAX_UNCOMPRESSED_BYTES", default=1024 * 1024 * 1024
+    ),
+    "UPLOAD_MAX_FILES": env.int("NOTEBOOK_UPLOAD_MAX_FILES", default=2000),
     # Simplification tolerance (degrees) for GeoJSON served to the map picker.
     "AREA_SIMPLIFY_TOLERANCE": env.float("AREA_SIMPLIFY_TOLERANCE", default=0.005),
 }
