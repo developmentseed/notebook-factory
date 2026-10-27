@@ -321,7 +321,11 @@ REST_FRAMEWORK = {
 }
 SPECTACULAR_SETTINGS = {
     "TITLE": "Montandon Notebooks API",
-    "DESCRIPTION": "Index of analysis notebook templates and their published runs; orchestration of new runs.",
+    "DESCRIPTION": (
+        "Index of analysis notebook templates and their published runs; orchestration of new runs. "
+        "Runs can take an item from any registered STAC catalog and are tagged with configurable "
+        "filters (e.g. hazard, use case); the template, run and STAC item lists accept ?<filter key>=<option>."
+    ),
     "VERSION": "0.1.0",
     "SERVE_INCLUDE_SCHEMA": False,
 }

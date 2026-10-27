@@ -14,7 +14,7 @@ db:               ## create the postgres database + postgis extension (Postgres.
 migrate:
 	uv run python manage.py migrate
 
-seed:             ## hazards, Nepal boundaries (GADM), templates, Montandon catalog, example rules
+seed:             ## hazard/use case filters, Nepal boundaries (GADM), templates, Montandon catalog, example rules
 	uv run python manage.py seed_demo --countries NPL
 
 superuser:

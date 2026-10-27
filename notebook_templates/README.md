@@ -44,9 +44,20 @@ parameters:               # JSON Schema (object); becomes the form + validation
   required: [hazard]
 ```
 
+Filters and their options are managed by staff on the **Filters** page; `filters:` keys and option
+keys must already exist there (unknown ones are skipped with a warning when `sync_templates` runs).
 The older `use_case:` and `hazards:` keys are still read as `filters.use_case` / `filters.hazard`.
-A parameter whose name is a filter key (like `hazard` above) tags the run with the chosen option;
-any other parameter can do the same with `x-filter: <filter key>`.
+
+A parameter whose name is a filter key (like `hazard` above) tags the run with the chosen option, so
+its `enum` values should be that filter's option keys. Any other parameter can do the same with
+`x-filter`:
+
+```yaml
+    focus_sectors: {type: array, items: {type: string, enum: [health, shelter]}, x-filter: sector}
+```
+
+Filters fed by a parameter, or pinned by `filters:` to a single option, are not asked again in the run
+form's *Tags*; the rest can be set there (see the main README, "Filters").
 
 `requires_event` is still read as an alias of `requires_stac_item`. Hints never block a run: the user
 can tick "show all" in the picker, and the API / CLI ignore them.
@@ -73,13 +84,50 @@ the notebook also runs standalone in Jupyter:
 | `stac_collection` | str | the item's collection id |
 | `stac_api_url` | str | root URL of the item's catalog |
 | `stac_catalog_profile` | str | `generic` or `montandon` (`""` without an item) |
-| `filters` | dict | the run's filter tags, e.g. `{"hazard": ["flood"], "use_case": ["uc1"]}` |
+| `filters` | dict | the run's filter tags at creation time, e.g. `{"hazard": ["flood"], "use_case": ["uc1"]}` |
 | `hazard` | str | first `hazard` option key or `""` (kept for older templates) |
 
 The kernel also gets the environment variables `STAC_API_URL` and `STAC_API_KEY` for the item's
 catalog (empty without an item). The key is never a parameter, so it does not end up in the published
-notebook. Send it as `Authorization: Bearer <key>`; pystac-client does that with
-`Client.open(url, headers={"Authorization": f"Bearer {key}"})`.
+notebook.
+
+A parameters cell that declares all of them:
+
+```python
+# --- Reserved parameters (injected by the Notebook Factory; defaults keep the notebook runnable standalone) ---
+run_id = ""
+inputs_dir = ""
+output_dir = "outputs"
+area = {}                      # {id, code, name, level, country, country_name, bbox}
+area_geojson = ""              # FeatureCollection with the target area
+subdivisions_geojson = ""      # FeatureCollection with the aggregation subdivisions
+stac_item = {}                 # the run's STAC item (dict)
+stac_item_json = ""
+stac_collection = ""
+stac_api_url = ""              # root of the item's catalog
+stac_catalog_profile = ""      # "generic" | "montandon"
+filters = {}                   # {"hazard": ["flood"], "use_case": ["uc1"], ...}
+hazard = ""
+```
+
+## Using the STAC item
+
+`stac_item` is the item as the catalog returned it, so a notebook can read its geometry, properties and
+assets directly. To query the same catalog (related items, history, …) use `stac_api_url` and the key
+from the environment, sent as a Bearer token:
+
+```python
+import os
+from pystac_client import Client
+
+key = os.environ.get("STAC_API_KEY")
+catalog = Client.open(stac_api_url, headers={"Authorization": f"Bearer {key}"} if key else None)
+related = catalog.search(collections=[stac_collection], bbox=stac_item.get("bbox"), max_items=20)
+```
+
+Check `stac_catalog_profile` before relying on extension fields: `monty:*` properties are only expected
+from `montandon` catalogs. Templates that only make sense for one kind of catalog can say so with
+`stac_hints` (above).
 
 ## Output conventions
 
