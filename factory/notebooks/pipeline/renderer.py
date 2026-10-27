@@ -80,7 +80,7 @@ def render(run: NotebookRun, ctx: RunContext, base_url: str) -> Path:
         "project": {
             "title": run.title,
             "description": run.notebook.summary or run.notebook.title,
-            "keywords": [k for k in [run.notebook.use_case, run.hazard.key if run.hazard_id else None] if k],
+            "keywords": [k for keys in run.filter_values.values() for k in keys],
             "plugins": ["anywidget-static-export.mjs"],
             "toc": [{"file": "notebook.ipynb"}],
         },

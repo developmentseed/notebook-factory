@@ -11,10 +11,13 @@ execution, and publishes the results as static HTML** — the architecture propo
   a STAC item from any configured catalog — with [papermill](https://papermill.readthedocs.io/), render it with
   [MyST](https://mystmd.org/) and upload the static site to object storage (local disk, S3/MinIO or Azure Blob).
 * A **browse UI** (Django templates + HTMX) and a **REST API** make every generated analysis
-  discoverable by country, area, hazard, use case and date. Published pages are served straight from storage.
+  discoverable by country, area, date and any **filter**. Published pages are served straight from storage.
+* **Filters** (`Facet` + `FacetOption`) are staff-defined dimensions such as *Hazard* and *Use case*
+  (both seeded), or anything else (*Sector*, *Programme*…). Templates, runs, STAC items and trigger rules
+  are tagged with options; see [Filters](#filters).
 * **STAC catalogs** (`StacCatalog`) are any STAC APIs staff register in the UI (URL + optional API key).
   Users pick catalog → collection → item when starting a run. Montandon is one such catalog, with a
-  `montandon` profile that also reads the `monty:*` fields (correlation id, hazard codes, countries).
+  `montandon` profile that also reads the `monty:*` fields (correlation id, countries).
 * A **poller** (Celery beat) watches catalog collections for new items and fires **trigger rules**
   that map them onto templates (Use Cases 2 and 3). Use Case 3 results are **written back** to the
   item's catalog (e.g. Montandon) as a `response-prioritisation` STAC collection.
@@ -42,7 +45,7 @@ cp .env.example .env                      # edit DATABASE_URL etc.
 createdb notebook_factory && psql -d notebook_factory -c "CREATE EXTENSION postgis;"
 
 uv run python manage.py migrate
-uv run python manage.py seed_demo --countries NPL   # hazards, Nepal boundaries from GADM, templates, example rules
+uv run python manage.py seed_demo --countries NPL   # hazard/use case filters, Nepal boundaries from GADM, templates, example rules
 uv run python manage.py createsuperuser
 uv run python manage.py runserver
 ```
@@ -135,12 +138,29 @@ and stored in plain text in the database.
 Runs can be fanned out over every area at an admin level in one request (a `RunBatch`), from the UI
 (*Run for every area at this level*) or the API (`country` + `area_level`).
 
+## Filters
+
+Staff manage filters under **Filters** in the UI (or the admin, or `/api/filters/`). Each filter has
+options, may allow several options per run (`multiple`), and may name a STAC property
+(`stac_property`, e.g. `monty:hazard_codes`) whose values map onto options via their *match codes*
+(prefixes). A run's options for each filter come from the first source that has any:
+
+1. **manual**: picked in the run form's *Tags*, edited later on the run page (requester or staff), or
+   `filters` in `POST /api/runs/`;
+2. **a template parameter**: one whose name is the filter key (e.g. `hazard`), or that declares
+   `x-filter: <key>`;
+3. **the STAC item**: options matched from the filter's `stac_property`, for items from any catalog;
+4. **the template**: when `template.yml` `filters:` lists exactly one option for that filter.
+
+Browse, the STAC item list and the API filter with `?<filter key>=<option>` (repeat a key for "any of";
+different keys must all match), e.g. `?hazard=flood&hazard=cyclone&use_case=uc2`.
+
 ## Automation (Use Cases 2 & 3)
 
 `TriggerRule` (manage it in the admin) says: *for items in these collections of this catalog, with these
-roles / hazards / countries (and an optional CQL2 `search_filter`), run this template with these
-parameters*. Hazard and country filters only match items from catalogs whose profile extracts them
-(`montandon`). Parameter values may use Jinja, e.g. `{{ item.correlation_id }}` or
+roles / filter options / countries (and an optional CQL2 `search_filter`), run this template with these
+parameters*. Country filters only match items from catalogs whose profile extracts them
+(`montandon`). Parameter values may use Jinja, e.g. `{{ item.correlation_id }}`, `{{ filters.hazard }}` or
 `{{ props['monty:hazard_codes'][0] }}` (`event` still works as an alias of `item`). Rules run once per
 item (`ItemRuleLink`) unless `rerun_on_update` is set, and can fan out over an admin level.
 
@@ -152,7 +172,7 @@ run creation are shared.
 ## Writing a template
 
 See [`notebook_templates/README.md`](notebook_templates/README.md). In short: a folder with
-`template.yml` (title, use case, hazards, `parameters` JSON Schema, `requires_area`, `requires_stac_item`,
+`template.yml` (title, `filters` such as use case and hazards, `parameters` JSON Schema, `requires_area`, `requires_stac_item`,
 `stac_hints`, `supports_writeback`) and a `notebook.ipynb` whose first code cell is tagged `parameters`. The bundled
 templates (`demo-area-map`, `uc1-risk-exposure`, `uc2-impact-estimation`, `uc3-response-prioritisation`)
 run end-to-end with **synthetic hazard/population data** so the pipeline can be exercised without
@@ -164,7 +184,8 @@ Browse the OpenAPI docs at `/api/docs/`. Highlights:
 
 ```
 GET  /api/templates/                       templates with their parameter schema
-GET  /api/runs/?country=NPL&hazard=flood   published runs (filters: notebook, use_case, area, stac_item, catalog, status, since, until)
+GET  /api/runs/?country=NPL&hazard=flood   published runs (also: notebook, area, stac_item, catalog, status, since, until, any filter key)
+GET  /api/filters/                         filters with their options (staff can create / edit)
 POST /api/runs/  {"notebook": "uc1-risk-exposure", "area": 12, "parameters": {...}}
 POST /api/runs/  {"notebook": "...", "country": "NPL", "area_level": 2, "parameters": {...}}   # fan-out
 POST /api/runs/  {"notebook": "uc2-impact-estimation", "area": 1, "stac_catalog": "montandon",
@@ -181,7 +202,7 @@ Catalogs need a logged-in user to read and staff to write; their API keys are wr
 
 ```
 config/                 settings, celery, urls
-factory/catalog/        Hazard, Country, AdminArea (PostGIS) + GADM/COD importers
+factory/catalog/        Facet/FacetOption (filters) + tagging rules, Country, AdminArea (PostGIS), GADM/COD importers
 factory/notebooks/      AnalysisNotebook, NotebookRun, RunBatch; parameter schemas; the pipeline
 factory/events/         StacCatalog, StacItem, TriggerRule, STAC client + profiles, poller, write-back
 factory/notifications/  Notification + delivery

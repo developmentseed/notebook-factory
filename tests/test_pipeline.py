@@ -65,6 +65,7 @@ def test_prepare_inputs_writes_area_and_subdivisions(template, nepal, tmp_path, 
     ctx = RunContext.create(str(run.id))
     injected = inputs.prepare_inputs(run, ctx)
     assert injected["area"]["code"] == "NPL" and injected["hazard"] == "flood"
+    assert injected["filters"] == {"hazard": ["flood"], "use_case": ["uc1"]}
     subs = json.loads(Path(injected["subdivisions_geojson"]).read_text())
     assert len(subs["features"]) == 2  # immediate children (level 1)
     run.parameters["aggregation_level"] = 2

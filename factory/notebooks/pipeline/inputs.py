@@ -15,7 +15,8 @@ their parameters cell with harmless defaults so they also run standalone):
   stac_collection        str   the item's collection id (or "")
   stac_api_url           str   STAC API root of the item's catalog (or "")
   stac_catalog_profile   str   "generic" | "montandon" (or "")
-  hazard                 str   hazard key (or "")
+  filters                dict  the run's filter tags {facet_key: [option_key, ...]}, e.g. {"hazard": ["flood"]}
+  hazard                 str   first hazard option key (or ""); kept for older templates
 
 The catalog's API key is passed through the environment (STAC_API_KEY, next to
 STAC_API_URL), never as a parameter, so it does not end up inside the published
@@ -49,7 +50,8 @@ def prepare_inputs(run: NotebookRun, ctx: RunContext) -> dict[str, Any]:
         "stac_collection": "",
         "stac_api_url": "",
         "stac_catalog_profile": "",
-        "hazard": run.hazard.key if run.hazard_id else "",
+        "filters": run.filter_values,
+        "hazard": (run.filter_values.get("hazard") or [""])[0],
     }
     if run.area_id:
         area = run.area

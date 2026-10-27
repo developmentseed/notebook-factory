@@ -19,8 +19,9 @@ title: Population & infrastructure risk exposure
 summary: One line for cards.
 description: |
   Markdown shown on the template page.
-use_case: uc1            # uc1 | uc2 | uc3 | other
-hazards: [flood, cyclone] # Hazard keys (see seed_demo)
+filters:                  # filter key -> option keys (see the Filters page); runs inherit a filter
+  use_case: [uc1]         #   when exactly one option is listed (several = the choices offered)
+  hazard: [flood, cyclone]
 version: "0.2"
 requires_area: true       # run needs an admin area
 area_levels: [1, 2]       # optional: restrict admin levels
@@ -42,6 +43,10 @@ parameters:               # JSON Schema (object); becomes the form + validation
     climate_scenario: {type: string, enum: [current, rcp45], x-widget: radio}
   required: [hazard]
 ```
+
+The older `use_case:` and `hazards:` keys are still read as `filters.use_case` / `filters.hazard`.
+A parameter whose name is a filter key (like `hazard` above) tags the run with the chosen option;
+any other parameter can do the same with `x-filter: <filter key>`.
 
 `requires_event` is still read as an alias of `requires_stac_item`. Hints never block a run: the user
 can tick "show all" in the picker, and the API / CLI ignore them.
@@ -68,7 +73,8 @@ the notebook also runs standalone in Jupyter:
 | `stac_collection` | str | the item's collection id |
 | `stac_api_url` | str | root URL of the item's catalog |
 | `stac_catalog_profile` | str | `generic` or `montandon` (`""` without an item) |
-| `hazard` | str | hazard key or `""` |
+| `filters` | dict | the run's filter tags, e.g. `{"hazard": ["flood"], "use_case": ["uc1"]}` |
+| `hazard` | str | first `hazard` option key or `""` (kept for older templates) |
 
 The kernel also gets the environment variables `STAC_API_URL` and `STAC_API_KEY` for the item's
 catalog (empty without an item). The key is never a parameter, so it does not end up in the published

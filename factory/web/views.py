@@ -14,18 +14,51 @@ from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.http import require_POST
 from django.views.static import serve
 
-from factory.catalog.models import AdminArea, Country, Hazard
+from factory.catalog import facets
+from factory.catalog.models import AdminArea, Country, Facet
 from factory.events.models import PollerState, StacCatalog, StacItem, TriggerRule
 from factory.events.stac_client import StacClient, StacClientError
 from factory.notebooks import parameters as P
-from factory.notebooks.models import AnalysisNotebook, NotebookRun, RunBatch, RunStatus, TriggerKind, UseCase
+from factory.notebooks.models import AnalysisNotebook, NotebookRun, RunBatch, RunStatus, TriggerKind
 from factory.notebooks.parameters import ParameterError
 from factory.notebooks.services import RunRequestError, cancel_run, create_batch, create_run, retry_run
 
 from . import stac_picker
-from .forms import RunRequestForm, StacCatalogForm
+from .forms import FacetForm, FacetOptionFormSet, RunRequestForm, StacCatalogForm
 
 staff_required = user_passes_test(lambda u: u.is_active and u.is_staff, login_url="web:login")
+
+
+def _browse_facets(params, qs=None):
+    """[{facet, options, selected}] for the filter sidebars; options limited to `qs` when given."""
+    out = []
+    for facet in Facet.objects.filter(show_in_browse=True).prefetch_related("options"):
+        values = params.getlist(facet.key) if hasattr(params, "getlist") else []
+        out.append(
+            {"facet": facet, "options": list(facet.options.all()), "selected": [v for v in values if v]}
+        )
+    return out
+
+
+def _tag_fields(facet_list, selected: dict[str, list[str]], allowed: dict[str, list] | None = None):
+    """[{facet, options, selected, name}] for tag inputs (select for single, checkboxes for multiple)."""
+    fields = []
+    for facet in facet_list:
+        options = (allowed or {}).get(facet.key) or list(facet.options.all())
+        fields.append(
+            {
+                "facet": facet,
+                "options": options,
+                "selected": selected.get(facet.key, []),
+                "name": f"facet_{facet.key}",
+            }
+        )
+    return fields
+
+
+def _posted_tags(post, facet_list) -> dict[str, list[str]]:
+    return {f.key: [v for v in post.getlist(f"facet_{f.key}") if v] for f in facet_list}
+
 
 # ---------------------------------------------------------------------------
 # Browse / discover
@@ -38,8 +71,6 @@ def _filtered_runs(request):
     f = {
         "q": g.get("q", "").strip(),
         "country": g.get("country", ""),
-        "hazard": g.get("hazard", ""),
-        "use_case": g.get("use_case", ""),
         "template": g.get("template", ""),
         "status": g.get("status", "published"),
         "period": g.get("period", ""),
@@ -58,10 +89,7 @@ def _filtered_runs(request):
         qs = qs.filter(
             Q(area__country_id=f["country"]) | Q(stac_item__country_codes__contains=[f["country"]])
         )
-    if f["hazard"]:
-        qs = qs.filter(hazard__key=f["hazard"])
-    if f["use_case"]:
-        qs = qs.filter(notebook__use_case=f["use_case"])
+    qs = facets.filter_queryset(qs, g)
     if f["template"]:
         qs = qs.filter(notebook__slug=f["template"])
     if f["status"] == "published":
@@ -85,8 +113,7 @@ def browse(request):
         "page": page,
         "filters": f,
         "countries": Country.objects.filter(Q(areas__runs__isnull=False)).distinct().order_by("name"),
-        "hazards": Hazard.objects.all(),
-        "use_cases": UseCase.choices,
+        "facet_filters": _browse_facets(request.GET),
         "templates": AnalysisNotebook.objects.filter(is_active=True),
         "total": paginator.count,
     }
@@ -103,14 +130,14 @@ def browse(request):
 def template_list(request):
     templates = (
         AnalysisNotebook.objects.filter(is_active=True)
-        .prefetch_related("hazards")
+        .prefetch_related("facet_options__facet")
         .annotate(run_count=Count("runs"))
     )
     return render(request, "web/templates_list.html", {"templates": templates})
 
 
 def template_detail(request, slug):
-    nb = get_object_or_404(AnalysisNotebook.objects.prefetch_related("hazards"), slug=slug)
+    nb = get_object_or_404(AnalysisNotebook.objects.prefetch_related("facet_options__facet"), slug=slug)
     runs = nb.runs.with_related()[:10]
     return render(
         request,
@@ -148,6 +175,17 @@ def run_new(request, slug):
         area = AdminArea.objects.light().filter(pk=request.GET["area"]).first()
         if area:
             initial.update({"country": area.country, "level": area.level, "area_ids": str(area.pk)})
+    # Tags: facets pinned by the template (exactly one option) are shown, not asked; facets
+    # fed by a parameter come from that parameter. The rest can be set by hand (empty = derived).
+    template_groups = {f.key: opts for f, opts in nb.facet_groups}
+    fed_by_params = facets.parameter_facet_keys(nb)
+    tag_facets = [
+        f
+        for f in Facet.objects.prefetch_related("options")
+        if f.key not in fed_by_params and len(template_groups.get(f.key, [])) != 1
+    ]
+    pinned = [(f, opts) for f, opts in nb.facet_groups if len(opts) == 1 and f.key not in fed_by_params]
+    tags = _posted_tags(request.POST, tag_facets) if request.method == "POST" else {}
     if request.method == "POST":
         form = RunRequestForm(nb, request.POST)
         params = P.coerce_form_data(nb.parameter_schema, request.POST)
@@ -168,6 +206,7 @@ def run_new(request, slug):
                         trigger=TriggerKind.MANUAL,
                         notify_emails=d["notify_emails"],
                         stac_item=d.get("stac_item"),
+                        filters=tags,
                         description=f"{d['areas'][0].country.name} · {len(d['areas'])} areas",
                     )
                     messages.success(request, f"Queued {len(d['areas'])} runs.")
@@ -177,6 +216,7 @@ def run_new(request, slug):
                     params,
                     area=d["areas"][0] if d["areas"] else None,
                     stac_item=d.get("stac_item"),
+                    filters=tags,
                     user=request.user,
                     trigger=TriggerKind.MANUAL,
                     notify_emails=d["notify_emails"],
@@ -200,6 +240,8 @@ def run_new(request, slug):
         "stac_item": stac_item,
         "picker": stac_picker.build(nb, picker_params) if nb.requires_stac_item else None,
         "selected_area_ids": request.POST.get("area_ids", initial.get("area_ids", "")),
+        "tag_fields": _tag_fields(tag_facets, tags, allowed=template_groups),
+        "pinned_tags": pinned,
     }
     return render(request, "web/run_new.html", ctx)
 
@@ -214,7 +256,37 @@ def run_detail(request, pk):
     ctx = {"run": run, "log": run.log_entries.all()[:400], "notifications": run.notifications.all()}
     if request.htmx:
         return render(request, "web/partials/run_status.html", ctx)
+    ctx["tags"] = _run_tags_ctx(request, run)
     return render(request, "web/run_detail.html", ctx)
+
+
+def _can_edit_tags(user, run) -> bool:
+    return user.is_authenticated and (user.is_staff or run.triggered_by_id == user.pk)
+
+
+def _run_tags_ctx(request, run, editing=False):
+    all_facets = list(Facet.objects.prefetch_related("options"))
+    return {
+        "run": run,
+        "can_edit": _can_edit_tags(request.user, run),
+        "editing": editing,
+        "tag_fields": _tag_fields(all_facets, facets.manual_tags(run)),
+    }
+
+
+@login_required
+def run_tags(request, pk):
+    """Show / edit a run's manual tags (HTMX partial). Clearing a filter falls back to derived tags."""
+    run = get_object_or_404(NotebookRun.objects.with_related(), pk=pk)
+    if not _can_edit_tags(request.user, run):
+        return HttpResponse("Only the requester or staff can edit tags.", status=403)
+    if request.method == "POST":
+        all_facets = list(Facet.objects.all())
+        facets.update_run_manual(run, _posted_tags(request.POST, all_facets))
+        run = NotebookRun.objects.with_related().get(pk=pk)
+        run.log(f"tags edited by {request.user.get_username()}")
+        return render(request, "web/partials/run_tags.html", _run_tags_ctx(request, run))
+    return render(request, "web/partials/run_tags.html", _run_tags_ctx(request, run, editing=True))
 
 
 def run_status_json(request, pk):
@@ -282,7 +354,11 @@ def stac_picker_partial(request, slug):
 
 
 def stac_item_list(request):
-    qs = StacItem.objects.select_related("hazard", "catalog").annotate(run_count=Count("runs"))
+    qs = (
+        StacItem.objects.select_related("catalog")
+        .prefetch_related("facet_options__facet")
+        .annotate(run_count=Count("runs", distinct=True))
+    )
     q = request.GET.get("q", "").strip()
     if q:
         qs = qs.filter(
@@ -293,8 +369,7 @@ def stac_item_list(request):
         )
     if request.GET.get("catalog"):
         qs = qs.filter(catalog__slug=request.GET["catalog"])
-    if request.GET.get("hazard"):
-        qs = qs.filter(hazard__key=request.GET["hazard"])
+    qs = facets.filter_queryset(qs, request.GET)
     page = Paginator(qs, 40).get_page(request.GET.get("page"))
     return render(
         request,
@@ -303,7 +378,7 @@ def stac_item_list(request):
             "page": page,
             "q": q,
             "catalogs": StacCatalog.objects.all(),
-            "hazards": Hazard.objects.all(),
+            "facet_filters": [f for f in _browse_facets(request.GET) if f["facet"].stac_property],
             "rules": TriggerRule.objects.select_related("notebook", "catalog"),
             "poller": PollerState.objects.select_related("catalog"),
         },
@@ -311,7 +386,9 @@ def stac_item_list(request):
 
 
 def stac_item_detail(request, pk):
-    item = get_object_or_404(StacItem.objects.select_related("hazard", "catalog"), pk=pk)
+    item = get_object_or_404(
+        StacItem.objects.select_related("catalog").prefetch_related("facet_options__facet"), pk=pk
+    )
     runs = item.runs.with_related()
     templates = AnalysisNotebook.objects.filter(is_active=True, requires_stac_item=True)
     return render(request, "web/stac_item_detail.html", {"item": item, "runs": runs, "templates": templates})
@@ -377,6 +454,60 @@ def catalog_test(request):
         except StacClientError as exc:
             ctx["message"] = str(exc)
     return render(request, "web/partials/catalog_test.html", ctx)
+
+
+# ---------------------------------------------------------------------------
+# Filters (staff)
+# ---------------------------------------------------------------------------
+
+
+def _facet_usage(facet) -> int:
+    from factory.notebooks.models import RunFacet
+
+    options = facet.options.all()
+    return (
+        RunFacet.objects.filter(option__in=options).count()
+        + AnalysisNotebook.objects.filter(facet_options__in=options).count()
+        + StacItem.objects.filter(facet_options__in=options).count()
+        + TriggerRule.objects.filter(facet_options__in=options).count()
+    )
+
+
+@staff_required
+def facet_list(request):
+    facet_rows = Facet.objects.prefetch_related("options").annotate(
+        run_count=Count("options__run_facets__run", distinct=True)
+    )
+    return render(request, "web/facets_list.html", {"facets": facet_rows})
+
+
+@staff_required
+def facet_edit(request, key=None):
+    facet = get_object_or_404(Facet, key=key) if key else None
+    form = FacetForm(request.POST or None, instance=facet)
+    formset = FacetOptionFormSet(request.POST or None, instance=facet or Facet(), prefix="options")
+    if request.method == "POST" and form.is_valid() and formset.is_valid():
+        facet = form.save()
+        formset.instance = facet
+        formset.save()
+        messages.success(request, f"Saved filter {facet}.")
+        return redirect("web:facet-list")
+    return render(request, "web/facet_form.html", {"form": form, "formset": formset, "facet": facet})
+
+
+@staff_required
+@require_POST
+def facet_delete(request, key):
+    facet = get_object_or_404(Facet, key=key)
+    used = _facet_usage(facet)
+    if used:
+        messages.error(
+            request, f"{facet} is used {used} time(s) by runs, templates, items or rules; not deleted."
+        )
+    else:
+        facet.delete()
+        messages.info(request, f"Deleted filter {facet}.")
+    return redirect("web:facet-list")
 
 
 # ---------------------------------------------------------------------------

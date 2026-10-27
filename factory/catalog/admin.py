@@ -1,13 +1,29 @@
 from django.contrib import admin
 from django.contrib.gis import admin as gis_admin
 
-from .models import AdminArea, Country, Hazard
+from .models import AdminArea, Country, Facet, FacetOption
 
 
-@admin.register(Hazard)
-class HazardAdmin(admin.ModelAdmin):
-    list_display = ("label", "key", "icon", "monty_codes", "order")
-    ordering = ("order",)
+class FacetOptionInline(admin.TabularInline):
+    model = FacetOption
+    extra = 1
+    fields = ("key", "label", "icon", "color", "match_codes", "order")
+    prepopulated_fields = {"key": ("label",)}
+
+
+@admin.register(Facet)
+class FacetAdmin(admin.ModelAdmin):
+    list_display = ("label", "key", "multiple", "stac_property", "show_in_browse", "order")
+    list_editable = ("order",)
+    prepopulated_fields = {"key": ("label",)}
+    inlines = [FacetOptionInline]
+
+
+@admin.register(FacetOption)
+class FacetOptionAdmin(admin.ModelAdmin):
+    list_display = ("label", "key", "facet", "icon", "match_codes", "order")
+    list_filter = ("facet",)
+    search_fields = ("label", "key")
 
 
 @admin.register(Country)

@@ -5,14 +5,13 @@
   {% for run in page.object_list %}
   <a class="card run-card" href="{% if run.status == 'published' %}{% url 'web:run-view' run.id %}{% else %}{{ run.get_absolute_url }}{% endif %}">
     <div class="card-top">
-      <span class="pill uc {{ run.notebook.use_case }}">{{ run.notebook.get_use_case_display }}</span>
       <span class="pill status {{ run.status|status_class }}">{{ run.get_status_display }}</span>
     </div>
     <h3>{{ run.title }}</h3>
     <p class="meta">{{ run.subtitle }}{% if run.subtitle %} · {% endif %}{{ run.created_at|date:"Y-m-d" }}</p>
     {% if run.parameters %}<p class="params">{{ run.parameter_summary|truncatechars:120 }}</p>{% endif %}
     <div class="card-foot">
-      {% if run.hazard %}<span class="pill hz" style="--hz: {{ run.hazard.color|default:'#6B7280' }}">{{ run.hazard.icon }} {{ run.hazard.label }}</span>{% endif %}
+      <span>{% include "web/partials/facet_pills.html" with groups=run.facet_groups %}</span>
       <span class="muted small">{{ run.get_trigger_display }} · {{ run.created_at|naturaltime }}</span>
     </div>
   </a>

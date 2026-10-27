@@ -8,7 +8,8 @@ from concurrent.futures import ThreadPoolExecutor
 from django.conf import settings
 from django.db import transaction
 
-from factory.catalog.models import AdminArea, Hazard
+from factory.catalog import facets
+from factory.catalog.models import AdminArea
 
 from . import parameters as P
 from .models import AnalysisNotebook, NotebookRun, RunBatch, RunStatus, TriggerKind
@@ -20,26 +21,13 @@ class RunRequestError(ValueError):
     pass
 
 
-def _resolve_hazard(notebook: AnalysisNotebook, params: dict, hazard: Hazard | None) -> Hazard | None:
-    if hazard:
-        return hazard
-    key = params.get("hazard")
-    if key:
-        h = Hazard.objects.filter(key=key).first()
-        if h:
-            return h
-    if notebook.hazards.count() == 1:
-        return notebook.hazards.first()
-    return None
-
-
 def create_run(
     notebook: AnalysisNotebook,
     parameters: dict | None = None,
     *,
     area: AdminArea | None = None,
     stac_item=None,
-    hazard: Hazard | None = None,
+    filters: dict[str, list[str]] | None = None,
     user=None,
     trigger: str = TriggerKind.MANUAL,
     trigger_rule=None,
@@ -68,12 +56,12 @@ def create_run(
             parameters=params,
             area=area,
             stac_item=stac_item,
-            hazard=_resolve_hazard(notebook, params, hazard),
             triggered_by=user if getattr(user, "is_authenticated", False) else None,
             trigger=trigger,
             trigger_rule=trigger_rule,
             notify_emails=emails,
         )
+        facets.set_run_facets(run, facets.resolve_run(notebook, params, stac_item, filters))
         run.log("run created and queued")
         if enqueue:
             transaction.on_commit(lambda: enqueue_run(run))
@@ -90,6 +78,7 @@ def create_batch(
     trigger: str = TriggerKind.MANUAL,
     notify_emails: list[str] | None = None,
     stac_item=None,
+    filters: dict[str, list[str]] | None = None,
     trigger_rule=None,
 ) -> RunBatch:
     """Fan a single request out across many areas (one run per area)."""
@@ -110,6 +99,7 @@ def create_batch(
                 parameters,
                 area=area,
                 stac_item=stac_item,
+                filters=filters,
                 user=user,
                 trigger=trigger,
                 trigger_rule=trigger_rule,
@@ -178,7 +168,7 @@ def retry_run(run: NotebookRun, user=None) -> NotebookRun:
         run.parameters,
         area=run.area,
         stac_item=run.stac_item,
-        hazard=run.hazard,
+        filters=facets.manual_tags(run),
         user=user or run.triggered_by,
         trigger=run.trigger,
         trigger_rule=run.trigger_rule,

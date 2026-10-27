@@ -83,6 +83,14 @@
 
   <section class="step">
     <h2><span class="num">{% if nb.requires_area and nb.requires_stac_item %}4{% elif nb.requires_area or nb.requires_stac_item %}3{% else %}2{% endif %}</span> Run</h2>
+    {% if tag_fields or pinned_tags %}
+    <div class="tags">
+      <h3>Tags <span class="muted small">used to find this analysis later</span></h3>
+      {% if pinned_tags %}<p class="small">From the template: {% include "web/partials/facet_pills.html" with groups=pinned_tags %}</p>{% endif %}
+      {% if tag_fields %}<p class="muted small">Optional. Empty values are filled from the parameters or the STAC item where possible.</p>
+      <div class="param-grid">{% include "web/partials/tag_inputs.html" %}</div>{% endif %}
+    </div>
+    {% endif %}
     <label>Also notify (emails, comma separated) <input type="text" name="notify_emails" value="{{ form.notify_emails.value|default:'' }}" placeholder="colleague@example.org"></label>
     {% if form.notify_emails.errors %}<p class="error">{{ form.notify_emails.errors|join:" " }}</p>{% endif %}
     <div class="review panel">

@@ -1,12 +1,12 @@
 """
-Seed reference data for a first look: hazards, a demo country (from GADM,
+Seed reference data for a first look: the hazard and use case filters, a demo country (from GADM,
 downloaded on demand), the local templates, the Montandon STAC catalog and example trigger rules.
 """
 
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
 
-from factory.catalog.models import AdminArea, Hazard
+from factory.catalog.models import AdminArea, Facet, FacetOption
 
 HAZARDS = [
     ("flood", "Flood", "🌊", "#2E6FB0", ["nat-hyd-flo"], 10),
@@ -20,9 +20,19 @@ HAZARDS = [
     ("volcano", "Volcanic activity", "🌋", "#C0392B", ["nat-geo-vol"], 90),
 ]
 
+USE_CASES = [
+    ("uc1", "Risk exposure", "#2E6FB0", 10),
+    ("uc2", "Impact estimation", "#B9770E", 20),
+    ("uc3", "Response prioritisation", "#C0392B", 30),
+    ("other", "Other", "#6B7280", 90),
+]
+
 
 class Command(BaseCommand):
-    help = "Seed hazards, demo boundaries (GADM), templates, the Montandon STAC catalog and example trigger rules."
+    help = (
+        "Seed the hazard / use case filters, demo boundaries (GADM), templates, "
+        "the Montandon STAC catalog and example trigger rules."
+    )
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -32,12 +42,21 @@ class Command(BaseCommand):
         parser.add_argument("--skip-boundaries", action="store_true")
 
     def handle(self, *args, **opts):
+        hazard, _ = Facet.objects.get_or_create(
+            key="hazard", defaults={"label": "Hazard", "stac_property": "monty:hazard_codes", "order": 10}
+        )
         for key, label, icon, color, codes, order in HAZARDS:
-            Hazard.objects.update_or_create(
+            FacetOption.objects.update_or_create(
+                facet=hazard,
                 key=key,
-                defaults={"label": label, "icon": icon, "color": color, "monty_codes": codes, "order": order},
+                defaults={"label": label, "icon": icon, "color": color, "match_codes": codes, "order": order},
             )
-        self.stdout.write(self.style.SUCCESS(f"{len(HAZARDS)} hazards"))
+        use_case, _ = Facet.objects.get_or_create(key="use_case", defaults={"label": "Use case", "order": 20})
+        for key, label, color, order in USE_CASES:
+            FacetOption.objects.update_or_create(
+                facet=use_case, key=key, defaults={"label": label, "color": color, "order": order}
+            )
+        self.stdout.write(self.style.SUCCESS(f"filters: {len(HAZARDS)} hazards, {len(USE_CASES)} use cases"))
 
         if not opts["skip_boundaries"] and opts["countries"]:
             for iso3 in [c.strip() for c in opts["countries"].split(",") if c.strip()]:
@@ -86,8 +105,10 @@ class Command(BaseCommand):
                 },
             )
             if created:
-                rule.hazards.set(
-                    Hazard.objects.filter(key__in=["flood", "cyclone", "earthquake", "wildfire"])
+                rule.facet_options.set(
+                    FacetOption.objects.filter(
+                        facet__key="hazard", key__in=["flood", "cyclone", "earthquake", "wildfire"]
+                    )
                 )
                 self.stdout.write("created example trigger rule (disabled): New event → impact estimation")
         if uc3:

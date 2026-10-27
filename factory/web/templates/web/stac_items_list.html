@@ -8,21 +8,21 @@
     <form class="inline-filters" method="get">
       <input type="search" name="q" value="{{ q }}" placeholder="Title, item id, corr id or ISO3">
       <select name="catalog"><option value="">All catalogs</option>{% for c in catalogs %}<option value="{{ c.slug }}" {% if request.GET.catalog == c.slug %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select>
-      <select name="hazard"><option value="">All hazards</option>{% for h in hazards %}<option value="{{ h.key }}" {% if request.GET.hazard == h.key %}selected{% endif %}>{{ h.icon }} {{ h.label }}</option>{% endfor %}</select>
+      {% for ff in facet_filters %}<select name="{{ ff.facet.key }}"><option value="">All {{ ff.facet.label|lower }}</option>{% for o in ff.options %}<option value="{{ o.key }}" {% if o.key in ff.selected %}selected{% endif %}>{% if o.icon %}{{ o.icon }} {% endif %}{{ o.label }}</option>{% endfor %}</select>{% endfor %}
       <button class="btn">Filter</button>
     </form>
     <table class="table">
-      <thead><tr><th>Item</th><th>Hazard</th><th>Countries</th><th>When</th><th>Runs</th></tr></thead>
+      <thead><tr><th>Item</th><th>Filters</th><th>Countries</th><th>When</th><th>Runs</th></tr></thead>
       <tbody>
       {% for e in page.object_list %}
         <tr><td><a href="{{ e.get_absolute_url }}">{{ e.title|default:e.item_id|truncatechars:60 }}</a><br><span class="muted small">{{ e.catalog.name }} · {{ e.collection }} · <code>{{ e.short_ref }}</code></span></td>
-            <td>{% if e.hazard %}{{ e.hazard.icon }} {{ e.hazard.label }}{% else %}<span class="muted">{{ e.hazard_codes|join:", "|default:"—" }}</span>{% endif %}</td>
+            <td>{% include "web/partials/facet_pills.html" with groups=e.facet_groups %}{% if not e.facet_groups %}<span class="muted">—</span>{% endif %}</td>
             <td>{{ e.countries_display }}</td><td class="small">{{ e.occurred_at|date:"Y-m-d H:i"|default:"—" }}</td><td>{{ e.run_count }}</td></tr>
       {% empty %}<tr><td colspan="5" class="muted">No STAC items yet. Pick one when starting a run, or configure a trigger rule in the admin and run <code>python manage.py poll_catalogs</code>.</td></tr>
       {% endfor %}
       </tbody>
     </table>
-    {% if page.has_other_pages %}<nav class="pagination">{% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&q={{ q }}&catalog={{ request.GET.catalog }}&hazard={{ request.GET.hazard }}">‹ Prev</a>{% endif %}<span>Page {{ page.number }} / {{ page.paginator.num_pages }}</span>{% if page.has_next %}<a href="?page={{ page.next_page_number }}&q={{ q }}&catalog={{ request.GET.catalog }}&hazard={{ request.GET.hazard }}">Next ›</a>{% endif %}</nav>{% endif %}
+    {% if page.has_other_pages %}<nav class="pagination">{% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&q={{ q }}&catalog={{ request.GET.catalog }}{% for ff in facet_filters %}{% for v in ff.selected %}&{{ ff.facet.key }}={{ v|urlencode }}{% endfor %}{% endfor %}">‹ Prev</a>{% endif %}<span>Page {{ page.number }} / {{ page.paginator.num_pages }}</span>{% if page.has_next %}<a href="?page={{ page.next_page_number }}&q={{ q }}&catalog={{ request.GET.catalog }}{% for ff in facet_filters %}{% for v in ff.selected %}&{{ ff.facet.key }}={{ v|urlencode }}{% endfor %}{% endfor %}">Next ›</a>{% endif %}</nav>{% endif %}
   </div>
   <aside class="side">
     <div class="panel">

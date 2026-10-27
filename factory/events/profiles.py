@@ -2,8 +2,10 @@
 Catalog profiles: how the derived StacItem fields are read from a raw STAC item.
 
 `generic` uses only core STAC properties. `montandon` also reads the monty:*
-extension (correlation id, hazard codes, ISO3 country codes), which is what
-hazard and country filters on trigger rules match against.
+extension (correlation id, ISO3 country codes), which is what country filters
+on trigger rules match against. Filter options (e.g. hazards) are not part of
+the profile: any catalog's items are tagged via each filter's `stac_property`
+(see factory.catalog.facets.for_stac_item).
 """
 
 from __future__ import annotations
@@ -15,8 +17,6 @@ from typing import Any
 from django.contrib.gis.geos import GEOSGeometry
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
-
-from factory.catalog.models import Hazard
 
 from .models import CatalogProfile
 
@@ -47,8 +47,6 @@ def _generic(item: dict) -> dict:
         "title": (props.get("title") or item.get("id") or "")[:300],
         "description": props.get("description") or "",
         "roles": props.get("roles") or [],
-        "hazard": None,
-        "hazard_codes": [],
         "country_codes": [],
         "source": source[:120] if isinstance(source, str) else "",
         "occurred_at": _dt(props.get("datetime") or props.get("start_datetime")),
@@ -63,12 +61,9 @@ def _generic(item: dict) -> dict:
 def _montandon(item: dict) -> dict:
     fields = _generic(item)
     props = item.get("properties", {}) or {}
-    hazard_codes = props.get("monty:hazard_codes") or []
     fields.update(
         {
             "correlation_id": props.get("monty:corr_id") or "",
-            "hazard": Hazard.for_codes(hazard_codes),
-            "hazard_codes": hazard_codes,
             "country_codes": [c.upper() for c in (props.get("monty:country_codes") or [])],
         }
     )

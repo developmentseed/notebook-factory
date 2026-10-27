@@ -1,0 +1,42 @@
+{% extends "web/base.html" %}
+{% block title %}{% if facet %}{{ facet.label }}{% else %}New filter{% endif %} · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="{% url 'web:facet-list' %}">Filters</a> › {% if facet %}{{ facet.label }}{% else %}New{% endif %}</p>
+<h1>{% if facet %}Edit {{ facet.label }}{% else %}Add a filter{% endif %}</h1>
+<form method="post" class="panel">
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div class="msg error">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+  <div class="param-grid">
+  {% for field in form %}
+    <div class="field {% if field.errors %}has-error{% endif %}">
+      {% if field.field.widget.input_type == "checkbox" %}<label class="check">{{ field }} {{ field.label }}</label>
+      {% else %}<label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% endif %}
+      {% if field.help_text %}<small class="muted">{{ field.help_text }}</small>{% endif %}
+      {% if field.errors %}<small class="error">{{ field.errors|join:" " }}</small>{% endif %}
+    </div>
+  {% endfor %}
+  </div>
+  <h2>Options</h2>
+  {{ formset.management_form }}
+  {% if formset.non_form_errors %}<div class="msg error">{{ formset.non_form_errors|join:" " }}</div>{% endif %}
+  <table class="table options-table">
+    <thead><tr><th>Label</th><th>Key</th><th>Icon</th><th>Colour</th><th>Match codes</th><th>Order</th><th>Delete</th></tr></thead>
+    <tbody>
+    {% for of in formset %}
+      <tr>{{ of.id }}
+        <td>{{ of.label }}{% if of.label.errors %}<small class="error">{{ of.label.errors|join:" " }}</small>{% endif %}</td>
+        <td>{{ of.key }}{% if of.key.errors %}<small class="error">{{ of.key.errors|join:" " }}</small>{% endif %}</td>
+        <td>{{ of.icon }}</td>
+        <td>{{ of.color }}</td>
+        <td>{{ of.match_codes }}</td>
+        <td>{{ of.order }}</td>
+        <td>{% if of.instance.pk %}{{ of.DELETE }}{% endif %}</td>
+      </tr>
+      {% if of.non_field_errors %}<tr><td colspan="7" class="error small">{{ of.non_field_errors|join:" " }}</td></tr>{% endif %}
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted small">Save to get more empty rows. Match codes are only used when the filter has a STAC property.</p>
+  <p><button class="btn primary" type="submit">Save</button></p>
+</form>
+{% endblock %}

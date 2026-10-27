@@ -11,7 +11,9 @@ def test_create_run_validates_and_resolves_hazard(template, nepal, user):
     )
     assert run.status == RunStatus.QUEUED
     assert run.parameters["threshold"] == 0.5  # default filled
-    assert run.hazard.key == "earthquake"
+    assert run.filter_values == {"hazard": ["earthquake"], "use_case": ["uc1"]}
+    sources = {rf.option.key: rf.source for rf in run.run_facets.select_related("option")}
+    assert sources == {"earthquake": "parameter", "uc1": "template"}
     assert run.notify_emails == ["ana@example.org"]
     assert run.log_entries.count() == 1
 

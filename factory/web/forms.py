@@ -1,6 +1,6 @@
 from django import forms
 
-from factory.catalog.models import AdminArea, Country
+from factory.catalog.models import AdminArea, Country, Facet, FacetOption
 from factory.events.matching import fetch_item
 from factory.events.models import StacCatalog, StacItem
 from factory.events.stac_client import StacClientError
@@ -114,3 +114,35 @@ class StacCatalogForm(forms.ModelForm):
         if data.get("clear_api_key"):
             data["api_key"] = ""
         return data
+
+
+class FacetForm(forms.ModelForm):
+    class Meta:
+        model = Facet
+        fields = ["label", "key", "description", "multiple", "show_in_browse", "stac_property", "order"]
+
+
+class FacetOptionForm(forms.ModelForm):
+    """match_codes as a comma separated list instead of raw JSON."""
+
+    match_codes = forms.CharField(
+        required=False, help_text="Comma separated code prefixes, e.g. nat-hyd-flo, nat-hyd-mmw"
+    )
+
+    class Meta:
+        model = FacetOption
+        fields = ["label", "key", "icon", "color", "match_codes", "order"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.initial["match_codes"] = ", ".join(self.instance.match_codes or [])
+
+    def clean_match_codes(self):
+        raw = self.cleaned_data.get("match_codes") or ""
+        return [c.strip() for c in raw.split(",") if c.strip()]
+
+
+FacetOptionFormSet = forms.inlineformset_factory(
+    Facet, FacetOption, form=FacetOptionForm, extra=3, can_delete=True
+)

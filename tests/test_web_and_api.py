@@ -339,3 +339,148 @@ def test_api_create_run_with_live_stac_item(
         content_type="application/json",
     )
     assert r.status_code == 400 and "stac_item_id" in r.json()
+
+
+# ---------------------------------------------------------------------------
+# Filters (facets)
+# ---------------------------------------------------------------------------
+
+
+def test_browse_filters_by_any_facet(client, published_run, template, nepal, facets):
+    other = create_run(template, {"hazard": "earthquake"}, area=nepal["a2"])
+    other.set_status(RunStatus.PUBLISHED)
+    r = client.get(reverse("web:browse"))
+    body = r.content.decode()
+    assert 'name="hazard" value="flood"' in body and 'name="use_case" value="uc1"' in body
+    r = client.get(reverse("web:browse"), {"hazard": "earthquake"}, HTTP_HX_REQUEST="true")
+    assert b"East" in r.content and b"West" not in r.content
+    r = client.get(reverse("web:browse"), {"hazard": "flood", "use_case": "uc2"}, HTTP_HX_REQUEST="true")
+    assert b"No analyses match" in r.content
+
+
+def test_filters_page_is_staff_only_and_saves_options(client, user, staff, facets):
+    from factory.catalog.models import Facet
+
+    client.force_login(user)
+    assert client.get(reverse("web:facet-list")).status_code == 302
+    client.force_login(staff)
+    r = client.get(reverse("web:facet-list"))
+    assert r.status_code == 200 and b"Hazard" in r.content
+    data = {
+        "label": "Sector",
+        "key": "sector",
+        "multiple": "on",
+        "show_in_browse": "on",
+        "order": 30,
+        "options-TOTAL_FORMS": 3,
+        "options-INITIAL_FORMS": 0,
+        "options-0-label": "Health",
+        "options-0-key": "health",
+        "options-0-match_codes": "hea, med",
+        "options-0-order": 1,
+        "options-1-label": "",
+        "options-1-key": "",
+        "options-1-order": 100,
+        "options-2-order": 100,
+    }
+    r = client.post(reverse("web:facet-new"), data)
+    assert r.status_code == 302, r.content.decode()[:3000]
+    sector = Facet.objects.get(key="sector")
+    assert sector.multiple and list(sector.options.values_list("key", "match_codes")) == [
+        ("health", ["hea", "med"])
+    ]
+    r = client.post(reverse("web:facet-new"), {**data, "key": "status", "options-0-key": "x"})
+    assert r.status_code == 200 and b"reserved" in r.content
+    client.post(reverse("web:facet-delete", args=["sector"]))
+    assert not Facet.objects.filter(key="sector").exists()
+
+
+def test_facet_in_use_cannot_be_deleted(client, staff, published_run):
+    from factory.catalog.models import Facet
+
+    client.force_login(staff)
+    r = client.post(reverse("web:facet-delete", args=["hazard"]), follow=True)
+    assert Facet.objects.filter(key="hazard").exists() and b"not deleted" in r.content
+
+
+def test_run_form_offers_unpinned_facets_and_saves_manual_tags(client, user, nepal, template, facets):
+    from factory.catalog.models import Facet, FacetOption
+
+    sector = Facet.objects.create(key="sector", label="Sector", multiple=True)
+    FacetOption.objects.create(facet=sector, key="health", label="Health")
+    client.force_login(user)
+    url = reverse("web:run-new", args=[template.slug])
+    body = client.get(url).content.decode()
+    # hazard comes from the parameter and use case is pinned by the template: neither is asked
+    assert 'name="facet_sector"' in body and 'name="facet_hazard"' not in body
+    assert 'name="facet_use_case"' not in body and "Risk exposure" in body
+    r = client.post(
+        url,
+        {
+            "area_ids": str(nepal["a1"].pk),
+            "country": "NPL",
+            "level": 1,
+            "hazard": "flood",
+            "facet_sector": "health",
+        },
+    )
+    assert r.status_code == 302
+    assert NotebookRun.objects.get().filter_values == {
+        "hazard": ["flood"],
+        "use_case": ["uc1"],
+        "sector": ["health"],
+    }
+
+
+def test_run_tags_can_be_edited_by_requester(client, user, staff, published_run):
+    from django.contrib.auth import get_user_model
+
+    url = reverse("web:run-tags", args=[published_run.id])
+    stranger = get_user_model().objects.create_user("bo", "bo@example.org", "pw")
+    client.force_login(stranger)
+    assert client.get(url).status_code == 403
+    client.force_login(user)
+    r = client.get(published_run.get_absolute_url())
+    assert b"Edit tags" in r.content
+    assert b'name="facet_hazard"' in client.get(url).content
+    r = client.post(url, {"facet_hazard": "earthquake"})
+    assert r.status_code == 200 and b"Earthquake" in r.content
+    published_run.refresh_from_db()
+    assert published_run.filter_values["hazard"] == ["earthquake"]
+
+
+def test_api_filters_and_run_filtering(client, user, staff, published_run, template, nepal, facets):
+    r = client.get("/api/filters/")
+    hazard = next(f for f in r.json() if f["key"] == "hazard")
+    assert {o["key"] for o in hazard["options"]} >= {"flood", "earthquake"}
+    assert client.post("/api/filters/", {"key": "x", "label": "X"}).status_code in (401, 403)
+    run = client.get(f"/api/runs/{published_run.id}/").json()
+    assert run["filters"]["hazard"][0]["key"] == "flood" and run["filters"]["use_case"][0]["key"] == "uc1"
+    assert client.get("/api/runs/", {"hazard": "flood", "use_case": "uc1"}).json()["count"] == 1
+    assert client.get("/api/runs/", {"hazard": "earthquake"}).json()["count"] == 0
+    tpl = client.get(f"/api/templates/{template.slug}/").json()
+    assert {o["key"] for o in tpl["filters"]["hazard"]} == {"flood", "earthquake"}
+    assert client.get("/api/templates/", {"use_case": "uc2"}).json()["count"] == 0
+    client.force_login(user)
+    r = client.post(
+        "/api/runs/",
+        {
+            "notebook": "exposure",
+            "area": nepal["a2"].pk,
+            "parameters": {"hazard": "flood"},
+            "filters": {"hazard": ["earthquake"]},
+        },
+        content_type="application/json",
+    )
+    assert r.status_code == 202 and r.json()["filters"]["hazard"][0]["key"] == "earthquake"
+    r = client.post(
+        "/api/runs/",
+        {
+            "notebook": "exposure",
+            "area": nepal["a2"].pk,
+            "parameters": {"hazard": "flood"},
+            "filters": {"nope": ["x"]},
+        },
+        content_type="application/json",
+    )
+    assert r.status_code == 400 and "filters" in r.json()

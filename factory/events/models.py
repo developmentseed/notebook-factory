@@ -30,7 +30,7 @@ class StacCatalog(models.Model):
         max_length=20,
         choices=CatalogProfile.choices,
         default=CatalogProfile.GENERIC,
-        help_text="How extra metadata (hazard, countries, correlation id) is read from items",
+        help_text="How extra metadata (countries, correlation id) is read from items",
     )
     writeback_enabled = models.BooleanField(
         default=False, help_text="Notebook-produced STAC collections may be written to this catalog"
@@ -79,10 +79,12 @@ class StacItem(models.Model):
     title = models.CharField(max_length=300, blank=True)
     description = models.TextField(blank=True)
     roles = models.JSONField(default=list, blank=True)
-    hazard = models.ForeignKey(
-        "catalog.Hazard", null=True, blank=True, on_delete=models.SET_NULL, related_name="stac_items"
+    facet_options = models.ManyToManyField(
+        "catalog.FacetOption",
+        blank=True,
+        related_name="stac_items",
+        help_text="Derived from the item's properties via each filter's STAC property",
     )
-    hazard_codes = models.JSONField(default=list, blank=True)
     country_codes = models.JSONField(default=list, blank=True)
     source = models.CharField(max_length=120, blank=True)
     occurred_at = models.DateTimeField(null=True, blank=True, db_index=True)
@@ -117,6 +119,12 @@ class StacItem(models.Model):
         return self.catalog.item_url(self.collection, self.item_id)
 
     @property
+    def facet_groups(self):
+        from factory.catalog.facets import group_options
+
+        return group_options(self.facet_options.all())
+
+    @property
     def short_ref(self) -> str:
         return self.correlation_id or self.item_id
 
@@ -130,7 +138,6 @@ class StacItem(models.Model):
             props.update(
                 {
                     "monty:corr_id": self.correlation_id,
-                    "monty:hazard_codes": self.hazard_codes,
                     "monty:country_codes": self.country_codes,
                 }
             )
@@ -165,15 +172,16 @@ class TriggerRule(models.Model):
     roles = models.JSONField(
         default=list, blank=True, help_text="Only items with one of these roles (empty = any)"
     )
-    hazards = models.ManyToManyField(
-        "catalog.Hazard",
-        blank=True,
-        help_text="Only these hazards (empty = any). Needs a catalog profile that extracts hazards.",
-    )
     country_codes = models.JSONField(
         default=list,
         blank=True,
         help_text="Only these ISO3 countries (empty = any). Needs a catalog profile that extracts countries.",
+    )
+    facet_options = models.ManyToManyField(
+        "catalog.FacetOption",
+        blank=True,
+        related_name="trigger_rules",
+        help_text="Only items tagged with these options: any option within a filter, every filter listed",
     )
     parameter_template = models.JSONField(
         default=dict,

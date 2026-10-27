@@ -5,7 +5,8 @@ from rest_framework.routers import DefaultRouter
 from . import views
 
 router = DefaultRouter()
-router.register("hazards", views.HazardViewSet, basename="hazard")
+router.register("filters", views.FacetViewSet, basename="filter")
+router.register("filter-options", views.FacetOptionViewSet, basename="filter-option")
 router.register("countries", views.CountryViewSet, basename="country")
 router.register("areas", views.AdminAreaViewSet, basename="area")
 router.register("templates", views.AnalysisNotebookViewSet, basename="template")

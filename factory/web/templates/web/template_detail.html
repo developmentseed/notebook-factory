@@ -5,7 +5,6 @@
 <p class="crumbs"><a href="{% url 'web:template-list' %}">Templates</a> › {{ nb.title }}</p>
 <div class="two-col">
   <div>
-    <span class="pill uc {{ nb.use_case }}">{{ nb.get_use_case_display }}</span>
     <h1>{{ nb.title }}</h1>
     <p class="lead">{{ nb.summary }}</p>
     <div class="prose">{{ nb.description|markdown }}</div>
@@ -33,9 +32,9 @@
       <dl class="facts">
         <dt>Source</dt><dd>{% if nb.source_repo %}<a href="{{ nb.source_repo }}">{{ nb.source_repo|cut:"https://" }}</a>{% else %}local templates dir{% endif %}<br><code>{{ nb.notebook_path }}</code></dd>
         <dt>Version</dt><dd>{{ nb.version|default:"—" }}{% if nb.source_ref %} · {{ nb.source_ref }}{% endif %}</dd>
-        <dt>Hazards</dt><dd>{% for h in nb.hazards.all %}<span class="pill hz" style="--hz: {{ h.color|default:'#6B7280' }}">{{ h.icon }} {{ h.label }}</span> {% empty %}any{% endfor %}</dd>
+        {% for facet, options in nb.facet_groups %}<dt>{{ facet.label }}</dt><dd>{% for o in options %}<span class="pill tag" style="--pill: {{ o.color|default:'#6B7280' }}">{% if o.icon %}{{ o.icon }} {% endif %}{{ o.label }}</span> {% endfor %}</dd>{% endfor %}
         <dt>Inputs</dt><dd>{% if nb.requires_area %}Admin area{% if nb.area_levels %} (levels {{ nb.area_levels|join:", " }}){% endif %}{% endif %}{% if nb.requires_stac_item %}{% if nb.requires_area %} + {% endif %}STAC item{% if nb.stac_hints.collections %} ({{ nb.stac_hints.collections|join:", " }}){% endif %}{% endif %}{% if not nb.requires_area and not nb.requires_stac_item %}parameters only{% endif %}</dd>
-        {% if nb.supports_writeback %}<dt>Write-back</dt><dd>Publishes a STAC collection to Montandon</dd>{% endif %}
+        {% if nb.supports_writeback %}<dt>Write-back</dt><dd>Publishes a STAC collection to the item's catalog</dd>{% endif %}
         <dt>Est. runtime</dt><dd>{% if nb.estimated_runtime_minutes %}~{{ nb.estimated_runtime_minutes }} min{% else %}—{% endif %}</dd>
         <dt>Updated</dt><dd>{{ nb.updated_at|date:"Y-m-d" }}</dd>
       </dl>

@@ -3,4 +3,5 @@
 {% block content %}
 <p class="crumbs"><a href="{% url 'web:browse' %}">Analyses</a> › <a href="{{ run.notebook.get_absolute_url }}">{{ run.notebook.title }}</a> › Run <code>{{ run.short_id }}</code></p>
 {% include "web/partials/run_status.html" %}
+{% include "web/partials/run_tags.html" with run=tags.run can_edit=tags.can_edit editing=tags.editing tag_fields=tags.tag_fields %}
 {% endblock %}

@@ -51,7 +51,7 @@ def poll(clients: dict[int, StacClient] | None = None, dry_run: bool = False) ->
     cfg = settings.STAC
     rules = list(
         TriggerRule.objects.filter(enabled=True, catalog__is_active=True)
-        .prefetch_related("hazards")
+        .prefetch_related("facet_options__facet")
         .select_related("notebook", "catalog")
     )
     summary = {"collections": {}, "items_new": 0, "items_updated": 0, "runs_created": 0, "errors": []}
@@ -110,7 +110,11 @@ def fire_rules(
     rules = (
         rules
         if rules is not None
-        else list(TriggerRule.objects.filter(enabled=True, catalog=item.catalog).prefetch_related("hazards"))
+        else list(
+            TriggerRule.objects.filter(enabled=True, catalog=item.catalog).prefetch_related(
+                "facet_options__facet"
+            )
+        )
     )
     n = 0
     for rule in rules:

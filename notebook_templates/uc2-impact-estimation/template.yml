@@ -10,12 +10,14 @@ description: '**Use Case 2 · Impact · during / just after.** Takes the observe
   > In this version the observed extent is a **buffer around the event location** and population is synthetic.
 
   > Replace the extent with the CEMS / Charter vector product linked to the event in Montandon.'
-use_case: uc2
-hazards:
-- flood
-- cyclone
-- earthquake
-- wildfire
+filters:
+  use_case:
+  - uc2
+  hazard:
+  - flood
+  - cyclone
+  - earthquake
+  - wildfire
 version: '0.2'
 requires_area: true
 requires_stac_item: true

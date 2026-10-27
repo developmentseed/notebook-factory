@@ -8,8 +8,9 @@ Each template lives in its own folder:
         notebook.ipynb   the template (with a cell tagged `parameters`)
         ...              helper modules or small data files
 
-template.yml keys: title, summary, description, use_case, hazards, notebook (file
-name, default notebook.ipynb), version, requires_area, area_levels,
+template.yml keys: title, summary, description, filters ({facet key: [option keys]},
+e.g. {hazard: [flood], use_case: [uc1]}; the older `hazards:` and `use_case:` keys
+are read too), notebook (file name, default notebook.ipynb), version, requires_area, area_levels,
 requires_stac_item (alias: requires_event), stac_hints ({profile, collections, roles}; soft
 filters for the run-form pickers), supports_writeback, estimated_runtime_minutes,
 parameters (JSON Schema).
@@ -24,7 +25,8 @@ import yaml
 from django.conf import settings
 from django.db import transaction
 
-from factory.catalog.models import Hazard
+from factory.catalog.facets import options_by_keys
+from factory.catalog.models import Facet
 
 from .models import AnalysisNotebook, SourceKind
 
@@ -43,6 +45,23 @@ def discover(templates_dir: Path | None = None) -> list[tuple[Path, dict]]:
     return found
 
 
+def _template_options(slug: str, meta: dict) -> list:
+    """Facet options named in template.yml; unknown filters / options are logged and skipped."""
+    wanted = {k: v for k, v in (meta.get("filters") or {}).items()}
+    if meta.get("hazards") and "hazard" not in wanted:
+        wanted["hazard"] = meta["hazards"]
+    if meta.get("use_case") and "use_case" not in wanted:
+        wanted["use_case"] = [meta["use_case"]]
+    options = []
+    facets = {f.key: f for f in Facet.objects.filter(key__in=list(wanted))}
+    for key, values in wanted.items():
+        if key not in facets:
+            log.warning("template %s: unknown filter %r ignored", slug, key)
+            continue
+        options.extend(options_by_keys(facets[key], values if isinstance(values, list) else [values]))
+    return options
+
+
 @transaction.atomic
 def sync_templates(
     templates_dir: Path | None = None, deactivate_missing: bool = False
@@ -58,7 +77,6 @@ def sync_templates(
             "title": meta.get("title", slug),
             "summary": meta.get("summary", ""),
             "description": meta.get("description", ""),
-            "use_case": meta.get("use_case", "other"),
             "source_kind": SourceKind.LOCAL,
             "source_repo": meta.get("source_repo", ""),
             "source_ref": meta.get("source_ref", ""),
@@ -74,8 +92,7 @@ def sync_templates(
             "is_active": bool(meta.get("active", True)),
         }
         nb, created = AnalysisNotebook.objects.update_or_create(slug=slug, defaults=defaults)
-        hazards = Hazard.objects.filter(key__in=meta.get("hazards", []) or [])
-        nb.hazards.set(hazards)
+        nb.facet_options.set(_template_options(slug, meta))
         synced.append(nb)
         seen.add(slug)
         log.info("%s template %s", "Created" if created else "Updated", slug)

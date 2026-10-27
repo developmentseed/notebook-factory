@@ -40,14 +40,14 @@ class StacItemAdmin(gis_admin.GISModelAdmin):
         "catalog",
         "collection",
         "correlation_id",
-        "hazard",
         "countries_display",
         "occurred_at",
         "first_seen_at",
     )
-    list_filter = ("catalog", "collection", "hazard")
+    list_filter = ("catalog", "collection", "facet_options")
     search_fields = ("title", "item_id", "correlation_id")
     readonly_fields = ("first_seen_at", "updated_at")
+    filter_horizontal = ("facet_options",)
     date_hierarchy = "occurred_at"
 
 
@@ -64,7 +64,7 @@ class TriggerRuleAdmin(admin.ModelAdmin):
         "last_triggered_at",
     )
     list_filter = ("enabled", "catalog", "notebook")
-    filter_horizontal = ("hazards",)
+    filter_horizontal = ("facet_options",)
 
 
 @admin.register(PollerState)

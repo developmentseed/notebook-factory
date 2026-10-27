@@ -13,7 +13,7 @@ from factory.notebooks.models import NotebookRun, TriggerKind
 def test_montandon_profile_maps_hazard_and_countries(hazards, montandon, sample_item):
     item, created, changed = upsert_item(montandon, sample_item)
     assert created and changed
-    assert item.hazard == hazards["earthquake"]
+    assert list(item.facet_options.all()) == [hazards["earthquake"]]
     assert item.country_codes == ["NPL"] and item.correlation_id == "20260901-NPL-GEO-EAR-GRO-1-GCDB"
     assert item.geom is not None and item.occurred_at.year == 2026
     assert item.stac_url == (
@@ -23,9 +23,11 @@ def test_montandon_profile_maps_hazard_and_countries(hazards, montandon, sample_
     assert again.pk == item.pk and not created2 and not changed2
 
 
-def test_generic_profile_ignores_monty_fields(hazards, earth_search, sample_item):
+def test_generic_profile_ignores_monty_fields_but_filters_still_apply(hazards, earth_search, sample_item):
     item, *_ = upsert_item(earth_search, sample_item)
-    assert item.hazard is None and item.country_codes == [] and item.correlation_id == ""
+    assert item.country_codes == [] and item.correlation_id == ""
+    # filters read their STAC property from items of any catalog
+    assert list(item.facet_options.all()) == [hazards["earthquake"]]
     assert item.title.startswith("Earthquake in Nepal") and item.roles == ["event"]
     assert "monty:corr_id" not in item.as_stac_item()["properties"]
 
@@ -42,9 +44,9 @@ def test_rule_matching(hazards, montandon, earth_search, item_template, sample_i
         name="r", catalog=montandon, notebook=item_template, collections=["reference-events"], roles=["event"]
     )
     assert rule_matches(rule, item)
-    rule.hazards.set([hazards["flood"]])
+    rule.facet_options.set([hazards["flood"]])
     assert not rule_matches(rule, item)
-    rule.hazards.set([hazards["earthquake"]])
+    rule.facet_options.set([hazards["earthquake"], hazards["flood"]])  # any option within a filter
     rule.country_codes = ["VNM"]
     assert not rule_matches(rule, item)
     rule.country_codes = ["npl"]
@@ -239,4 +241,4 @@ def test_fetch_item_stores_item(monkeypatch, montandon, hazards, sample_item):
 
     monkeypatch.setattr(httpx.Client, "__init__", _mock_transport(handler))
     item = fetch_item(montandon, "reference-events", "example-event-npl-earthquake-2026")
-    assert item.catalog == montandon and item.hazard == hazards["earthquake"]
+    assert item.catalog == montandon and list(item.facet_options.all()) == [hazards["earthquake"]]

@@ -50,7 +50,7 @@
         <dt>Template</dt><dd><a href="{{ run.notebook.get_absolute_url }}">{{ run.notebook.title }}</a>{% if run.notebook.version %} · v{{ run.notebook.version }}{% endif %}</dd>
         {% if run.area %}<dt>Area</dt><dd>{{ run.area.breadcrumb }}<br><span class="muted small">{{ run.area.display_level }} · {{ run.area.code }}</span></dd>{% endif %}
         {% if run.stac_item %}<dt>STAC item</dt><dd><a href="{{ run.stac_item.get_absolute_url }}">{{ run.stac_item }}</a><br><span class="muted small">{{ run.stac_item.catalog.name }} · {{ run.stac_item.collection }}</span><br><code class="small">{{ run.stac_item.short_ref }}</code></dd>{% endif %}
-        {% if run.hazard %}<dt>Hazard</dt><dd>{{ run.hazard.icon }} {{ run.hazard.label }}</dd>{% endif %}
+        {% if run.facet_groups %}<dt>Filters</dt><dd>{% include "web/partials/facet_pills.html" with groups=run.facet_groups %}</dd>{% endif %}
         <dt>Params</dt><dd class="small">{% for k, v in run.parameters.items %}<div><span class="muted">{{ k }}</span> {{ v }}</div>{% empty %}—{% endfor %}</dd>
         <dt>Triggered by</dt><dd>{% if run.triggered_by %}{{ run.triggered_by.email|default:run.triggered_by.username }}{% else %}{{ run.get_trigger_display }}{% endif %}{% if run.trigger_rule %}<br><span class="muted small">rule: {{ run.trigger_rule.name }}</span>{% endif %}</dd>
         <dt>Started</dt><dd>{{ run.started_at|date:"Y-m-d H:i:s"|default:"—" }}</dd>

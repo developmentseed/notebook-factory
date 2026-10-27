@@ -18,7 +18,7 @@
     <dt>Collection</dt><dd><code>{{ item.collection }}</code></dd>
     <dt>Item</dt><dd><a href="{{ item.stac_url }}"><code>{{ item.item_id }}</code></a></dd>
     {% if item.catalog.is_montandon %}<dt>monty:corr_id</dt><dd><code>{{ item.correlation_id|default:"—" }}</code></dd>{% endif %}
-    {% if item.hazard or item.hazard_codes %}<dt>Hazard</dt><dd>{% if item.hazard %}{{ item.hazard.icon }} {{ item.hazard.label }}{% endif %} <span class="muted small">{{ item.hazard_codes|join:", " }}</span></dd>{% endif %}
+    {% for facet, options in item.facet_groups %}<dt>{{ facet.label }}</dt><dd>{% for o in options %}<span class="pill tag" style="--pill: {{ o.color|default:'#6B7280' }}">{% if o.icon %}{{ o.icon }} {% endif %}{{ o.label }}</span> {% endfor %}{% if facet.stac_property %}<br><span class="muted small"><code>{{ facet.stac_property }}</code></span>{% endif %}</dd>{% endfor %}
     {% if item.country_codes %}<dt>Countries</dt><dd>{{ item.countries_display }}</dd>{% endif %}
     <dt>Roles</dt><dd>{{ item.roles|join:", "|default:"—" }}</dd>
     <dt>Source</dt><dd>{{ item.source|default:"—" }}</dd>
