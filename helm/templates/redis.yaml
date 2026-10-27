@@ -1,0 +1,63 @@
+# Celery broker. The append-only file on a volume keeps queued runs across restarts.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "nf.redis" . }}
+  labels:
+    {{- include "nf.labels" . | nindent 4 }}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: {{ .Values.redis.storage }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nf.redis" . }}
+  labels:
+    {{- include "nf.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  replicas: 1
+  # Stop the old pod before starting the new one: the volume is ReadWriteOnce.
+  strategy: { rollingUpdate: { maxSurge: 0, maxUnavailable: 1 } }
+  selector:
+    matchLabels:
+      {{- include "nf.selector" . | nindent 6 }}
+      app.kubernetes.io/component: redis
+  template:
+    metadata:
+      labels:
+        {{- include "nf.selector" . | nindent 8 }}
+        app.kubernetes.io/component: redis
+    spec:
+      containers:
+        - name: redis
+          image: {{ .Values.redis.image }}
+          args: ["--save", "", "--appendonly", "yes"]
+          ports:
+            - { name: redis, containerPort: 6379 }
+          readinessProbe:
+            exec: { command: [redis-cli, ping] }
+            periodSeconds: 10
+          resources: {{ toYaml .Values.redis.resources | nindent 12 }}
+          volumeMounts:
+            - { name: data, mountPath: /data }
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "nf.redis" . }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "nf.redis" . }}
+  labels:
+    {{- include "nf.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "nf.selector" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+  ports:
+    - { name: redis, port: 6379, targetPort: redis }

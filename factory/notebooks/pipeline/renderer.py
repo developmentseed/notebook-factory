@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fcntl
 import logging
 import os
 import re
@@ -21,6 +22,26 @@ log = logging.getLogger(__name__)
 
 class RenderError(RuntimeError):
     pass
+
+
+def _run_myst(
+    cmd: list[str], build: Path, env: dict, cache: Path, template: str, timeout: int
+) -> subprocess.CompletedProcess:
+    """Run a MyST build. The first build into an empty theme cache downloads the theme into it;
+    a concurrent build would read it half-written, so builds wait on a lock until one succeeds."""
+
+    def run():
+        return subprocess.run(cmd, cwd=build, env=env, capture_output=True, text=True, timeout=timeout)
+
+    ready = cache / f".{template}.ready"
+    if ready.exists():
+        return run()
+    with open(cache / ".lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        proc = run()
+        if proc.returncode == 0:
+            ready.touch()
+        return proc
 
 
 def _myst_cmd() -> list[str]:
@@ -112,9 +133,7 @@ def render(run: NotebookRun, ctx: RunContext, base_url: str) -> Path:
     }
     cmd = [*_myst_cmd(), "build", "--html"]
     try:
-        proc = subprocess.run(
-            cmd, cwd=build, env=env, capture_output=True, text=True, timeout=cfg["MYST_BUILD_TIMEOUT"]
-        )
+        proc = _run_myst(cmd, build, env, cache, cfg["MYST_TEMPLATE"], cfg["MYST_BUILD_TIMEOUT"])
     except FileNotFoundError as exc:
         raise RenderError(
             f"MyST CLI not found ({cmd[0]}). Install with `npm i -g mystmd` or set MYST_COMMAND."

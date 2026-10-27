@@ -175,12 +175,21 @@ if PUBLISHED_STORAGE_BACKEND == "s3":
         },
     }
 elif PUBLISHED_STORAGE_BACKEND == "azure":
+    _azure_key = env("AZURE_ACCOUNT_KEY", default=None)
+    _azure_connection_string = env("AZURE_CONNECTION_STRING", default=None)
+    _azure_token_credential = None
+    if not (_azure_key or _azure_connection_string):
+        # No key: sign in as the pod's workload identity (or `az login` locally).
+        from azure.identity import DefaultAzureCredential
+
+        _azure_token_credential = DefaultAzureCredential()
     _published_storage = {
         "BACKEND": "storages.backends.azure_storage.AzureStorage",
         "OPTIONS": {
             "account_name": env("AZURE_ACCOUNT_NAME", default=None),
-            "account_key": env("AZURE_ACCOUNT_KEY", default=None),
-            "connection_string": env("AZURE_CONNECTION_STRING", default=None),
+            "account_key": _azure_key,
+            "connection_string": _azure_connection_string,
+            "token_credential": _azure_token_credential,
             "azure_container": env("AZURE_CONTAINER", default="notebooks"),
             "custom_domain": env("AZURE_CUSTOM_DOMAIN", default=None),
             "expiration_secs": None,
@@ -223,6 +232,9 @@ CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_ACKS_LATE = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_TASK_TIME_LIMIT = env.int("CELERY_TASK_TIME_LIMIT", default=60 * 60 * 3)
+# Redis hands an unacknowledged task to another worker after the visibility timeout (1 h by
+# default). With acks_late, it must outlast the longest task or long runs execute twice.
+CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": CELERY_TASK_TIME_LIMIT + 60 * 60}
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULE = {
     "poll-stac-catalogs": {

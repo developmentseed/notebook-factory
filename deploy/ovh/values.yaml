@@ -1,0 +1,17 @@
+# Test deploy on the devseed OVH cluster (UK1). Secrets: secrets.sh. Database: postgis.yaml.
+#   helm upgrade --install notebook-factory ./helm -n notebook-factory -f deploy/ovh/values.yaml
+host: ovh.notebook-factory.ds.io
+
+ingress:
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+
+publishedProxy:
+  upstream: https://notebook-factory.s3.uk.io.cloud.ovh.net
+
+env:
+  S3_BUCKET: notebook-factory
+  S3_ENDPOINT_URL: https://s3.uk.io.cloud.ovh.net
+  S3_REGION: uk
+  S3_DEFAULT_ACL: public-read # the proxy reads objects anonymously; bucket listing stays private

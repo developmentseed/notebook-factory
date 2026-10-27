@@ -5,3 +5,23 @@
 {% include "web/partials/run_status.html" %}
 {% include "web/partials/run_tags.html" with run=tags.run can_edit=tags.can_edit editing=tags.editing tag_fields=tags.tag_fields %}
 {% endblock %}
+{% block scripts %}
+<script>
+  // #run-status is re-rendered every 2s, which resets run.log to the top. Follow the tail
+  // unless the reader has scrolled up, in which case keep their position.
+  (() => {
+    const log = () => document.querySelector("#run-status .log");
+    let follow = true, pos = 0;
+    document.body.addEventListener("htmx:beforeSwap", () => {
+      const el = log();
+      if (el) { pos = el.scrollTop; follow = el.scrollHeight - el.scrollTop - el.clientHeight < 24; }
+    });
+    document.body.addEventListener("htmx:afterSettle", () => {
+      const el = log();
+      if (el) el.scrollTop = follow ? el.scrollHeight : pos;
+    });
+    const el = log();
+    if (el) el.scrollTop = el.scrollHeight;
+  })();
+</script>
+{% endblock %}
