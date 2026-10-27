@@ -1,6 +1,6 @@
 """
 Seed reference data for a first look: hazards, a demo country (from GADM,
-downloaded on demand), the local templates and one example trigger rule.
+downloaded on demand), the local templates, the Montandon STAC catalog and example trigger rules.
 """
 
 from django.core.management import call_command
@@ -22,7 +22,7 @@ HAZARDS = [
 
 
 class Command(BaseCommand):
-    help = "Seed hazards, demo boundaries (GADM), templates and an example trigger rule."
+    help = "Seed hazards, demo boundaries (GADM), templates, the Montandon STAC catalog and example trigger rules."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -50,16 +50,33 @@ class Command(BaseCommand):
         self._seed_rules()
 
     def _seed_rules(self):
-        from factory.events.models import EventTriggerRule
+        from django.conf import settings
+
+        from factory.events.models import CatalogProfile, StacCatalog, TriggerRule
         from factory.notebooks.models import AnalysisNotebook
+
+        cfg = settings.MONTANDON_SEED
+        montandon, created = StacCatalog.objects.get_or_create(
+            slug="montandon",
+            defaults={
+                "name": "Montandon",
+                "url": cfg["URL"],
+                "api_key": cfg["API_KEY"],
+                "profile": CatalogProfile.MONTANDON,
+                "writeback_enabled": cfg["WRITEBACK_ENABLED"],
+            },
+        )
+        if created:
+            self.stdout.write(f"created STAC catalog: Montandon ({cfg['URL']})")
 
         uc2 = AnalysisNotebook.objects.filter(slug="uc2-impact-estimation").first()
         uc3 = AnalysisNotebook.objects.filter(slug="uc3-response-prioritisation").first()
         if uc2:
-            rule, created = EventTriggerRule.objects.get_or_create(
+            rule, created = TriggerRule.objects.get_or_create(
                 name="New event → impact estimation",
                 defaults={
                     "enabled": False,
+                    "catalog": montandon,
                     "notebook": uc2,
                     "collections": ["reference-events"],
                     "roles": ["event"],
@@ -74,10 +91,11 @@ class Command(BaseCommand):
                 )
                 self.stdout.write("created example trigger rule (disabled): New event → impact estimation")
         if uc3:
-            rule, created = EventTriggerRule.objects.get_or_create(
+            rule, created = TriggerRule.objects.get_or_create(
                 name="New event → response prioritisation",
                 defaults={
                     "enabled": False,
+                    "catalog": montandon,
                     "notebook": uc3,
                     "collections": ["reference-events"],
                     "roles": ["event"],

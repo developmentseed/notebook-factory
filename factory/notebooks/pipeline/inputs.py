@@ -10,21 +10,22 @@ their parameters cell with harmless defaults so they also run standalone):
   area                   dict  {id, code, name, level, country, country_name} or {}
   area_geojson           str   path to a FeatureCollection with the target area (or "")
   subdivisions_geojson   str   path to a FeatureCollection with the aggregation subdivisions (or "")
-  event                  dict  the Montandon STAC item (or {})
-  event_json             str   path to the STAC item as JSON (or "")
-  montandon_stac_url     str   STAC API base URL
+  stac_item              dict  the selected STAC item (or {})
+  stac_item_json         str   path to the STAC item as JSON (or "")
+  stac_collection        str   the item's collection id (or "")
+  stac_api_url           str   STAC API root of the item's catalog (or "")
+  stac_catalog_profile   str   "generic" | "montandon" (or "")
   hazard                 str   hazard key (or "")
 
-The Montandon API token is passed through the environment (MONTANDON_API_TOKEN),
-never as a parameter, so it does not end up inside the published notebook.
+The catalog's API key is passed through the environment (STAC_API_KEY, next to
+STAC_API_URL), never as a parameter, so it does not end up inside the published
+notebook.
 """
 
 from __future__ import annotations
 
 import json
 from typing import Any
-
-from django.conf import settings
 
 from ..models import NotebookRun
 from .context import RunContext
@@ -43,9 +44,11 @@ def prepare_inputs(run: NotebookRun, ctx: RunContext) -> dict[str, Any]:
         "area": {},
         "area_geojson": "",
         "subdivisions_geojson": "",
-        "event": {},
-        "event_json": "",
-        "montandon_stac_url": settings.MONTANDON["STAC_URL"],
+        "stac_item": {},
+        "stac_item_json": "",
+        "stac_collection": "",
+        "stac_api_url": "",
+        "stac_catalog_profile": "",
         "hazard": run.hazard.key if run.hazard_id else "",
     }
     if run.area_id:
@@ -81,8 +84,12 @@ def prepare_inputs(run: NotebookRun, ctx: RunContext) -> dict[str, Any]:
             ctx.inputs_dir / "subdivisions.geojson",
             {"type": "FeatureCollection", "features": [a.as_feature() for a in subdivisions]},
         )
-    if run.event_id:
-        injected["event"] = run.event.raw or run.event.as_stac_item()
-        injected["event_json"] = _write_json(ctx.inputs_dir / "event.json", injected["event"])
+    if run.stac_item_id:
+        item = run.stac_item
+        injected["stac_item"] = item.raw or item.as_stac_item()
+        injected["stac_item_json"] = _write_json(ctx.inputs_dir / "stac_item.json", injected["stac_item"])
+        injected["stac_collection"] = item.collection
+        injected["stac_api_url"] = item.catalog.base_url
+        injected["stac_catalog_profile"] = item.catalog.profile
     ctx.injected = injected
     return injected

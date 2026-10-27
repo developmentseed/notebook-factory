@@ -10,7 +10,9 @@ Each template lives in its own folder:
 
 template.yml keys: title, summary, description, use_case, hazards, notebook (file
 name, default notebook.ipynb), version, requires_area, area_levels,
-requires_event, supports_writeback, estimated_runtime_minutes, parameters (JSON Schema).
+requires_stac_item (alias: requires_event), stac_hints ({profile, collections, roles}; soft
+filters for the run-form pickers), supports_writeback, estimated_runtime_minutes,
+parameters (JSON Schema).
 """
 
 from __future__ import annotations
@@ -65,7 +67,8 @@ def sync_templates(
             "parameter_schema": meta.get("parameters", {}) or {},
             "requires_area": bool(meta.get("requires_area", True)),
             "area_levels": meta.get("area_levels", []) or [],
-            "requires_event": bool(meta.get("requires_event", False)),
+            "requires_stac_item": bool(meta.get("requires_stac_item", meta.get("requires_event", False))),
+            "stac_hints": meta.get("stac_hints", {}) or {},
             "supports_writeback": bool(meta.get("supports_writeback", False)),
             "estimated_runtime_minutes": meta.get("estimated_runtime_minutes"),
             "is_active": bool(meta.get("active", True)),

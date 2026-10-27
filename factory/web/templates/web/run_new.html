@@ -37,22 +37,18 @@
   </section>
   {% endif %}
 
-  {% if nb.requires_event %}
+  {% if nb.requires_stac_item %}
   <section class="step">
-    <h2><span class="num">{% if nb.requires_area %}2{% else %}1{% endif %}</span> Event</h2>
-    <label>Montandon event
-      <select name="event" id="event" required>
-        <option value="">— choose —</option>
-        {% for e in recent_events %}<option value="{{ e.pk }}" {% if form.event.value|stringformat:"s" == e.pk|stringformat:"s" or event and event.pk == e.pk %}selected{% endif %}>{{ e.title|truncatechars:70 }} · {{ e.countries_display }} · {{ e.occurred_at|date:"Y-m-d" }}</option>{% endfor %}
-      </select>
-    </label>
-    {% if form.event.errors %}<p class="error">{{ form.event.errors|join:" " }}</p>{% endif %}
-    <p class="muted small">Events arrive through the Montandon poller. See <a href="{% url 'web:event-list' %}">Events</a>.</p>
+    <h2><span class="num">{% if nb.requires_area %}2{% else %}1{% endif %}</span> STAC item</h2>
+    <p class="muted">Pick a catalog, a collection and the item this analysis is about.</p>
+    {% if stac_item %}<input type="hidden" name="stac_item" value="{{ stac_item.pk }}">{% endif %}
+    {% include "web/partials/stac_picker.html" %}
+    {% if form.stac_item.errors %}<p class="error">{{ form.stac_item.errors|join:" " }}</p>{% endif %}
   </section>
   {% endif %}
 
   <section class="step">
-    <h2><span class="num">{% if nb.requires_area and nb.requires_event %}3{% elif nb.requires_area or nb.requires_event %}2{% else %}1{% endif %}</span> Parameters</h2>
+    <h2><span class="num">{% if nb.requires_area and nb.requires_stac_item %}3{% elif nb.requires_area or nb.requires_stac_item %}2{% else %}1{% endif %}</span> Parameters</h2>
     {% if not fields %}<p class="muted">This template has no user parameters.</p>{% endif %}
     <div class="param-grid">
     {% for f in fields %}
@@ -86,7 +82,7 @@
   </section>
 
   <section class="step">
-    <h2><span class="num">{% if nb.requires_area and nb.requires_event %}4{% elif nb.requires_area or nb.requires_event %}3{% else %}2{% endif %}</span> Run</h2>
+    <h2><span class="num">{% if nb.requires_area and nb.requires_stac_item %}4{% elif nb.requires_area or nb.requires_stac_item %}3{% else %}2{% endif %}</span> Run</h2>
     <label>Also notify (emails, comma separated) <input type="text" name="notify_emails" value="{{ form.notify_emails.value|default:'' }}" placeholder="colleague@example.org"></label>
     {% if form.notify_emails.errors %}<p class="error">{{ form.notify_emails.errors|join:" " }}</p>{% endif %}
     <div class="review panel">

@@ -55,9 +55,14 @@ class AnalysisNotebook(models.Model):
     area_levels = models.JSONField(
         default=list, blank=True, help_text="Allowed admin levels, e.g. [1, 2]; empty = any"
     )
-    requires_event = models.BooleanField(default=False, help_text="Run needs a Montandon event")
+    requires_stac_item = models.BooleanField(default=False, help_text="Run needs a STAC item")
+    stac_hints = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Soft picker hints: {profile, collections, roles}. Never enforced.",
+    )
     supports_writeback = models.BooleanField(
-        default=False, help_text="Notebook produces a STAC collection to write back"
+        default=False, help_text="Notebook produces a STAC collection to write back to the item's catalog"
     )
     estimated_runtime_minutes = models.PositiveIntegerField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
@@ -106,7 +111,7 @@ STAGE_ORDER = [
 class TriggerKind(models.TextChoices):
     MANUAL = "manual", "Manual (UI)"
     API = "api", "API"
-    AUTO = "auto", "Automatic (event)"
+    AUTO = "auto", "Automatic (trigger rule)"
     CLI = "cli", "Command line"
 
 
@@ -154,7 +159,14 @@ class NotebookRunQuerySet(models.QuerySet):
 
     def with_related(self):
         return self.select_related(
-            "notebook", "area", "area__country", "hazard", "event", "triggered_by", "batch"
+            "notebook",
+            "area",
+            "area__country",
+            "hazard",
+            "stac_item",
+            "stac_item__catalog",
+            "triggered_by",
+            "batch",
         )
 
 
@@ -175,8 +187,8 @@ class NotebookRun(models.Model):
     hazard = models.ForeignKey(
         "catalog.Hazard", null=True, blank=True, on_delete=models.SET_NULL, related_name="runs"
     )
-    event = models.ForeignKey(
-        "events.Event", null=True, blank=True, on_delete=models.SET_NULL, related_name="runs"
+    stac_item = models.ForeignKey(
+        "events.StacItem", null=True, blank=True, on_delete=models.SET_NULL, related_name="runs"
     )
 
     trigger = models.CharField(max_length=10, choices=TriggerKind.choices, default=TriggerKind.MANUAL)
@@ -188,7 +200,7 @@ class NotebookRun(models.Model):
         related_name="notebook_runs",
     )
     trigger_rule = models.ForeignKey(
-        "events.EventTriggerRule", null=True, blank=True, on_delete=models.SET_NULL, related_name="runs"
+        "events.TriggerRule", null=True, blank=True, on_delete=models.SET_NULL, related_name="runs"
     )
     notify_emails = models.JSONField(default=list, blank=True)
 
@@ -207,7 +219,7 @@ class NotebookRun(models.Model):
         max_length=10, choices=WritebackStatus.choices, default=WritebackStatus.NONE
     )
     writeback_ref = models.CharField(
-        max_length=400, blank=True, help_text="Collection id / URL written to Montandon"
+        max_length=400, blank=True, help_text="Collection id written to the item's catalog"
     )
     writeback_error = models.TextField(blank=True)
 
@@ -237,8 +249,8 @@ class NotebookRun(models.Model):
         bits = [self.notebook.title]
         if self.area_id:
             bits.append(self.area.name)
-        elif self.event_id:
-            bits.append(self.event.title)
+        elif self.stac_item_id:
+            bits.append(str(self.stac_item))
         return " · ".join(bits)
 
     @property
@@ -246,8 +258,12 @@ class NotebookRun(models.Model):
         bits = []
         if self.area_id:
             bits.append(f"{self.area.country.name} · {self.area.display_level}")
-        elif self.event_id and self.event.country_codes:
-            bits.append(", ".join(self.event.country_codes))
+        elif self.stac_item_id:
+            bits.append(
+                self.stac_item.countries_display
+                if self.stac_item.country_codes
+                else self.stac_item.collection
+            )
         if self.hazard_id:
             bits.append(self.hazard.label)
         return " · ".join(bits)

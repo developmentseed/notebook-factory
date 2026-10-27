@@ -6,9 +6,10 @@ from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import MultiPolygon, Polygon
 
 from factory.catalog.models import AdminArea, Country, Hazard
+from factory.events.models import CatalogProfile, StacCatalog
 from factory.notebooks.models import AnalysisNotebook
 
-FIXTURES = Path(__file__).resolve().parent.parent / "examples" / "events"
+FIXTURES = Path(__file__).resolve().parent.parent / "examples" / "stac_items"
 
 
 @pytest.fixture
@@ -88,15 +89,34 @@ def template(db, hazards):
 
 
 @pytest.fixture
-def event_template(db, hazards):
+def item_template(db, hazards):
     return AnalysisNotebook.objects.create(
         slug="impact",
         title="Impact",
         use_case="uc2",
         notebook_path="impact/notebook.ipynb",
         requires_area=True,
-        requires_event=True,
+        requires_stac_item=True,
+        stac_hints={"profile": "montandon", "collections": ["reference-events"], "roles": ["event"]},
         parameter_schema={"type": "object", "properties": {"radius": {"type": "number", "default": 10}}},
+    )
+
+
+@pytest.fixture
+def montandon(db):
+    return StacCatalog.objects.create(
+        name="Montandon",
+        slug="montandon",
+        url="https://montandon.example.org/stac/",
+        api_key="monty-secret",
+        profile=CatalogProfile.MONTANDON,
+    )
+
+
+@pytest.fixture
+def earth_search(db):
+    return StacCatalog.objects.create(
+        name="Earth Search", slug="earth-search", url="https://earth-search.example.org/v1"
     )
 
 

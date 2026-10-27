@@ -1,4 +1,4 @@
-"""Create and enqueue runs. Used by the web UI, the API, the CLI and the event poller."""
+"""Create and enqueue runs. Used by the web UI, the API, the CLI and the STAC poller."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ def create_run(
     parameters: dict | None = None,
     *,
     area: AdminArea | None = None,
-    event=None,
+    stac_item=None,
     hazard: Hazard | None = None,
     user=None,
     trigger: str = TriggerKind.MANUAL,
@@ -53,8 +53,8 @@ def create_run(
         raise RunRequestError("This template needs a target admin area.")
     if area is not None and notebook.area_levels and area.level not in notebook.area_levels:
         raise RunRequestError(f"This template accepts admin levels {notebook.area_levels}, not {area.level}.")
-    if notebook.requires_event and event is None:
-        raise RunRequestError("This template needs a Montandon event.")
+    if notebook.requires_stac_item and stac_item is None:
+        raise RunRequestError("This template needs a STAC item.")
     params = P.validate(notebook.parameter_schema, parameters or {})
 
     emails = [e.strip() for e in (notify_emails or []) if e and e.strip()]
@@ -67,7 +67,7 @@ def create_run(
             batch=batch,
             parameters=params,
             area=area,
-            event=event,
+            stac_item=stac_item,
             hazard=_resolve_hazard(notebook, params, hazard),
             triggered_by=user if getattr(user, "is_authenticated", False) else None,
             trigger=trigger,
@@ -89,7 +89,7 @@ def create_batch(
     user=None,
     trigger: str = TriggerKind.MANUAL,
     notify_emails: list[str] | None = None,
-    event=None,
+    stac_item=None,
     trigger_rule=None,
 ) -> RunBatch:
     """Fan a single request out across many areas (one run per area)."""
@@ -109,7 +109,7 @@ def create_batch(
                 notebook,
                 parameters,
                 area=area,
-                event=event,
+                stac_item=stac_item,
                 user=user,
                 trigger=trigger,
                 trigger_rule=trigger_rule,
@@ -177,7 +177,7 @@ def retry_run(run: NotebookRun, user=None) -> NotebookRun:
         run.notebook,
         run.parameters,
         area=run.area,
-        event=run.event,
+        stac_item=run.stac_item,
         hazard=run.hazard,
         user=user or run.triggered_by,
         trigger=run.trigger,

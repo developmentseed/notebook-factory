@@ -12,7 +12,7 @@ class AnalysisNotebookAdmin(admin.ModelAdmin):
         "version",
         "source_kind",
         "requires_area",
-        "requires_event",
+        "requires_stac_item",
         "is_active",
     )
     list_filter = ("use_case", "source_kind", "is_active", "hazards")
@@ -36,14 +36,20 @@ class NotebookRunAdmin(admin.ModelAdmin):
         "status",
         "area",
         "hazard",
-        "event",
+        "stac_item",
         "trigger",
         "triggered_by",
         "created_at",
         "finished_at",
     )
     list_filter = ("status", "trigger", "notebook", "hazard", "writeback_status")
-    search_fields = ("id", "area__name", "event__title", "event__monty_corr_id")
+    search_fields = (
+        "id",
+        "area__name",
+        "stac_item__title",
+        "stac_item__item_id",
+        "stac_item__correlation_id",
+    )
     readonly_fields = (
         "id",
         "created_at",
@@ -56,7 +62,7 @@ class NotebookRunAdmin(admin.ModelAdmin):
         "notebook_url",
         "artifacts",
     )
-    raw_id_fields = ("area", "event", "batch", "triggered_by")
+    raw_id_fields = ("area", "stac_item", "batch", "triggered_by")
     inlines = [RunLogInline]
     date_hierarchy = "created_at"
 

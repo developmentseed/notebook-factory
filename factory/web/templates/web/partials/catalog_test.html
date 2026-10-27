@@ -1,0 +1,4 @@
+<div class="msg {% if ok %}success{% else %}error{% endif %}">
+  {% if ok %}Connected: {% else %}Failed: {% endif %}{{ message }}
+  {% if collections %}<br><span class="small muted">{{ collections|join:", " }}{% if collections|length == 12 %}, …{% endif %}</span>{% endif %}
+</div>

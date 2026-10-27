@@ -1,0 +1,29 @@
+{% extends "web/base.html" %}
+{% block title %}{{ item }}{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="{% url 'web:stac-item-list' %}">STAC items</a> › {{ item|truncatechars:60 }}</p>
+<div class="two-col">
+  <div>
+    <h1>{{ item }}</h1>
+    {% if item.description %}<p class="lead">{{ item.description|truncatechars:400 }}</p>{% endif %}
+    <h2>Analyses for this item</h2>
+    {% include "web/partials/run_table.html" with runs=runs %}
+    {% if user.is_authenticated and templates %}
+    <h3>Run an analysis</h3>
+    <p>{% for t in templates %}<a class="btn" href="{% url 'web:run-new' t.slug %}?stac_item={{ item.pk }}">{{ t.title }}</a> {% endfor %}</p>
+    {% endif %}
+  </div>
+  <aside class="side"><div class="panel"><dl class="facts">
+    <dt>Catalog</dt><dd>{{ item.catalog.name }} <span class="muted small">({{ item.catalog.get_profile_display }})</span></dd>
+    <dt>Collection</dt><dd><code>{{ item.collection }}</code></dd>
+    <dt>Item</dt><dd><a href="{{ item.stac_url }}"><code>{{ item.item_id }}</code></a></dd>
+    {% if item.catalog.is_montandon %}<dt>monty:corr_id</dt><dd><code>{{ item.correlation_id|default:"—" }}</code></dd>{% endif %}
+    {% if item.hazard or item.hazard_codes %}<dt>Hazard</dt><dd>{% if item.hazard %}{{ item.hazard.icon }} {{ item.hazard.label }}{% endif %} <span class="muted small">{{ item.hazard_codes|join:", " }}</span></dd>{% endif %}
+    {% if item.country_codes %}<dt>Countries</dt><dd>{{ item.countries_display }}</dd>{% endif %}
+    <dt>Roles</dt><dd>{{ item.roles|join:", "|default:"—" }}</dd>
+    <dt>Source</dt><dd>{{ item.source|default:"—" }}</dd>
+    <dt>When</dt><dd>{{ item.occurred_at|date:"Y-m-d H:i"|default:"—" }}{% if item.ended_at %} → {{ item.ended_at|date:"Y-m-d H:i" }}{% endif %}</dd>
+    <dt>First seen</dt><dd>{{ item.first_seen_at|date:"Y-m-d H:i" }}</dd>
+  </dl></div></aside>
+</div>
+{% endblock %}

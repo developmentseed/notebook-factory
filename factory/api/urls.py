@@ -11,8 +11,9 @@ router.register("areas", views.AdminAreaViewSet, basename="area")
 router.register("templates", views.AnalysisNotebookViewSet, basename="template")
 router.register("runs", views.NotebookRunViewSet, basename="run")
 router.register("batches", views.RunBatchViewSet, basename="batch")
-router.register("events", views.EventViewSet, basename="event")
-router.register("trigger-rules", views.EventTriggerRuleViewSet, basename="trigger-rule")
+router.register("catalogs", views.StacCatalogViewSet, basename="catalog")
+router.register("stac-items", views.StacItemViewSet, basename="stac-item")
+router.register("trigger-rules", views.TriggerRuleViewSet, basename="trigger-rule")
 
 app_name = "api"
 urlpatterns = [

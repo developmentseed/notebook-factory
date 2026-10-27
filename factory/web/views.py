@@ -4,9 +4,9 @@ from pathlib import Path
 
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.paginator import Paginator
-from django.db.models import Count, Q
+from django.db.models import Count, ProtectedError, Q
 from django.http import HttpResponse, HttpResponseNotFound, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -15,13 +15,17 @@ from django.views.decorators.http import require_POST
 from django.views.static import serve
 
 from factory.catalog.models import AdminArea, Country, Hazard
-from factory.events.models import Event, EventTriggerRule, PollerState
+from factory.events.models import PollerState, StacCatalog, StacItem, TriggerRule
+from factory.events.stac_client import StacClient, StacClientError
 from factory.notebooks import parameters as P
 from factory.notebooks.models import AnalysisNotebook, NotebookRun, RunBatch, RunStatus, TriggerKind, UseCase
 from factory.notebooks.parameters import ParameterError
 from factory.notebooks.services import RunRequestError, cancel_run, create_batch, create_run, retry_run
 
-from .forms import RunRequestForm
+from . import stac_picker
+from .forms import RunRequestForm, StacCatalogForm
+
+staff_required = user_passes_test(lambda u: u.is_active and u.is_staff, login_url="web:login")
 
 # ---------------------------------------------------------------------------
 # Browse / discover
@@ -46,11 +50,14 @@ def _filtered_runs(request):
             Q(notebook__title__icontains=f["q"])
             | Q(area__name__icontains=f["q"])
             | Q(area__country__name__icontains=f["q"])
-            | Q(event__title__icontains=f["q"])
-            | Q(event__monty_corr_id__icontains=f["q"])
+            | Q(stac_item__title__icontains=f["q"])
+            | Q(stac_item__item_id__icontains=f["q"])
+            | Q(stac_item__correlation_id__icontains=f["q"])
         )
     if f["country"]:
-        qs = qs.filter(Q(area__country_id=f["country"]) | Q(event__country_codes__contains=[f["country"]]))
+        qs = qs.filter(
+            Q(area__country_id=f["country"]) | Q(stac_item__country_codes__contains=[f["country"]])
+        )
     if f["hazard"]:
         qs = qs.filter(hazard__key=f["hazard"])
     if f["use_case"]:
@@ -122,12 +129,19 @@ def template_detail(request, slug):
 def run_new(request, slug):
     nb = get_object_or_404(AnalysisNotebook, slug=slug, is_active=True)
     initial = {}
-    event = None
-    if request.GET.get("event"):
-        event = Event.objects.filter(pk=request.GET["event"]).first()
-        if event:
-            initial["event"] = event
-            iso3 = (event.country_codes or [None])[0]
+    picker_params = request.POST if request.method == "POST" else {}
+    stac_item = None
+    if request.GET.get("stac_item"):
+        stac_item = StacItem.objects.select_related("catalog").filter(pk=request.GET["stac_item"]).first()
+        if stac_item:
+            initial["stac_item"] = stac_item
+            picker_params = {
+                "stac_catalog": str(stac_item.catalog_id),
+                "stac_collection": stac_item.collection,
+                "stac_item_id": stac_item.item_id,
+                "stac_show_all": "1",
+            }
+            iso3 = (stac_item.country_codes or [None])[0]
             if iso3:
                 initial["country"] = Country.objects.filter(pk=iso3).first()
     if request.GET.get("area"):
@@ -153,7 +167,7 @@ def run_new(request, slug):
                         user=request.user,
                         trigger=TriggerKind.MANUAL,
                         notify_emails=d["notify_emails"],
-                        event=d.get("event"),
+                        stac_item=d.get("stac_item"),
                         description=f"{d['areas'][0].country.name} · {len(d['areas'])} areas",
                     )
                     messages.success(request, f"Queued {len(d['areas'])} runs.")
@@ -162,7 +176,7 @@ def run_new(request, slug):
                     nb,
                     params,
                     area=d["areas"][0] if d["areas"] else None,
-                    event=d.get("event"),
+                    stac_item=d.get("stac_item"),
                     user=request.user,
                     trigger=TriggerKind.MANUAL,
                     notify_emails=d["notify_emails"],
@@ -183,8 +197,8 @@ def run_new(request, slug):
         "param_errors": param_errors,
         "countries": Country.objects.filter(areas__isnull=False).distinct().order_by("name"),
         "levels": sorted(set(AdminArea.objects.values_list("level", flat=True).distinct())),
-        "event": event,
-        "recent_events": Event.objects.select_related("hazard")[:50] if nb.requires_event else [],
+        "stac_item": stac_item,
+        "picker": stac_picker.build(nb, picker_params) if nb.requires_stac_item else None,
         "selected_area_ids": request.POST.get("area_ids", initial.get("area_ids", "")),
     }
     return render(request, "web/run_new.html", ctx)
@@ -251,38 +265,118 @@ def batch_detail(request, pk):
 
 
 # ---------------------------------------------------------------------------
-# Events
+# STAC picker (run form)
 # ---------------------------------------------------------------------------
 
 
-def event_list(request):
-    qs = Event.objects.select_related("hazard").annotate(run_count=Count("runs"))
+@login_required
+def stac_picker_partial(request, slug):
+    """Re-render the catalog → collection → item picker from its own inputs (HTMX)."""
+    nb = get_object_or_404(AnalysisNotebook, slug=slug, is_active=True)
+    return render(request, "web/partials/stac_picker.html", {"picker": stac_picker.build(nb, request.GET)})
+
+
+# ---------------------------------------------------------------------------
+# STAC items
+# ---------------------------------------------------------------------------
+
+
+def stac_item_list(request):
+    qs = StacItem.objects.select_related("hazard", "catalog").annotate(run_count=Count("runs"))
     q = request.GET.get("q", "").strip()
     if q:
         qs = qs.filter(
-            Q(title__icontains=q) | Q(monty_corr_id__icontains=q) | Q(country_codes__contains=[q.upper()])
+            Q(title__icontains=q)
+            | Q(item_id__icontains=q)
+            | Q(correlation_id__icontains=q)
+            | Q(country_codes__contains=[q.upper()])
         )
+    if request.GET.get("catalog"):
+        qs = qs.filter(catalog__slug=request.GET["catalog"])
     if request.GET.get("hazard"):
         qs = qs.filter(hazard__key=request.GET["hazard"])
     page = Paginator(qs, 40).get_page(request.GET.get("page"))
     return render(
         request,
-        "web/events_list.html",
+        "web/stac_items_list.html",
         {
             "page": page,
             "q": q,
+            "catalogs": StacCatalog.objects.all(),
             "hazards": Hazard.objects.all(),
-            "rules": EventTriggerRule.objects.select_related("notebook"),
-            "poller": PollerState.objects.all(),
+            "rules": TriggerRule.objects.select_related("notebook", "catalog"),
+            "poller": PollerState.objects.select_related("catalog"),
         },
     )
 
 
-def event_detail(request, pk):
-    event = get_object_or_404(Event.objects.select_related("hazard"), pk=pk)
-    runs = event.runs.with_related()
-    templates = AnalysisNotebook.objects.filter(is_active=True, requires_event=True)
-    return render(request, "web/event_detail.html", {"event": event, "runs": runs, "templates": templates})
+def stac_item_detail(request, pk):
+    item = get_object_or_404(StacItem.objects.select_related("hazard", "catalog"), pk=pk)
+    runs = item.runs.with_related()
+    templates = AnalysisNotebook.objects.filter(is_active=True, requires_stac_item=True)
+    return render(request, "web/stac_item_detail.html", {"item": item, "runs": runs, "templates": templates})
+
+
+# ---------------------------------------------------------------------------
+# STAC catalogs (staff)
+# ---------------------------------------------------------------------------
+
+
+@staff_required
+def catalog_list(request):
+    catalogs = StacCatalog.objects.annotate(item_count=Count("items", distinct=True))
+    return render(request, "web/catalogs_list.html", {"catalogs": catalogs})
+
+
+@staff_required
+def catalog_edit(request, slug=None):
+    catalog = get_object_or_404(StacCatalog, slug=slug) if slug else None
+    form = StacCatalogForm(request.POST or None, instance=catalog)
+    if request.method == "POST" and form.is_valid():
+        catalog = form.save()
+        messages.success(request, f"Saved catalog {catalog}.")
+        return redirect("web:catalog-list")
+    return render(request, "web/catalog_form.html", {"form": form, "catalog": catalog})
+
+
+@staff_required
+@require_POST
+def catalog_delete(request, slug):
+    catalog = get_object_or_404(StacCatalog, slug=slug)
+    try:
+        catalog.delete()
+        messages.info(request, f"Deleted catalog {catalog}.")
+    except ProtectedError:
+        messages.error(request, f"{catalog} has stored STAC items; deactivate it instead of deleting it.")
+    return redirect("web:catalog-list")
+
+
+@staff_required
+@require_POST
+def catalog_test(request):
+    """Try the URL / key currently in the form (falls back to the stored key when the field is blank)."""
+    url = request.POST.get("url", "").strip()
+    api_key = request.POST.get("api_key", "").strip()
+    slug = request.POST.get("existing_slug", "")
+    if not api_key and slug and not request.POST.get("clear_api_key"):
+        stored = StacCatalog.objects.filter(slug=slug).first()
+        api_key = stored.api_key if stored else ""
+    ctx = {"ok": False, "message": "", "collections": []}
+    if not url:
+        ctx["message"] = "Enter the STAC API URL first."
+    else:
+        try:
+            with StacClient(url, api_key) as client:
+                root = client.root()
+                collections = client.collections()
+            ctx.update(
+                ok=True,
+                message=f"{root.get('title') or root.get('id') or url} · {len(collections)} collections",
+                collections=[c.get("id") for c in collections[:12]],
+            )
+        except StacClientError as exc:
+            ctx["message"] = str(exc)
+    return render(request, "web/partials/catalog_test.html", ctx)
 
 
 # ---------------------------------------------------------------------------

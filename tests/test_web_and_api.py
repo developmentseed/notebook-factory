@@ -127,13 +127,15 @@ def test_api_create_run_and_batch(client, user, template, nepal):
     assert r.status_code == 400 and "hazard" in r.json()["parameters"]
 
 
-def test_events_pages_and_notifications(client, user, hazards, sample_item, published_run):
-    from factory.events.matching import upsert_event
+def test_stac_item_pages_and_notifications(client, user, hazards, montandon, sample_item, published_run):
+    from factory.events.matching import upsert_item
     from factory.notifications.services import notify_run_finished
 
-    event, *_ = upsert_event(sample_item)
-    assert client.get(reverse("web:event-list")).status_code == 200
-    assert client.get(event.get_absolute_url()).status_code == 200
+    item, *_ = upsert_item(montandon, sample_item)
+    r = client.get(reverse("web:stac-item-list"), {"catalog": "montandon"})
+    assert r.status_code == 200 and b"Earthquake in Nepal" in r.content
+    r = client.get(item.get_absolute_url())
+    assert r.status_code == 200 and b"20260901-NPL-GEO-EAR-GRO-1-GCDB" in r.content
     notes = notify_run_finished(published_run)
     assert len(notes) == 1 and notes[0].user == user and notes[0].sent_at is not None
     client.force_login(user)
@@ -155,3 +157,185 @@ def test_published_files_are_embeddable(client, settings, tmp_path):
     r = client.get("/published/runs/abc/missing.js")
     assert r.status_code == 404 and "X-Frame-Options" not in r
     assert client.get("/published/../manage.py").status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# STAC catalogs, picker and runs with STAC items
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def staff(db):
+    from django.contrib.auth import get_user_model
+
+    return get_user_model().objects.create_user("sam", "sam@example.org", "pw", is_staff=True)
+
+
+class FakeStac:
+    """Stands in for StacClient in the web layer."""
+
+    def __init__(self, items, collections=("reference-events", "sentinel-2-l2a")):
+        self.items = items
+        self._collections = collections
+        self.searches = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return None
+
+    def root(self):
+        return {"id": "fake", "title": "Fake STAC"}
+
+    def collections(self):
+        return [{"id": c, "title": c.title()} for c in self._collections]
+
+    def search(self, collections, **kwargs):
+        self.searches.append((collections, kwargs))
+        found = [i for i in self.items if i["collection"] in collections]
+        if kwargs.get("ids"):
+            found = [i for i in found if i["id"] in kwargs["ids"]]
+        return iter(found)
+
+    def get_item(self, collection, item_id):
+        for i in self.items:
+            if i["collection"] == collection and i["id"] == item_id:
+                return i
+        from factory.events.stac_client import StacClientError
+
+        raise StacClientError(f"GET {item_id} -> 404")
+
+
+@pytest.fixture
+def fake_stac(monkeypatch, sample_item):
+    from factory.events.models import StacCatalog
+
+    fake = FakeStac([sample_item])
+    monkeypatch.setattr(StacCatalog, "client", lambda self: fake)
+    monkeypatch.setattr("factory.web.views.StacClient", lambda url, key: fake)
+    return fake
+
+
+def test_catalog_pages_are_staff_only(client, user, staff, montandon):
+    client.force_login(user)
+    assert client.get(reverse("web:catalog-list")).status_code == 302
+    client.force_login(staff)
+    r = client.get(reverse("web:catalog-list"))
+    assert r.status_code == 200 and b"Montandon" in r.content and b"monty-secret" not in r.content
+    r = client.get(reverse("web:catalog-edit", args=["montandon"]))
+    assert r.status_code == 200 and b"monty-secret" not in r.content and b"A key is stored" in r.content
+
+
+def test_catalog_create_edit_keeps_key_and_delete(client, staff):
+    from factory.events.models import StacCatalog
+
+    client.force_login(staff)
+    data = {"name": "Earth Search", "slug": "es", "url": "https://es.example.org/v1", "api_key": "k1"}
+    data.update(profile="generic", is_active="on")
+    assert client.post(reverse("web:catalog-new"), data).status_code == 302
+    cat = StacCatalog.objects.get(slug="es")
+    assert cat.api_key == "k1"
+    client.post(reverse("web:catalog-edit", args=["es"]), {**data, "api_key": "", "name": "ES"})
+    cat.refresh_from_db()
+    assert cat.name == "ES" and cat.api_key == "k1"  # blank keeps the stored key
+    client.post(reverse("web:catalog-edit", args=["es"]), {**data, "api_key": "", "clear_api_key": "on"})
+    cat.refresh_from_db()
+    assert cat.api_key == ""
+    client.post(reverse("web:catalog-delete", args=["es"]))
+    assert not StacCatalog.objects.filter(slug="es").exists()
+
+
+def test_catalog_test_connection(client, staff, fake_stac):
+    client.force_login(staff)
+    r = client.post(reverse("web:catalog-test"), {"url": "https://x.org/v1"})
+    assert b"Connected" in r.content and b"Fake STAC" in r.content and b"reference-events" in r.content
+
+
+def test_stac_picker_applies_soft_hints(client, user, item_template, montandon, earth_search, fake_stac):
+    client.force_login(user)
+    url = reverse("web:stac-picker", args=[item_template.slug])
+    r = client.get(url)
+    body = r.content.decode()
+    # profile hint → only the Montandon catalog; collections hint → only reference-events, preselected
+    assert "Earth Search" not in body and "sentinel-2-l2a" not in body
+    assert 'value="reference-events" selected' in body and "example-event-npl-earthquake-2026" in body
+    r = client.get(url, {"stac_show_all": "1", "stac_catalog": montandon.pk})
+    body = r.content.decode()
+    assert "Earth Search" in body and "sentinel-2-l2a" in body
+    r = client.get(
+        url, {"stac_catalog": montandon.pk, "stac_collection": "reference-events", "stac_q": "nope"}
+    )
+    assert "No item with id" in r.content.decode()
+    assert fake_stac.searches[-1][1]["ids"] == ["nope"]
+
+
+def test_run_form_fetches_picked_item(client, user, nepal, hazards, item_template, montandon, fake_stac):
+    from factory.events.models import StacItem
+
+    client.force_login(user)
+    url = reverse("web:run-new", args=[item_template.slug])
+    assert client.get(url).status_code == 200
+    data = {
+        "area_ids": str(nepal["root"].pk),
+        "country": "NPL",
+        "level": 0,
+        "radius": 5,
+        "stac_catalog": montandon.pk,
+        "stac_collection": "reference-events",
+        "stac_item_id": "example-event-npl-earthquake-2026",
+    }
+    r = client.post(url, data)
+    assert r.status_code == 302, r.content.decode()[:2000]
+    run = NotebookRun.objects.get()
+    assert run.stac_item.item_id == "example-event-npl-earthquake-2026" and run.stac_item.catalog == montandon
+    assert StacItem.objects.count() == 1
+    # prefill from an item page goes straight to that item
+    r = client.get(url, {"stac_item": run.stac_item.pk})
+    assert b'value="example-event-npl-earthquake-2026"' in r.content
+    # unknown item → form error, no run
+    r = client.post(url, {**data, "stac_item_id": "missing"})
+    assert r.status_code == 200 and b"Could not fetch missing" in r.content
+    r = client.post(url, {**data, "stac_item_id": ""})
+    assert b"needs a STAC item" in r.content
+
+
+def test_api_catalogs_hide_key_and_require_staff(client, user, staff, montandon):
+    client.force_login(user)
+    r = client.get("/api/catalogs/")
+    assert r.status_code == 200 and r.json()[0]["has_api_key"] is True
+    assert "monty-secret" not in r.content.decode()
+    body = {"name": "X", "slug": "x", "url": "https://x.org/v1", "api_key": "s3cret"}
+    assert client.post("/api/catalogs/", body, content_type="application/json").status_code == 403
+    client.force_login(staff)
+    r = client.post("/api/catalogs/", body, content_type="application/json")
+    assert r.status_code == 201 and "s3cret" not in r.content.decode()
+
+
+def test_api_create_run_with_live_stac_item(
+    client, user, nepal, hazards, item_template, montandon, fake_stac
+):
+    client.force_login(user)
+    r = client.post(
+        "/api/runs/",
+        {
+            "notebook": item_template.slug,
+            "area": nepal["root"].pk,
+            "stac_catalog": "montandon",
+            "stac_collection": "reference-events",
+            "stac_item_id": "example-event-npl-earthquake-2026",
+        },
+        content_type="application/json",
+    )
+    assert r.status_code == 202, r.json()
+    assert r.json()["stac_item"]["catalog"] == "montandon"
+    assert "monty-secret" not in r.content.decode()
+    item_pk = r.json()["stac_item"]["id"]
+    r = client.get("/api/runs/", {"stac_item": item_pk})
+    assert r.json()["count"] == 1
+    r = client.post(
+        "/api/runs/",
+        {"notebook": item_template.slug, "area": nepal["root"].pk, "stac_catalog": "montandon"},
+        content_type="application/json",
+    )
+    assert r.status_code == 400 and "stac_item_id" in r.json()

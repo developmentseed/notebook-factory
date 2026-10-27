@@ -1,4 +1,4 @@
-/* Run wizard: map-based area picker + live summary. Plain JS, Leaflet from CDN. */
+/* Run wizard: map-based area picker, STAC item picker + live summary. Plain JS, Leaflet from CDN. */
 (function () {
   const form = document.getElementById("run-form");
   if (!form) return;
@@ -62,6 +62,8 @@
       });
       if (value.length) bits.push(`${f.dataset.title}: ${value.join(", ")}`);
     });
+    const stacItemEl = document.getElementById("stac_item_id");
+    if (stacItemEl && stacItemEl.value) bits.push(`STAC item ${stacItemEl.value}`);
     summaryEl.textContent = bits.join(" · ");
   }
 
@@ -108,6 +110,33 @@
     allEl.addEventListener("change", () => { if (allEl.checked) { selected.clear(); if (layer) layer.setStyle((f) => styleFor(f.properties.id)); } renderSelection(); });
     loadAreas();
   }
+  // STAC picker (the #stac-picker partial is re-rendered by HTMX, so listeners are delegated).
+  // Capture phase: runs before HTMX re-renders the picker for the same change event.
+  form.addEventListener("change", (e) => {
+    const name = e.target.name;
+    if (name === "stac_catalog" || name === "stac_collection") {
+      const itemEl = document.getElementById("stac_item_id");
+      const qEl = document.getElementById("stac_q");
+      if (itemEl) itemEl.value = "";
+      if (qEl) qEl.value = "";
+    }
+  }, true);
+  form.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-stac-item]");
+    if (!btn) return;
+    const itemEl = document.getElementById("stac_item_id");
+    if (itemEl) itemEl.value = btn.dataset.stacItem;
+    form.querySelectorAll(".stac-items li").forEach((li) => li.classList.remove("selected"));
+    btn.closest("li")?.classList.add("selected");
+    renderSummary();
+  });
+  form.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.target.id === "stac_q") {
+      e.preventDefault();
+      document.getElementById("stac_search")?.click();
+    }
+  });
+  document.body.addEventListener("htmx:afterSwap", renderSummary);
   form.addEventListener("input", renderSummary);
   form.addEventListener("change", renderSummary);
   renderSelection();

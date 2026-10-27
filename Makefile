@@ -14,7 +14,7 @@ db:               ## create the postgres database + postgis extension (Postgres.
 migrate:
 	uv run python manage.py migrate
 
-seed:             ## hazards, Nepal boundaries (GADM), templates, example rules
+seed:             ## hazards, Nepal boundaries (GADM), templates, Montandon catalog, example rules
 	uv run python manage.py seed_demo --countries NPL
 
 superuser:
@@ -26,11 +26,11 @@ run:              ## dev server (runs notebooks in-process when CELERY_BROKER_UR
 worker:           ## celery worker (needs CELERY_BROKER_URL)
 	uv run celery -A config worker -l info --concurrency 2
 
-beat:             ## celery beat: Montandon poller + cleanup (needs CELERY_BROKER_URL)
+beat:             ## celery beat: STAC poller + cleanup (needs CELERY_BROKER_URL)
 	uv run celery -A config beat -l info
 
-poll:             ## poll Montandon once
-	uv run python manage.py poll_montandon
+poll:             ## poll every STAC catalog with enabled rules once
+	uv run python manage.py poll_catalogs
 
 demo-run:         ## run the demo template synchronously
 	uv run python manage.py run_notebook demo-area-map --area NPL.1_1 -p label="Hello Nepal"

@@ -5,11 +5,17 @@ from django.views.decorators.cache import cache_page
 from django_filters import rest_framework as filters
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
+from rest_framework.permissions import (
+    SAFE_METHODS,
+    BasePermission,
+    IsAuthenticated,
+    IsAuthenticatedOrReadOnly,
+)
 from rest_framework.response import Response
 
 from factory.catalog.models import AdminArea, Country, Hazard
-from factory.events.models import Event, EventTriggerRule
+from factory.events.models import StacCatalog, StacItem, TriggerRule
+from factory.events.stac_client import StacClientError
 from factory.notebooks.models import AnalysisNotebook, NotebookRun, RunBatch, TriggerKind
 from factory.notebooks.parameters import ParameterError
 from factory.notebooks.services import RunRequestError, cancel_run, create_batch, create_run, retry_run
@@ -79,7 +85,7 @@ class AnalysisNotebookViewSet(viewsets.ReadOnlyModelViewSet):
     )
     serializer_class = S.AnalysisNotebookSerializer
     lookup_field = "slug"
-    filterset_fields = ["use_case", "hazards__key", "requires_event", "requires_area"]
+    filterset_fields = ["use_case", "hazards__key", "requires_stac_item", "requires_area"]
     search_fields = ["title", "summary", "description"]
 
 
@@ -89,7 +95,8 @@ class RunFilter(filters.FilterSet):
     country = filters.CharFilter(method="filter_country")
     area = filters.NumberFilter(field_name="area_id")
     hazard = filters.CharFilter(field_name="hazard__key")
-    event = filters.NumberFilter(field_name="event_id")
+    stac_item = filters.NumberFilter(field_name="stac_item_id")
+    catalog = filters.CharFilter(field_name="stac_item__catalog__slug")
     status = filters.CharFilter()
     trigger = filters.CharFilter()
     batch = filters.UUIDFilter(field_name="batch_id")
@@ -104,7 +111,7 @@ class RunFilter(filters.FilterSet):
         value = value.upper()
         from django.db.models import Q
 
-        return qs.filter(Q(area__country_id=value) | Q(event__country_codes__contains=[value]))
+        return qs.filter(Q(area__country_id=value) | Q(stac_item__country_codes__contains=[value]))
 
 
 class NotebookRunViewSet(
@@ -112,7 +119,13 @@ class NotebookRunViewSet(
 ):
     queryset = NotebookRun.objects.with_related()
     filterset_class = RunFilter
-    search_fields = ["notebook__title", "area__name", "event__title", "event__monty_corr_id"]
+    search_fields = [
+        "notebook__title",
+        "area__name",
+        "stac_item__title",
+        "stac_item__item_id",
+        "stac_item__correlation_id",
+    ]
     ordering_fields = ["created_at", "finished_at", "status"]
     permission_classes = [IsAuthenticatedOrReadOnly]
 
@@ -136,14 +149,14 @@ class NotebookRunViewSet(
                     user=request.user,
                     trigger=TriggerKind.API,
                     notify_emails=d["notify_emails"],
-                    event=d.get("event"),
+                    stac_item=d.get("stac_item"),
                 )
                 return Response(S.RunBatchSerializer(batch).data, status=status.HTTP_202_ACCEPTED)
             run = create_run(
                 d["notebook"],
                 d["parameters"],
                 area=d.get("area"),
-                event=d.get("event"),
+                stac_item=d.get("stac_item"),
                 user=request.user,
                 trigger=TriggerKind.API,
                 notify_emails=d["notify_emails"],
@@ -175,17 +188,45 @@ class RunBatchViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = S.RunBatchSerializer
 
 
-class EventViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Event.objects.select_related("hazard")
-    serializer_class = S.EventSerializer
-    filterset_fields = ["collection", "hazard__key", "monty_corr_id"]
-    search_fields = ["title", "monty_corr_id", "stac_id"]
+class ReadAuthenticatedWriteStaff(BasePermission):
+    def has_permission(self, request, view):
+        user = request.user
+        if request.method in SAFE_METHODS:
+            return bool(user and user.is_authenticated)
+        return bool(user and user.is_staff)
+
+
+class StacCatalogViewSet(viewsets.ModelViewSet):
+    queryset = StacCatalog.objects.all()
+    serializer_class = S.StacCatalogSerializer
+    permission_classes = [ReadAuthenticatedWriteStaff]
+    lookup_field = "slug"
+    pagination_class = None
+    filterset_fields = ["profile", "is_active"]
+
+    @action(detail=True, methods=["get"])
+    def collections(self, request, slug=None):
+        """Collections offered by the catalog (fetched live)."""
+        catalog = self.get_object()
+        try:
+            with catalog.client() as client:
+                collections = client.collections()
+        except StacClientError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response([{"id": c.get("id"), "title": c.get("title")} for c in collections])
+
+
+class StacItemViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = StacItem.objects.select_related("hazard", "catalog")
+    serializer_class = S.StacItemSerializer
+    filterset_fields = ["catalog__slug", "collection", "hazard__key", "correlation_id"]
+    search_fields = ["title", "correlation_id", "item_id"]
     ordering_fields = ["occurred_at", "first_seen_at"]
 
 
-class EventTriggerRuleViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = EventTriggerRule.objects.select_related("notebook").prefetch_related("hazards")
-    serializer_class = S.EventTriggerRuleSerializer
+class TriggerRuleViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = TriggerRule.objects.select_related("notebook", "catalog").prefetch_related("hazards")
+    serializer_class = S.TriggerRuleSerializer
     pagination_class = None
 
 

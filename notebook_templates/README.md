@@ -24,8 +24,12 @@ hazards: [flood, cyclone] # Hazard keys (see seed_demo)
 version: "0.2"
 requires_area: true       # run needs an admin area
 area_levels: [1, 2]       # optional: restrict admin levels
-requires_event: false     # run needs a Montandon event (UC2 / UC3)
-supports_writeback: false # notebook writes output_dir/stac/ for Montandon write-back
+requires_stac_item: false # run needs a STAC item from a configured catalog (UC2 / UC3)
+stac_hints:               # optional, soft: pre-filter the run form's catalog / collection / item pickers
+  profile: montandon      #   only offer catalogs with this profile (generic | montandon)
+  collections: [reference-events]  # preselect / narrow the collection list
+  roles: [event]          #   hide items without one of these roles
+supports_writeback: false # notebook writes output_dir/stac/ for write-back to the item's catalog
 estimated_runtime_minutes: 3
 parameters:               # JSON Schema (object); becomes the form + validation
   type: object
@@ -38,6 +42,9 @@ parameters:               # JSON Schema (object); becomes the form + validation
     climate_scenario: {type: string, enum: [current, rcp45], x-widget: radio}
   required: [hazard]
 ```
+
+`requires_event` is still read as an alias of `requires_stac_item`. Hints never block a run: the user
+can tick "show all" in the picker, and the API / CLI ignore them.
 
 Supported: `string | number | integer | boolean | array` (arrays need `items.enum`), `enum`, `default`,
 `title`, `description`, `minimum`, `maximum`, `multipleOf` (UI step), `x-widget`
@@ -56,19 +63,24 @@ the notebook also runs standalone in Jupyter:
 | `area` | dict | `{id, code, name, level, country, country_name, bbox}` or `{}` |
 | `area_geojson` | str | path to a FeatureCollection with the target area |
 | `subdivisions_geojson` | str | path to the aggregation subdivisions (children of the area, or the level given by an `aggregation_level` parameter) |
-| `event` | dict | the Montandon STAC item, or `{}` |
-| `event_json` | str | the same item on disk |
-| `montandon_stac_url` | str | STAC API base URL |
+| `stac_item` | dict | the run's STAC item, or `{}` |
+| `stac_item_json` | str | the same item on disk |
+| `stac_collection` | str | the item's collection id |
+| `stac_api_url` | str | root URL of the item's catalog |
+| `stac_catalog_profile` | str | `generic` or `montandon` (`""` without an item) |
 | `hazard` | str | hazard key or `""` |
 
-The Montandon token is available as the environment variable `MONTANDON_API_TOKEN` (never as a
-parameter, so it does not end up in the published notebook).
+The kernel also gets the environment variables `STAC_API_URL` and `STAC_API_KEY` for the item's
+catalog (empty without an item). The key is never a parameter, so it does not end up in the published
+notebook. Send it as `Authorization: Bearer <key>`; pystac-client does that with
+`Client.open(url, headers={"Authorization": f"Bearer {key}"})`.
 
 ## Output conventions
 
 * Anything in `output_dir` is uploaded to `runs/<id>/outputs/` and listed as run artefacts.
-* Write-back (UC3): `output_dir/stac/collection.json` + `output_dir/stac/items/*.json`. Items should
-  carry `monty:corr_id` and a `derived_from` link; the app adds an `about` link to the published page.
+* Write-back (UC3): `output_dir/stac/collection.json` + `output_dir/stac/items/*.json`, pushed to the
+  catalog the run's STAC item came from, only when that catalog has write-back enabled. Items should carry a
+  `derived_from` link (and `monty:corr_id` for Montandon); the app adds an `about` link to the published page.
 * Widgets: anywidget-based outputs (lonboard maps, [manywidgets](https://github.com/developmentseed/manywidgets)
   `Chart`/`Stat`/`Slider`/`Toggle`/`Legend`/`Row`/`Column`, `LayerToggle`, `jslink`ed controls) are exported as
   static, kernel-free widgets by the vendored myst-anywidget-static-export plugin. Classic ipywidgets
