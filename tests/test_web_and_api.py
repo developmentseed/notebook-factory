@@ -25,6 +25,22 @@ def test_browse_lists_published_runs_and_filters(client, published_run, nepal):
     assert r.status_code == 200 and b"<html" not in r.content and b"West" in r.content
 
 
+def test_help_page(client):
+    r = client.get(reverse("web:help"))
+    assert r.status_code == 200
+    for anchor in (
+        b'id="browsing-analyses"',
+        b'id="importing-countries-and-admin-boundaries"',
+        b'id="using-the-api"',
+    ):
+        assert anchor in r.content
+    assert (
+        b'class="toc"' in r.content
+        and b"{{BASE_URL}}" not in r.content
+        and b"http://testserver/api" in r.content
+    )
+
+
 def test_template_pages(client, template):
     assert client.get(reverse("web:template-list")).status_code == 200
     r = client.get(template.get_absolute_url())

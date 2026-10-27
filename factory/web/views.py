@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import markdown
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
@@ -11,6 +12,7 @@ from django.db.models.functions import Coalesce, NullIf
 from django.http import HttpResponse, HttpResponseNotFound, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.safestring import mark_safe
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.http import require_POST
 from django.views.static import serve
@@ -625,6 +627,22 @@ def notification_open(request, pk):
         n.read_at = timezone.now()
         n.save(update_fields=["read_at"])
     return redirect(n.run)
+
+
+HELP_GUIDE = Path(__file__).parent / "help" / "guide.md"
+
+
+def help_page(request):
+    """The user guide: help/guide.md rendered with a table of contents."""
+    text = HELP_GUIDE.read_text(encoding="utf-8")
+    text = text.replace("{{BASE_URL}}", request.build_absolute_uri("/")).replace(
+        "{{SITE_NAME}}", settings.SITE_NAME
+    )
+    converter = markdown.Markdown(
+        extensions=["tables", "fenced_code", "toc"], extension_configs={"toc": {"toc_depth": "2-3"}}
+    )
+    body = converter.convert(text)
+    return render(request, "web/help.html", {"body": mark_safe(body), "toc": mark_safe(converter.toc)})
 
 
 def healthz(request):
