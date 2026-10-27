@@ -19,6 +19,7 @@
     {% if user.is_staff %}<a href="{% url 'web:facet-list' %}" class="{% if 'facet' in request.resolver_match.url_name %}active{% endif %}">Filters</a>{% endif %}
     {% if user.is_staff %}<a href="{% url 'web:catalog-list' %}" class="{% if 'catalog' in request.resolver_match.url_name %}active{% endif %}">Catalogs</a>{% endif %}
     <a href="{% url 'api:docs' %}">API</a>
+    <a href="{% url 'web:help' %}" class="{% if request.resolver_match.url_name == 'help' %}active{% endif %}">Help</a>
   </nav>
   <div class="topbar-right">
     {% if user.is_authenticated %}

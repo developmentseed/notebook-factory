@@ -108,3 +108,18 @@ progress { width: 100%; height: 8px; accent-color: var(--orange); }
 .run-tags, .run-details { margin-top: 1rem; }
 .options-table input { width: 100%; min-width: 3rem; }
 .tags { margin-bottom: 1rem; }
+
+/* Help */
+.help { max-width: 80ch; }
+.help h2 { font-size: 1.35rem; margin-top: 2.4rem; padding-top: .8rem; border-top: 1px solid var(--line); }
+.help h3 { font-size: 1.05rem; margin: 1.4rem 0 .5rem; }
+.help h2, .help h3 { scroll-margin-top: 70px; }
+.help pre { background: var(--ink); color: #d7dbe3; padding: .8rem 1rem; border-radius: 8px; overflow: auto; font-size: .82rem; line-height: 1.45; }
+.help pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+.help table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); font-size: .88rem; margin: .6rem 0 1rem; display: block; overflow-x: auto; }
+.help th, .help td { padding: .45rem .6rem; text-align: left; border-bottom: 1px solid var(--line-2); vertical-align: top; }
+.help th { font-size: .75rem; letter-spacing: .05em; color: var(--muted); background: var(--surface-3); }
+.help-toc { max-height: calc(100vh - 90px); overflow: auto; font-size: .88rem; }
+.help-toc h3 { margin-top: 0; }
+.help-toc ul { list-style: none; padding-left: 0; margin: 0 0 .8rem; } .help-toc ul ul { padding-left: .9rem; margin: .1rem 0 .3rem; font-size: .84rem; }
+.help-toc li { padding: .12rem 0; } .help-toc a { color: var(--ink-2); }
