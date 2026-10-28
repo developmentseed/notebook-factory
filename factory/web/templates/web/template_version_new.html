@@ -1,0 +1,24 @@
+{% extends "web/base.html" %}
+{% block title %}New version · {{ nb.title }} · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="{% url 'web:template-list' %}">Templates</a> › <a href="{{ nb.get_absolute_url }}">{{ nb.title }}</a> › New version</p>
+<h1>Upload a new version of {{ nb.title }}</h1>
+<p class="lead">Replace the notebook and its files. Without a <code>template.yml</code> in the upload, the current settings are kept and new variables in the <code>parameters</code> cell are added as parameters. Download the current version to start from it.</p>
+<form method="post" enctype="multipart/form-data" class="panel">
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div class="msg error">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+  <div class="field {% if form.file.errors %}has-error{% endif %}">
+    <label for="id_file">{{ form.file.label }} <span class="req">*</span></label>
+    <input type="file" name="file" id="id_file" accept=".zip,.ipynb" required
+           hx-post="{% url 'web:template-inspect' %}" hx-trigger="change" hx-encoding="multipart/form-data"
+           hx-include="#id_file, [name=csrfmiddlewaretoken]" hx-target="#template-inspect" hx-swap="innerHTML">
+    <small class="muted">{{ form.file.help_text }}</small>
+    {% if form.file.errors %}<small class="error">{{ form.file.errors|join:" " }}</small>{% endif %}
+  </div>
+  <div id="template-inspect">{% include "web/partials/template_inspect.html" with selected=form.notebook_path.value %}</div>
+  {% include "web/partials/form_field.html" with field=form.note %}
+  {% include "web/partials/form_field.html" with field=form.make_current %}
+  <p class="muted small">Queued and running runs keep the version they started with.{% if nb.trigger_rules.exists %} Trigger rules are checked against the new parameters.{% endif %}</p>
+  <p><button class="btn primary" type="submit">Upload</button> <a class="btn" href="{% url 'web:template-download' nb.slug %}">Download current</a></p>
+</form>
+{% endblock %}

@@ -34,8 +34,10 @@ def create_run(
     notify_emails: list[str] | None = None,
     batch: RunBatch | None = None,
     enqueue: bool = True,
+    allow_inactive: bool = False,
 ) -> NotebookRun:
-    if not notebook.is_active:
+    """`allow_inactive` lets template editors test a template before activating it."""
+    if not notebook.is_active and not allow_inactive:
         raise RunRequestError("This template is not active.")
     if notebook.requires_area and area is None:
         raise RunRequestError("This template needs a target admin area.")
@@ -52,6 +54,7 @@ def create_run(
     with transaction.atomic():
         run = NotebookRun.objects.create(
             notebook=notebook,
+            template_version_id=notebook.current_version_id,
             batch=batch,
             parameters=params,
             area=area,
@@ -80,6 +83,7 @@ def create_batch(
     stac_item=None,
     filters: dict[str, list[str]] | None = None,
     trigger_rule=None,
+    allow_inactive: bool = False,
 ) -> RunBatch:
     """Fan a single request out across many areas (one run per area)."""
     areas = list(areas)
@@ -105,6 +109,7 @@ def create_batch(
                 trigger_rule=trigger_rule,
                 notify_emails=notify_emails,
                 batch=batch,
+                allow_inactive=allow_inactive,
             )
     return batch
 
@@ -161,8 +166,8 @@ def cancel_run(run: NotebookRun) -> bool:
     return True
 
 
-def retry_run(run: NotebookRun, user=None) -> NotebookRun:
-    """Create a fresh run with the same inputs."""
+def retry_run(run: NotebookRun, user=None, allow_inactive: bool = False) -> NotebookRun:
+    """Create a fresh run with the same inputs, on the template's current version."""
     if run.is_upload:
         from .uploads import retry_upload
 
@@ -178,6 +183,7 @@ def retry_run(run: NotebookRun, user=None) -> NotebookRun:
         trigger_rule=run.trigger_rule,
         notify_emails=run.notify_emails,
         batch=run.batch,
+        allow_inactive=allow_inactive,
     )
 
 

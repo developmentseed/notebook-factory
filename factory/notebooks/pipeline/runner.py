@@ -41,10 +41,22 @@ def run_pipeline(run_id: str) -> NotebookRun:
         else:
             run.set_status(RunStatus.FETCHING, "Resolving template and preparing inputs", cell=0, total=0)
             run.log(f"worker picked up run {run.short_id}")
-            sources.resolve_template(run.notebook, ctx)
-            run.log(
-                f"template: {run.notebook.slug} ({run.notebook.version or 'unversioned'}) from {run.notebook.get_source_kind_display().lower()}"
-            )
+            version = run.template_version
+            sources.resolve_template(run.notebook, ctx, version)
+            if version is not None:
+                source = (
+                    "uploaded bundle"
+                    if version.archive_key
+                    else run.notebook.get_source_kind_display().lower()
+                )
+                run.log(
+                    f"template: {run.notebook.slug} v{version.number}"
+                    f"{f' ({version.label})' if version.label else ''} from {source}"
+                )
+            else:
+                run.log(
+                    f"template: {run.notebook.slug} ({run.notebook.version or 'unversioned'}) from {run.notebook.get_source_kind_display().lower()}"
+                )
             injected = inputs.prepare_inputs(run, ctx)
             if run.area_id:
                 run.log(f"inputs: area {run.area.name} (L{run.area.level}) + subdivisions written to inputs/")

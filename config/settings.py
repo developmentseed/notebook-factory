@@ -291,6 +291,12 @@ NOTEBOOK_FACTORY = {
         "NOTEBOOK_UPLOAD_MAX_UNCOMPRESSED_BYTES", default=1024 * 1024 * 1024
     ),
     "UPLOAD_MAX_FILES": env.int("NOTEBOOK_UPLOAD_MAX_FILES", default=2000),
+    # Uploaded template bundles (zip or bare .ipynb), and where workers unpack them (keyed by content hash).
+    "TEMPLATE_MAX_BYTES": env.int("NOTEBOOK_TEMPLATE_MAX_BYTES", default=50 * 1024 * 1024),
+    "TEMPLATE_CACHE_DIR": Path(
+        env("NOTEBOOK_TEMPLATE_CACHE_DIR", default=str(BASE_DIR / "data" / "template-cache"))
+    ),
+    "TEMPLATE_CACHE_MAX_AGE_HOURS": env.int("NOTEBOOK_TEMPLATE_CACHE_MAX_AGE_HOURS", default=24 * 7),
     # Simplification tolerance (degrees) for GeoJSON served to the map picker.
     "AREA_SIMPLIFY_TOLERANCE": env.float("AREA_SIMPLIFY_TOLERANCE", default=0.005),
 }

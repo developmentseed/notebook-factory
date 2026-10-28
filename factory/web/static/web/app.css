@@ -123,3 +123,17 @@ progress { width: 100%; height: 8px; accent-color: var(--orange); }
 .help-toc h3 { margin-top: 0; }
 .help-toc ul { list-style: none; padding-left: 0; margin: 0 0 .8rem; } .help-toc ul ul { padding-left: .9rem; margin: .1rem 0 .3rem; font-size: .84rem; }
 .help-toc li { padding: .12rem 0; } .help-toc a { color: var(--ink-2); }
+
+/* Template editor */
+.schema-editor .tabs { display: flex; gap: .4rem; margin-bottom: .8rem; }
+.schema-editor textarea.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; width: 100%; }
+.param-row { border: 1px solid var(--line); border-radius: var(--radius); padding: .6rem .8rem; margin-bottom: .6rem; background: var(--surface); }
+.param-row.has-error { border-color: var(--err); }
+.param-row-main { display: grid; grid-template-columns: auto 1fr 8rem 1.3fr 1fr auto; gap: .6rem; align-items: end; }
+.param-row-main .field { margin: 0; }
+.param-row details { margin-top: .4rem; }
+.param-row input.narrow { width: 5rem; }
+@media (max-width: 760px) { .param-row-main { grid-template-columns: 1fr 1fr; } }
+.schema-actions { display: flex; gap: .4rem; flex-wrap: wrap; }
+fieldset.plain { border: 0; padding: 0; margin: 0; min-width: 0; }
+.preview { margin-top: 1rem; }

@@ -49,7 +49,7 @@ Beat only schedules: the Montandon poll and the hourly cleanup run on the worker
 
 | Component | Notes |
 |---|---|
-| `web` | Runs `migrate`, `collectstatic` and `sync_templates` on start, so keep `web.replicas: 1`. Readiness checks `/healthz`, which queries the database; liveness is a TCP check so a database outage does not restart it. |
+| `web` | Runs `migrate` and `collectstatic` on start, so keep `web.replicas: 1`. Templates are uploaded in the app; import the examples once with `kubectl exec … python manage.py sync_templates`. Readiness checks `/healthz`, which queries the database; liveness is a TCP check so a database outage does not restart it. |
 | `worker` | Two runs at a time per pod (`CELERY_CONCURRENCY`). Scale with `worker.replicas`. |
 | `beat` | Always one replica, `Recreate` strategy, so there are never two schedulers. |
 | `redis` | Broker and result backend. The append-only file on a PVC keeps queued runs across restarts. Rollouts stop the old pod first because the volume is ReadWriteOnce. |

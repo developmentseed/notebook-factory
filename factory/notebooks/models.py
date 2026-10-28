@@ -18,6 +18,22 @@ from django.utils import timezone
 class SourceKind(models.TextChoices):
     LOCAL = "local", "Local templates directory"
     GIT = "git", "Git repository"
+    BUNDLE = "bundle", "Uploaded bundle"
+
+
+# Fields a TemplateVersion freezes; the template keeps a copy of its current version's values.
+SNAPSHOT_FIELDS = (
+    "notebook_path",
+    "source_repo",
+    "source_ref",
+    "parameter_schema",
+    "requires_area",
+    "area_levels",
+    "requires_stac_item",
+    "stac_hints",
+    "supports_writeback",
+    "estimated_runtime_minutes",
+)
 
 
 class AnalysisNotebook(models.Model):
@@ -39,7 +55,7 @@ class AnalysisNotebook(models.Model):
     source_ref = models.CharField(max_length=120, blank=True, help_text="Branch, tag or commit")
     notebook_path = models.CharField(
         max_length=300,
-        help_text="Path to the .ipynb relative to the templates dir (local) or repo root (git)",
+        help_text="Path to the .ipynb relative to the templates dir (local), repo root (git) or bundle (uploaded)",
     )
     version = models.CharField(max_length=40, blank=True)
 
@@ -63,6 +79,14 @@ class AnalysisNotebook(models.Model):
     )
     estimated_runtime_minutes = models.PositiveIntegerField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
+    current_version = models.ForeignKey(
+        "TemplateVersion",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="The version new runs use; its snapshot is copied onto this template",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -89,6 +113,73 @@ class AnalysisNotebook(models.Model):
     @property
     def last_run(self) -> NotebookRun | None:
         return self.runs.order_by("-created_at").first()
+
+    def snapshot(self) -> dict:
+        """The current values of the versioned fields (plus the free-text version as `label`)."""
+        return {**{f: getattr(self, f) for f in SNAPSHOT_FIELDS}, "label": self.version}
+
+    def make_current(self, version: TemplateVersion) -> None:
+        """Point at `version` and copy its snapshot onto the template (the one write path for versioned fields)."""
+        for f in SNAPSHOT_FIELDS:
+            setattr(self, f, getattr(version, f))
+        self.version = version.label
+        if version.archive_key:
+            self.source_kind = SourceKind.BUNDLE
+        elif version.source_repo:
+            self.source_kind = SourceKind.GIT
+        else:
+            self.source_kind = SourceKind.LOCAL
+        self.current_version = version
+        self.save()
+
+
+class TemplateVersion(models.Model):
+    """An immutable snapshot of a template: its code bundle plus the schema and inputs that match it."""
+
+    notebook = models.ForeignKey(AnalysisNotebook, on_delete=models.CASCADE, related_name="versions")
+    number = models.PositiveIntegerField()
+    label = models.CharField(max_length=40, blank=True, help_text="Free-text version, e.g. 0.3")
+    note = models.CharField(max_length=300, blank=True, help_text="What changed")
+
+    archive_key = models.CharField(
+        max_length=300, blank=True, help_text="Bundle zip in the published storage; empty for local / git"
+    )
+    sha256 = models.CharField(max_length=64, blank=True, help_text="Hash of the bundle's files")
+    files = models.JSONField(default=list, blank=True, help_text="Paths in the bundle")
+
+    notebook_path = models.CharField(max_length=300)
+    source_repo = models.URLField(blank=True)
+    source_ref = models.CharField(max_length=120, blank=True)
+    parameter_schema = models.JSONField(default=dict, blank=True)
+    requires_area = models.BooleanField(default=True)
+    area_levels = models.JSONField(default=list, blank=True)
+    requires_stac_item = models.BooleanField(default=False)
+    stac_hints = models.JSONField(default=dict, blank=True)
+    supports_writeback = models.BooleanField(default=False)
+    estimated_runtime_minutes = models.PositiveIntegerField(null=True, blank=True)
+
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["notebook", "-number"]
+        constraints = [
+            models.UniqueConstraint(fields=["notebook", "number"], name="uniq_templateversion_number")
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.notebook.slug} v{self.number}" + (f" ({self.label})" if self.label else "")
+
+    @property
+    def is_current(self) -> bool:
+        return self.notebook.current_version_id == self.pk
+
+    @property
+    def is_bundle(self) -> bool:
+        return bool(self.archive_key)
+
+    def snapshot(self) -> dict:
+        return {**{f: getattr(self, f) for f in SNAPSHOT_FIELDS}, "label": self.label}
 
 
 class RunStatus(models.TextChoices):
@@ -165,6 +256,7 @@ class NotebookRunQuerySet(models.QuerySet):
     def with_related(self):
         return self.select_related(
             "notebook",
+            "template_version",
             "area",
             "area__country",
             "stac_item",
@@ -185,6 +277,14 @@ class NotebookRun(models.Model):
         on_delete=models.PROTECT,
         related_name="runs",
         help_text="Empty for uploaded notebooks",
+    )
+    template_version = models.ForeignKey(
+        TemplateVersion,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="runs",
+        help_text="The template version this run executes; empty for uploads and runs from before versioning",
     )
     batch = models.ForeignKey(RunBatch, null=True, blank=True, on_delete=models.SET_NULL, related_name="runs")
     status = models.CharField(

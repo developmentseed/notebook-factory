@@ -3,9 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import markdown
+import yaml
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib.auth.decorators import login_required, permission_required, user_passes_test
 from django.core.paginator import Paginator
 from django.db.models import Count, ProtectedError, Q, Value
 from django.db.models.functions import Coalesce, NullIf
@@ -18,19 +19,44 @@ from django.views.decorators.http import require_POST
 from django.views.static import serve
 
 from factory.catalog import facets
-from factory.catalog.models import AdminArea, Country, Facet
+from factory.catalog.models import AdminArea, Country, Facet, FacetOption
 from factory.events.models import PollerState, StacCatalog, StacItem, TriggerRule
 from factory.events.stac_client import StacClient, StacClientError
 from factory.notebooks import parameters as P
+from factory.notebooks import schema_builder as SB
+from factory.notebooks import templates as T
+from factory.notebooks.bundles import inspect_template
 from factory.notebooks.models import AnalysisNotebook, NotebookRun, RunBatch, RunStatus, TriggerKind
 from factory.notebooks.parameters import ParameterError
+from factory.notebooks.pipeline.inputs import RESERVED_PARAMETERS
 from factory.notebooks.services import RunRequestError, cancel_run, create_batch, create_run, retry_run
-from factory.notebooks.uploads import UploadError, as_archive, create_upload, inspect_archive
+from factory.notebooks.uploads import ArchiveError, UploadError, as_archive, create_upload, inspect_archive
 
 from . import stac_picker
-from .forms import FacetForm, FacetOptionFormSet, RunDetailsForm, RunRequestForm, StacCatalogForm, UploadForm
+from .forms import (
+    FacetForm,
+    FacetOptionFormSet,
+    ParameterRowFormSet,
+    RunDetailsForm,
+    RunRequestForm,
+    StacCatalogForm,
+    TemplateForm,
+    TemplateUploadForm,
+    TemplateVersionForm,
+    UploadForm,
+)
 
 staff_required = user_passes_test(lambda u: u.is_active and u.is_staff, login_url="web:login")
+# Uploaded templates run arbitrary code on the workers, so editing them is a separate permission.
+TEMPLATE_PERM = "notebooks.change_analysisnotebook"
+
+
+def template_editor_required(view):
+    return login_required(permission_required(TEMPLATE_PERM, raise_exception=True)(view))
+
+
+def _can_edit_templates(user) -> bool:
+    return user.is_authenticated and user.has_perm(TEMPLATE_PERM)
 
 
 def _browse_facets(params, qs=None):
@@ -143,16 +169,24 @@ def browse(request):
 
 
 def template_list(request):
+    can_edit = _can_edit_templates(request.user)
     templates = (
-        AnalysisNotebook.objects.filter(is_active=True)
-        .prefetch_related("facet_options__facet")
-        .annotate(run_count=Count("runs"))
+        AnalysisNotebook.objects.all() if can_edit else AnalysisNotebook.objects.filter(is_active=True)
     )
-    return render(request, "web/templates_list.html", {"templates": templates})
+    templates = templates.prefetch_related("facet_options__facet").annotate(run_count=Count("runs"))
+    return render(request, "web/templates_list.html", {"templates": templates, "can_edit": can_edit})
+
+
+def _visible_template(request, slug, **lookup):
+    """Inactive templates are only visible to template editors (who may test-run them)."""
+    qs = AnalysisNotebook.objects.select_related("current_version")
+    if not _can_edit_templates(request.user):
+        qs = qs.filter(is_active=True)
+    return get_object_or_404(qs, slug=slug, **lookup)
 
 
 def template_detail(request, slug):
-    nb = get_object_or_404(AnalysisNotebook.objects.prefetch_related("facet_options__facet"), slug=slug)
+    nb = _visible_template(request, slug)
     runs = nb.runs.with_related()[:10]
     return render(
         request,
@@ -163,13 +197,14 @@ def template_detail(request, slug):
             "runs": runs,
             "run_count": nb.runs.count(),
             "rules": nb.trigger_rules.all(),
+            "can_edit": _can_edit_templates(request.user),
         },
     )
 
 
 @login_required
 def run_new(request, slug):
-    nb = get_object_or_404(AnalysisNotebook, slug=slug, is_active=True)
+    nb = _visible_template(request, slug)
     initial = {}
     picker_params = request.POST if request.method == "POST" else {}
     stac_item = None
@@ -223,6 +258,7 @@ def run_new(request, slug):
                         stac_item=d.get("stac_item"),
                         filters=tags,
                         description=f"{d['areas'][0].country.name} · {len(d['areas'])} areas",
+                        allow_inactive=True,
                     )
                     messages.success(request, f"Queued {len(d['areas'])} runs.")
                     return redirect(batch)
@@ -235,6 +271,7 @@ def run_new(request, slug):
                     user=request.user,
                     trigger=TriggerKind.MANUAL,
                     notify_emails=d["notify_emails"],
+                    allow_inactive=True,
                 )
                 messages.success(request, "Run queued.")
                 return redirect(run)
@@ -259,6 +296,300 @@ def run_new(request, slug):
         "pinned_tags": pinned,
     }
     return render(request, "web/run_new.html", ctx)
+
+
+# ---------------------------------------------------------------------------
+# Template management (notebooks.change_analysisnotebook)
+# ---------------------------------------------------------------------------
+
+
+def _facet_choices():
+    return [(f.key, f.label) for f in Facet.objects.all()]
+
+
+def _row_formset(data=None, rows=None):
+    kwargs = {"form_kwargs": {"facet_choices": _facet_choices()}, "prefix": "p"}
+    if data is not None:
+        return ParameterRowFormSet(data, **kwargs)
+    return ParameterRowFormSet(initial=rows or [], **kwargs)
+
+
+def _posted_schema(post):
+    """(schema or None, errors, mode, bound formset or None) from the schema editor's fields."""
+    mode = post.get("schema_mode", "rows")
+    if mode == "yaml":
+        try:
+            schema = yaml.safe_load(post.get("schema_yaml", "")) or {}
+            if not isinstance(schema, dict):
+                raise ValueError("the schema must be a mapping")
+        except (yaml.YAMLError, ValueError) as exc:
+            return None, {"_schema": f"Not a valid schema: {exc}"}, mode, None
+        return schema, {}, mode, None
+    formset = _row_formset(post)
+    if not formset.is_valid():
+        return None, {"_rows": "Fix the highlighted parameters."}, mode, formset
+    rows = []
+    for i, form in enumerate(formset.forms):
+        row = dict(form.cleaned_data)
+        if row:
+            row["order"] = row["order"] if row.get("order") is not None else 1000 + i
+            rows.append(row)
+    try:
+        return SB.schema_from_rows(rows), {}, mode, formset
+    except SB.RowError as exc:
+        return None, exc.errors, mode, formset
+
+
+def _editor_ctx(nb, schema, *, mode="rows", formset=None, errors=None, warnings=None, yaml_text=""):
+    """Context for partials/template_schema.html: rows or YAML, problems, and a preview of the run form."""
+    errors = dict(errors or {})
+    warnings = list(warnings or [])
+    preview = []
+    if schema is not None:
+        found, found_warnings = SB.check_schema(schema)
+        errors.update(found)
+        warnings.extend(found_warnings)
+        warnings.extend(T.trigger_rule_problems(nb, schema))
+        yaml_text = yaml.safe_dump(schema, sort_keys=False, allow_unicode=True, width=110) if schema else ""
+        if formset is None:
+            formset = _row_formset(rows=SB.rows_from_schema(schema))
+        if not errors:
+            preview = P.schema_fields(schema)
+    elif formset is None:
+        formset = _row_formset(rows=[])
+    return {
+        "nb": nb,
+        "mode": mode,
+        "formset": formset,
+        "schema_yaml": yaml_text,
+        "schema_errors": {k: v for k, v in errors.items() if not k.startswith("_")},
+        "general_errors": [v for k, v in errors.items() if k.startswith("_")],
+        "schema_warnings": warnings,
+        "fields": preview,
+        "values": P.defaults(schema) if preview else {},
+        "param_errors": {},
+        "reserved": RESERVED_PARAMETERS,
+    }
+
+
+def _flash_warnings(request, warnings):
+    for warning in warnings:
+        messages.warning(request, warning)
+
+
+@template_editor_required
+def template_new(request):
+    if not request.user.has_perm("notebooks.add_analysisnotebook"):
+        return HttpResponse("You may not add templates.", status=403)
+    form = TemplateUploadForm(request.POST or None, request.FILES or None)
+    manifest = None
+    if request.method == "POST" and form.is_valid():
+        d = form.cleaned_data
+        try:
+            manifest = inspect_template(d["file"], d["file"].name, d["notebook_path"])
+        except ArchiveError as exc:
+            form.add_error("file", str(exc))
+        else:
+            if manifest.notebook is None:
+                form.add_error("notebook_path", "The archive holds several notebooks; pick the one to run.")
+            else:
+                try:
+                    nb, warnings = T.create_from_manifest(
+                        manifest, slug=d["slug"], title=d["title"], user=request.user, note=d["note"]
+                    )
+                except T.TemplateError as exc:
+                    form.add_error("slug", str(exc))
+                else:
+                    messages.success(
+                        request,
+                        f"Uploaded {nb.title}. Review its parameters and settings, then make it active.",
+                    )
+                    _flash_warnings(request, warnings)
+                    return redirect("web:template-edit", nb.slug)
+    return render(request, "web/template_new.html", {"form": form, "manifest": manifest})
+
+
+@template_editor_required
+@require_POST
+def template_inspect(request):
+    """Describe a picked template file: its notebooks, detected parameters and warnings (HTMX)."""
+    upload = request.FILES.get("file")
+    ctx = {"manifest": None, "error": "", "selected": request.POST.get("notebook_path", ""), "detected": []}
+    if upload is not None:
+        try:
+            ctx["manifest"] = manifest = inspect_template(upload, upload.name, ctx["selected"])
+        except ArchiveError as exc:
+            ctx["error"] = str(exc)
+        else:
+            if manifest.nb is not None:
+                ctx["detected"], ctx["detect_warnings"] = SB.detect_parameters(manifest.nb)
+    return render(request, "web/partials/template_inspect.html", ctx)
+
+
+@template_editor_required
+def template_edit(request, slug):
+    nb = get_object_or_404(AnalysisNotebook.objects.select_related("current_version"), slug=slug)
+    form = TemplateForm(request.POST or None, instance=nb)
+    if request.method == "POST":
+        schema, errors, mode, formset = _posted_schema(request.POST)
+        if schema is not None:
+            errors.update(SB.check_schema(schema)[0])
+        if form.is_valid() and not errors:
+            fresh = AnalysisNotebook.objects.select_related("current_version").get(pk=nb.pk)
+            try:
+                outcome = T.save_settings(
+                    fresh,
+                    form.display(),
+                    form.snapshot(schema),
+                    options=form.cleaned_data["facet_options"],
+                    user=request.user,
+                    note=form.cleaned_data["note"],
+                )
+            except T.TemplateError as exc:
+                form.add_error(None, str(exc))
+            else:
+                fresh.refresh_from_db()
+                version = fresh.current_version
+                messages.success(
+                    request,
+                    {
+                        "unchanged": f"Saved {fresh.title}.",
+                        "amended": f"Saved {fresh.title} (v{version.number} updated; no run has used it yet).",
+                        "new version": f"Saved {fresh.title} as v{version.number}.",
+                    }[outcome],
+                )
+                _flash_warnings(request, SB.filter_warnings(schema) + T.trigger_rule_problems(fresh, schema))
+                return redirect(fresh)
+        if not errors and form.errors:
+            errors = {}
+        editor = _editor_ctx(
+            nb,
+            schema,
+            mode=mode,
+            formset=formset,
+            errors=errors,
+            yaml_text=request.POST.get("schema_yaml", ""),
+        )
+    else:
+        editor = _editor_ctx(nb, nb.parameter_schema)
+    selected = {int(x) for x in (form["facet_options"].value() or []) if str(x).isdigit()}
+    ctx = {
+        **editor,
+        "form": form,
+        "version": nb.current_version,
+        "option_groups": facets.group_options(FacetOption.objects.select_related("facet")),
+        "selected_options": selected,
+        "run_count": nb.runs.count(),
+    }
+    return render(request, "web/template_form.html", ctx)
+
+
+@template_editor_required
+@require_POST
+def template_schema(request, slug):
+    """Schema editor actions (HTMX): preview, switch rows/YAML, add a row, re-detect from the notebook."""
+    nb = get_object_or_404(AnalysisNotebook.objects.select_related("current_version"), slug=slug)
+    action = request.POST.get("action", "preview")
+    schema, errors, mode, formset = _posted_schema(request.POST)
+    warnings = []
+    if schema is not None:
+        if action == "to_yaml":
+            mode, formset = "yaml", None
+        elif action == "to_rows":
+            mode, formset = "rows", None
+        elif action == "add_row":
+            rows = SB.rows_from_schema(schema)
+            rows.append({"include": True, "type": "string", "order": len(rows)})
+            formset = _row_formset(rows=rows)
+        elif action == "detect":
+            try:
+                detected, warnings = SB.detect_parameters(T.current_notebook(nb))
+                rows, merge_warnings = SB.merge_detected(SB.rows_from_schema(schema), detected)
+                schema = SB.schema_from_rows(rows)
+                warnings += merge_warnings
+                mode, formset = "rows", None
+            except (T.TemplateError, ArchiveError, SB.RowError) as exc:
+                warnings.append(f"Could not read the notebook: {exc}")
+    ctx = _editor_ctx(
+        nb,
+        schema,
+        mode=mode,
+        formset=formset,
+        errors=errors,
+        warnings=warnings,
+        yaml_text=request.POST.get("schema_yaml", ""),
+    )
+    return render(request, "web/partials/template_schema.html", ctx)
+
+
+@template_editor_required
+def template_versions(request, slug):
+    nb = get_object_or_404(AnalysisNotebook.objects.select_related("current_version"), slug=slug)
+    versions = nb.versions.select_related("created_by").annotate(run_count=Count("runs"))
+    return render(request, "web/template_versions.html", {"nb": nb, "versions": versions})
+
+
+@template_editor_required
+def template_version_new(request, slug):
+    nb = get_object_or_404(AnalysisNotebook.objects.select_related("current_version"), slug=slug)
+    form = TemplateVersionForm(request.POST or None, request.FILES or None)
+    manifest = None
+    if request.method == "POST" and form.is_valid():
+        d = form.cleaned_data
+        try:
+            manifest = inspect_template(d["file"], d["file"].name, d["notebook_path"])
+            if manifest.notebook is None:
+                raise ArchiveError("The archive holds several notebooks; pick the one to run.")
+            version, warnings = T.add_version_from_manifest(
+                nb, manifest, user=request.user, note=d["note"], make_current=d["make_current"]
+            )
+        except (ArchiveError, T.TemplateError) as exc:
+            form.add_error("file", str(exc))
+        else:
+            state = "now current" if d["make_current"] else "not current yet"
+            messages.success(request, f"Uploaded v{version.number} of {nb.title} ({state}).")
+            _flash_warnings(request, warnings)
+            return redirect("web:template-edit" if d["make_current"] else "web:template-versions", nb.slug)
+    return render(request, "web/template_version_new.html", {"nb": nb, "form": form, "manifest": manifest})
+
+
+@template_editor_required
+@require_POST
+def template_version_current(request, slug, number):
+    nb = get_object_or_404(AnalysisNotebook.objects.select_related("current_version"), slug=slug)
+    version = get_object_or_404(nb.versions, number=number)
+    T.set_current(nb, version)
+    messages.success(request, f"v{version.number} is now the current version of {nb.title}.")
+    _flash_warnings(request, T.trigger_rule_problems(nb, version.parameter_schema))
+    return redirect("web:template-versions", nb.slug)
+
+
+@template_editor_required
+def template_download(request, slug, number=None):
+    nb = get_object_or_404(AnalysisNotebook.objects.select_related("current_version"), slug=slug)
+    version = get_object_or_404(nb.versions, number=number) if number else nb.current_version
+    try:
+        data = T.export_bundle(nb, version)
+    except (T.TemplateError, OSError) as exc:
+        messages.error(request, str(exc))
+        return redirect("web:template-versions", nb.slug)
+    name = f"{nb.slug}-v{version.number}.zip" if version else f"{nb.slug}.zip"
+    response = HttpResponse(data, content_type="application/zip")
+    response["Content-Disposition"] = f'attachment; filename="{name}"'
+    return response
+
+
+@template_editor_required
+@require_POST
+def template_delete(request, slug):
+    nb = get_object_or_404(AnalysisNotebook, slug=slug)
+    try:
+        T.delete_template(nb)
+    except T.TemplateError as exc:
+        messages.error(request, str(exc))
+        return redirect("web:template-edit", nb.slug)
+    messages.info(request, f"Deleted template {nb.title}.")
+    return redirect("web:template-list")
 
 
 # ---------------------------------------------------------------------------
@@ -356,7 +687,16 @@ def run_cancel(request, pk):
 @require_POST
 def run_retry(request, pk):
     run = get_object_or_404(NotebookRun.objects.with_related(), pk=pk)
-    new = retry_run(run, user=request.user)
+    try:
+        new = retry_run(run, user=request.user, allow_inactive=_can_edit_templates(request.user))
+    except ParameterError as exc:
+        messages.error(
+            request, f"The template's parameters changed since this run; start a new run instead ({exc})."
+        )
+        return redirect(run)
+    except RunRequestError as exc:
+        messages.error(request, str(exc))
+        return redirect(run)
     messages.success(request, "New run queued.")
     return redirect(new)
 

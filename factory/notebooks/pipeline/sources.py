@@ -1,4 +1,4 @@
-"""Locate the template notebook for a run: local templates dir or a git checkout."""
+"""Locate the template notebook for a run: an uploaded bundle, the local templates dir or a git checkout."""
 
 from __future__ import annotations
 
@@ -10,7 +10,8 @@ from pathlib import Path
 
 from django.conf import settings
 
-from ..models import AnalysisNotebook, SourceKind
+from .. import bundles
+from ..models import AnalysisNotebook, SourceKind, TemplateVersion
 from .context import RunContext
 
 log = logging.getLogger(__name__)
@@ -20,9 +21,22 @@ class SourceError(RuntimeError):
     pass
 
 
-def resolve_template(notebook: AnalysisNotebook, ctx: RunContext) -> Path:
-    """Copy the template notebook (and its sibling files) into the work dir and return its path."""
-    if notebook.source_kind == SourceKind.GIT:
+def resolve_template(
+    notebook: AnalysisNotebook, ctx: RunContext, version: TemplateVersion | None = None
+) -> Path:
+    """Copy the template notebook (and its sibling files) into the work dir and return its path.
+
+    `version` is the one the run was created with; a bundle version is used even if
+    the template has moved on since, so queued runs execute what they were queued with.
+    """
+    version = version or notebook.current_version
+    if version is not None and version.archive_key:
+        try:
+            root = bundles.materialise(version)
+        except (OSError, ValueError) as exc:
+            raise SourceError(f"Could not fetch template bundle {version.archive_key}: {exc}") from exc
+        src = root / version.notebook_path
+    elif notebook.source_kind == SourceKind.GIT:
         root = _git_checkout(notebook)
         src = root / notebook.notebook_path
     else:

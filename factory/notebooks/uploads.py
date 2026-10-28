@@ -34,8 +34,11 @@ log = logging.getLogger(__name__)
 IGNORED_PARTS = {"__MACOSX", ".ipynb_checkpoints", "__pycache__", ".git"}
 
 
-class UploadError(ValueError):
-    pass
+class ArchiveError(ValueError):
+    """A zip or notebook that cannot be accepted (uploads and template bundles)."""
+
+
+UploadError = ArchiveError
 
 
 @dataclass
@@ -58,11 +61,11 @@ def _size(fileobj) -> int:
     return size
 
 
-def as_archive(fileobj, filename: str = ""):
+def as_archive(fileobj, filename: str = "", max_bytes: int | None = None):
     """The upload as a zip file object; a bare .ipynb is wrapped in a one-file zip."""
-    cfg = settings.NOTEBOOK_FACTORY
-    if _size(fileobj) > cfg["UPLOAD_MAX_BYTES"]:
-        raise UploadError(f"The upload is larger than {cfg['UPLOAD_MAX_BYTES'] // (1024 * 1024)} MB.")
+    max_bytes = max_bytes or settings.NOTEBOOK_FACTORY["UPLOAD_MAX_BYTES"]
+    if _size(fileobj) > max_bytes:
+        raise UploadError(f"The upload is larger than {max_bytes // (1024 * 1024)} MB.")
     fileobj.seek(0)
     if zipfile.is_zipfile(fileobj):
         fileobj.seek(0)
@@ -78,7 +81,7 @@ def as_archive(fileobj, filename: str = ""):
     return buf
 
 
-def _ignored(name: str) -> bool:
+def ignored(name: str) -> bool:
     return bool(set(PurePosixPath(name).parts) & IGNORED_PARTS)
 
 
@@ -99,12 +102,12 @@ def safe_members(zf: zipfile.ZipFile) -> list[zipfile.ZipInfo]:
             raise UploadError(f"Unsafe path in archive: {info.filename}")
         if stat.S_ISLNK(info.external_attr >> 16):
             raise UploadError(f"Symbolic links are not allowed: {info.filename}")
-        if not _ignored(info.filename):
+        if not ignored(info.filename):
             out.append(info)
     return out
 
 
-def _open_zip(archive) -> zipfile.ZipFile:
+def open_zip(archive) -> zipfile.ZipFile:
     archive.seek(0)
     try:
         return zipfile.ZipFile(archive)
@@ -145,7 +148,7 @@ def execution_warnings(nb) -> list[str]:
 
 def inspect_archive(archive, notebook_path: str = "") -> UploadManifest:
     """Validate an archive without unpacking it, and describe the notebook to publish."""
-    with _open_zip(archive) as zf:
+    with open_zip(archive) as zf:
         members = safe_members(zf)
         notebooks = sorted(
             (i.filename for i in members if i.filename.endswith(".ipynb")),
@@ -242,7 +245,7 @@ def unpack(run: NotebookRun, ctx: RunContext) -> Path:
     with publisher.published_storage().open(source_key(run), "rb") as src, local.open("wb") as dst:
         shutil.copyfileobj(src, dst)
     dest = ctx.workdir / "upload"
-    with local.open("rb") as fh, _open_zip(fh) as zf:
+    with local.open("rb") as fh, open_zip(fh) as zf:
         for info in safe_members(zf):
             zf.extract(info, dest)
     nb_path = dest / run.upload_path

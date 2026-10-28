@@ -73,7 +73,7 @@ Useful commands:
 uv run python manage.py run_notebook demo-area-map --area NPL.1_1 -p label="Hi"   # run synchronously from the CLI
 uv run python manage.py import_gadm VNM UKR --levels 0,1,2     # more boundaries (GADM 4.1)
 uv run python manage.py import_admin_areas file.gpkg --level 2 --source cod   # COD / custom boundaries
-uv run python manage.py sync_templates                          # reload notebook_templates/*/template.yml
+uv run python manage.py sync_templates                          # import the example templates in notebook_templates/
 uv run python manage.py ingest_item --catalog montandon --file examples/stac_items/nepal-earthquake.json   # fake an item, fire rules
 uv run python manage.py poll_catalogs                           # poll every catalog with enabled rules once
 uv run python manage.py run_notebook uc2-impact-estimation --area NPL --catalog montandon --collection reference-events --item <id>
@@ -130,7 +130,8 @@ Everything is in `.env.example`. The important knobs:
 | `STAC_POLL_INTERVAL_SECONDS`, `STAC_POLL_LOOKBACK_DAYS`, `STAC_POLL_OVERLAP_MINUTES`, `STAC_POLL_PAGE_SIZE` | poller schedule and search window |
 | `STAC_COLLECTIONS_CACHE_SECONDS` | how long the run form caches a catalog's collection list (default 600) |
 | `MONTANDON_STAC_URL`, `MONTANDON_API_TOKEN`, `MONTANDON_WRITEBACK_ENABLED` | only used by `seed_demo` (and the one-off data migration) to create the Montandon catalog |
-| `NOTEBOOK_TEMPLATES_DIR`, `NOTEBOOK_WORK_DIR` | where templates live / where runs are executed |
+| `NOTEBOOK_TEMPLATES_DIR`, `NOTEBOOK_WORK_DIR` | example templates for `sync_templates` / where runs are executed |
+| `NOTEBOOK_TEMPLATE_MAX_BYTES`, `NOTEBOOK_TEMPLATE_CACHE_DIR` | uploaded template size limit / where workers unpack template bundles |
 | `EMAIL_*` | SMTP for notifications (console backend by default) |
 
 The older `MONTANDON_TIMEOUT` / `MONTANDON_POLL_*` names are still read when the `STAC_*` ones are unset.
@@ -248,7 +249,10 @@ run creation are shared.
 
 ## Writing a template
 
-See [`notebook_templates/README.md`](notebook_templates/README.md). In short: a folder with
+Upload templates in the app under **Templates → New template** (users with the *Can change analysis
+notebook* permission). Parameters are detected from the `parameters` cell and edited with a live form preview, and each
+change that affects runs is kept as a version that runs record (rollback from **Versions**). See
+[`notebook_templates/README.md`](notebook_templates/README.md). In short: a folder with
 `template.yml` (title, `filters` such as use case and hazards, `parameters` JSON Schema, `requires_area`, `requires_stac_item`,
 `stac_hints`, `supports_writeback`) and a `notebook.ipynb` whose first code cell is tagged `parameters`. The bundled
 templates (`demo-area-map`, `uc1-risk-exposure`, `uc2-impact-estimation`, `uc3-response-prioritisation`)
@@ -271,6 +275,10 @@ POST /api/runs/  {..., "filters": {"hazard": ["flood"]}}   # manual tags; they w
 POST /api/runs/<id>/cancel/  ·  POST /api/runs/<id>/retry/
 POST /api/runs/upload/  multipart: file=@notebook.zip, title, summary, description, area, stac_item,
                         filters='{"hazard": ["flood"]}', notebook_path   # staff only; rendered, not executed
+POST /api/templates/  multipart: file=@template.zip, slug, metadata='{...template.yml keys}'   # template editors; starts inactive
+PATCH /api/templates/<slug>/  {"is_active": true, "filters": {...}}
+POST /api/templates/<slug>/versions/  multipart: file=@template.zip, note, make_current   # e.g. from CI
+POST /api/templates/<slug>/versions/<n>/make-current/
 GET  /api/areas/geojson/?country=NPL&level=2   simplified boundaries for the map picker
 GET  /api/catalogs/  ·  /api/catalogs/<slug>/collections/  ·  /api/trigger-rules/  ·  /api/batches/
 GET  /api/stac-items/?catalog__slug=montandon&collection=reference-events&hazard=flood
@@ -292,7 +300,7 @@ factory/events/         StacCatalog, StacItem, TriggerRule, STAC client + profil
 factory/notifications/  Notification + delivery
 factory/api/            DRF viewsets
 factory/web/            HTMX views, templates, static; stac_picker.py = the run form's catalog/collection/item picker
-notebook_templates/     the notebook templates (one folder each)
+notebook_templates/     example notebook templates (one folder each; imported with sync_templates)
 examples/stac_items/    sample STAC items for local testing
 tests/                  pytest (needs the PostGIS database)
 helm/                   Helm chart

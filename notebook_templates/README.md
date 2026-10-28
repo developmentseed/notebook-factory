@@ -1,16 +1,23 @@
 # Notebook templates
 
-Each template is a folder:
+Templates are uploaded and edited in the app (**Templates → New template**; see the user guide,
+"Creating notebook templates"). Every change that affects how a template runs is kept as a version.
+The folders here are **examples**. Import them once with `manage.py sync_templates`, or zip one and
+upload it.
+
+A template is a folder (zip it to upload it):
 
 ```
-notebook_templates/<slug>/
-├── template.yml     metadata + parameter schema (loaded by `manage.py sync_templates`)
+<slug>/
+├── template.yml     settings + parameter schema (optional when uploading: they can be set in the app)
 ├── notebook.ipynb   the template; first code cell tagged `parameters`
-└── ...              helper modules / small data files (the whole folder is copied for each run)
+└── ...              helper modules / small data files (shipped with every run)
 ```
 
-Templates can also live in a git repository: set `source_kind=git`, `source_repo`, `source_ref`
-and `notebook_path` on the `AnalysisNotebook` in the admin; the worker clones (shallow) and caches it.
+`sync_templates` turns a new folder into a template, and a changed folder into a new version. It
+never replaces a version made in the app unless you pass `--force`. Add `--dry-run` to see what it
+would do. Templates can also live in a git repository: push versions from CI with
+`POST /api/templates/<slug>/versions/`, or set `source_kind=git` in the admin.
 
 ## template.yml
 
@@ -45,7 +52,7 @@ parameters:               # JSON Schema (object); becomes the form + validation
 ```
 
 Filters and their options are managed by staff on the **Filters** page; `filters:` keys and option
-keys must already exist there (unknown ones are skipped with a warning when `sync_templates` runs).
+keys must already exist there (unknown ones are skipped with a warning).
 The older `use_case:` and `hazards:` keys are still read as `filters.use_case` / `filters.hazard`.
 
 A parameter whose name is a filter key (like `hazard` above) tags the run with the chosen option, so

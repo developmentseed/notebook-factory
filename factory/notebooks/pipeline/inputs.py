@@ -31,6 +31,23 @@ from typing import Any
 from ..models import NotebookRun
 from .context import RunContext
 
+# Every key prepare_inputs injects; templates must not declare these as user parameters.
+RESERVED_PARAMETERS = (
+    "run_id",
+    "inputs_dir",
+    "output_dir",
+    "area",
+    "area_geojson",
+    "subdivisions_geojson",
+    "stac_item",
+    "stac_item_json",
+    "stac_collection",
+    "stac_api_url",
+    "stac_catalog_profile",
+    "filters",
+    "hazard",
+)
+
 
 def _write_json(path, payload) -> str:
     path.write_text(json.dumps(payload, indent=1, default=str))

@@ -1,6 +1,28 @@
 from django.contrib import admin
+from django.urls import reverse
+from django.utils.html import format_html
 
-from .models import AnalysisNotebook, NotebookRun, RunBatch, RunFacet, RunLogEntry
+from .models import (
+    SNAPSHOT_FIELDS,
+    AnalysisNotebook,
+    NotebookRun,
+    RunBatch,
+    RunFacet,
+    RunLogEntry,
+    TemplateVersion,
+)
+
+
+class TemplateVersionInline(admin.TabularInline):
+    model = TemplateVersion
+    extra = 0
+    fields = ("number", "label", "note", "notebook_path", "archive_key", "created_by", "created_at")
+    readonly_fields = fields
+    can_delete = False
+    show_change_link = True
+
+    def has_add_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(AnalysisNotebook)
@@ -8,6 +30,7 @@ class AnalysisNotebookAdmin(admin.ModelAdmin):
     list_display = (
         "title",
         "slug",
+        "current_version",
         "version",
         "source_kind",
         "requires_area",
@@ -18,6 +41,37 @@ class AnalysisNotebookAdmin(admin.ModelAdmin):
     search_fields = ("title", "slug", "summary")
     filter_horizontal = ("facet_options",)
     prepopulated_fields = {"slug": ("title",)}
+    inlines = [TemplateVersionInline]
+
+    def get_readonly_fields(self, request, obj=None):
+        """Versioned fields of uploaded templates change through the editor, which records a version."""
+        if obj is not None and obj.current_version_id:
+            return ("editor_link", "current_version", "source_kind", "version", *SNAPSHOT_FIELDS)
+        return ("editor_link", "current_version")
+
+    @admin.display(description="Editor")
+    def editor_link(self, obj):
+        if obj is None or not obj.pk:
+            return "—"
+        return format_html(
+            '<a href="{}">Edit parameters and versions in the app</a>',
+            reverse("web:template-edit", args=[obj.slug]),
+        )
+
+
+@admin.register(TemplateVersion)
+class TemplateVersionAdmin(admin.ModelAdmin):
+    """Read-only: versions are immutable once runs use them; create them in the app or with sync_templates."""
+
+    list_display = ("notebook", "number", "label", "note", "notebook_path", "created_by", "created_at")
+    list_filter = ("notebook",)
+    search_fields = ("notebook__slug", "label", "note", "sha256")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 class RunFacetInline(admin.TabularInline):
