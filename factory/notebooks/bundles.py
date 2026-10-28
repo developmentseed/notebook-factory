@@ -147,7 +147,9 @@ def inspect_template(fileobj, filename: str = "", notebook_path: str = "") -> Te
     manifest.title = notebook_title(nb)
     manifest.meta = metas.get(PurePosixPath(chosen).parent.as_posix(), {})
     manifest.bundle = pack(_strip_meta(entries, chosen))
-    manifest.warnings = schema_builder.notebook_warnings(nb, manifest.bundle.files, chosen)
+    manifest.warnings = schema_builder.notebook_warnings(
+        nb, manifest.bundle.files, chosen, secret_names=manifest.meta.get("secrets") or ()
+    )
     return manifest
 
 

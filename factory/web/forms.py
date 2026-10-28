@@ -6,7 +6,8 @@ from factory.events.models import CatalogProfile, StacCatalog, StacItem
 from factory.events.stac_client import StacClientError
 from factory.notebooks import parameters as P
 from factory.notebooks import schema_builder as SB
-from factory.notebooks.models import AnalysisNotebook, NotebookRun
+from factory.notebooks.environment import reserved_name
+from factory.notebooks.models import AnalysisNotebook, NotebookRun, TemplateSecret, env_name_validator
 from factory.notebooks.uploads import UploadError, as_archive, inspect_archive
 
 
@@ -268,6 +269,12 @@ class TemplateForm(forms.ModelForm):
         label="Version note",
         help_text="Recorded when the change makes a new version",
     )
+    secret_names = forms.CharField(
+        required=False,
+        label="Secrets",
+        help_text="Environment variables the notebook reads, comma separated, e.g. MAPBOX_TOKEN. "
+        "Each must also be granted to this template on the Secrets page.",
+    )
 
     class Meta:
         model = AnalysisNotebook
@@ -311,6 +318,7 @@ class TemplateForm(forms.ModelForm):
                     "hint_profile": hints.get("profile", ""),
                     "hint_collections": ", ".join(hints.get("collections") or []),
                     "hint_roles": ", ".join(hints.get("roles") or []),
+                    "secret_names": ", ".join(nb.secret_names or []),
                 }
             )
 
@@ -320,6 +328,19 @@ class TemplateForm(forms.ModelForm):
             return sorted({int(x) for x in raw.replace(";", ",").split(",") if x.strip()})
         except ValueError as exc:
             raise forms.ValidationError("Use whole numbers, e.g. 1, 2.") from exc
+
+    def clean_secret_names(self):
+        names = []
+        for name in (self.cleaned_data.get("secret_names") or "").replace(";", ",").split(","):
+            name = name.strip()
+            if not name or name in names:
+                continue
+            env_name_validator(name)
+            why = reserved_name(name)
+            if why:
+                raise forms.ValidationError(f"{name} can't be a secret: {why}.")
+            names.append(name)
+        return names
 
     def stac_hints(self) -> dict:
         d = self.cleaned_data
@@ -341,6 +362,7 @@ class TemplateForm(forms.ModelForm):
             "stac_hints": self.stac_hints(),
             "supports_writeback": d["supports_writeback"],
             "estimated_runtime_minutes": d.get("estimated_runtime_minutes"),
+            "secret_names": d.get("secret_names") or [],
             "label": d.get("version") or "",
         }
 
@@ -380,3 +402,37 @@ class ParameterRowForm(forms.Form):
 
 
 ParameterRowFormSet = forms.formset_factory(ParameterRowForm, extra=0)
+
+
+class TemplateSecretForm(forms.ModelForm):
+    """A secret for template kernels. The stored value is never shown; leave it blank to keep it."""
+
+    value = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=False, attrs={"autocomplete": "off"}),
+        help_text="Stored in plain text and never shown again. Leave blank to keep the current value.",
+    )
+
+    class Meta:
+        model = TemplateSecret
+        fields = ["name", "description", "value", "from_env", "templates"]
+        widgets = {"templates": forms.CheckboxSelectMultiple}
+        labels = {"from_env": "Or read it from the workers' environment variable", "templates": "Granted to"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.fields["name"].disabled = True
+            self.fields["name"].help_text = "Templates refer to it by this name, so it can't be changed."
+        self.fields["templates"].queryset = AnalysisNotebook.objects.order_by("title")
+
+    def clean(self):
+        data = super().clean()
+        value, from_env = data.get("value") or "", (data.get("from_env") or "").strip()
+        if value and from_env:
+            raise forms.ValidationError("Set either a value or a worker environment variable, not both.")
+        if not value and not from_env and self.instance.pk:
+            data["value"] = self.instance.value  # keep the stored value
+        if from_env:
+            data["value"] = ""  # switching to the environment drops the stored value
+        return data

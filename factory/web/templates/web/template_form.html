@@ -47,6 +47,10 @@
       {% include "web/partials/form_field.html" with field=form.supports_writeback %}
       {% include "web/partials/form_field.html" with field=form.estimated_runtime_minutes %}
     </div>
+    {% include "web/partials/form_field.html" with field=form.secret_names %}
+    {% if secret_states %}<p class="small">{% for name, state in secret_states %}<code>{{ name }}</code> {% if state == "granted" %}<span class="pill status ok">granted</span>{% elif state == "not granted" %}<span class="pill status err">not granted</span>{% else %}<span class="pill status err">no such secret</span>{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}
+      {% if perms.notebooks.change_templatesecret %} — <a href="{% url 'web:secret-list' %}">manage secrets</a>{% else %} — runs are refused until every secret is granted; ask an admin.{% endif %}</p>{% endif %}
+    <p class="muted small">Secrets reach the notebook as environment variables (<code>os.environ["NAME"]</code>), never as parameters, so they are not published. Values the notebook prints are redacted, but don't print them.</p>
   </section>
 
   <section class="step">

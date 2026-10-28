@@ -270,6 +270,10 @@ NOTEBOOK_FACTORY = {
     "UPLOAD_WORKERS": env.int("NOTEBOOK_UPLOAD_WORKERS", default=8),
     # papermill
     "KERNEL_NAME": env("NOTEBOOK_KERNEL_NAME", default="python3"),
+    # Kernels only inherit allowlisted worker variables (see factory/notebooks/environment.py), plus these
+    # names or PREFIX_* patterns. INHERIT=true passes the whole worker environment (app credentials included).
+    "KERNEL_ENV_PASSTHROUGH": env.list("NOTEBOOK_KERNEL_ENV_PASSTHROUGH", default=[]),
+    "KERNEL_ENV_INHERIT": env.bool("NOTEBOOK_KERNEL_ENV_INHERIT", default=False),
     "EXECUTION_TIMEOUT": env.int("NOTEBOOK_EXECUTION_TIMEOUT", default=60 * 60),
     "CELL_TIMEOUT": env.int("NOTEBOOK_CELL_TIMEOUT", default=60 * 20),
     # MyST rendering

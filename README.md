@@ -131,6 +131,7 @@ Everything is in `.env.example`. The important knobs:
 | `STAC_COLLECTIONS_CACHE_SECONDS` | how long the run form caches a catalog's collection list (default 600) |
 | `MONTANDON_STAC_URL`, `MONTANDON_API_TOKEN`, `MONTANDON_WRITEBACK_ENABLED` | only used by `seed_demo` (and the one-off data migration) to create the Montandon catalog |
 | `NOTEBOOK_TEMPLATES_DIR`, `NOTEBOOK_WORK_DIR` | example templates for `sync_templates` / where runs are executed |
+| `NOTEBOOK_KERNEL_ENV_PASSTHROUGH`, `NOTEBOOK_KERNEL_ENV_INHERIT` | extra worker env vars kernels may see / pass the whole worker env (off) |
 | `NOTEBOOK_TEMPLATE_MAX_BYTES`, `NOTEBOOK_TEMPLATE_CACHE_DIR` | uploaded template size limit / where workers unpack template bundles |
 | `EMAIL_*` | SMTP for notifications (console backend by default) |
 
@@ -202,7 +203,9 @@ filterable by catalog and by filters with a STAC property.
 **In the notebook.** The run gets `stac_item` (the raw item), `stac_item_json`, `stac_collection`,
 `stac_api_url` and `stac_catalog_profile` as parameters. The kernel gets `STAC_API_URL` and
 `STAC_API_KEY` as environment variables, set per run so parallel runs never see each other's keys; the
-key never appears in the published notebook. See
+key never appears in the published notebook. Other credentials are **secrets**: declared by the template
+(`secrets:` in template.yml), set and granted on the **Secrets** page, and injected as env vars. Kernels
+don't inherit the worker's environment, and secret values are redacted from published output. See
 [`notebook_templates/README.md`](notebook_templates/README.md#using-the-stac-item).
 
 **Write-back.** A template with `supports_writeback` writes `output_dir/stac/collection.json` and

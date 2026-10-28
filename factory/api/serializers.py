@@ -106,6 +106,7 @@ class TemplateVersionSerializer(serializers.ModelSerializer):
             "stac_hints",
             "supports_writeback",
             "estimated_runtime_minutes",
+            "secret_names",
             "created_by",
             "created_at",
         ]
@@ -152,6 +153,7 @@ class AnalysisNotebookSerializer(serializers.ModelSerializer):
             "stac_hints",
             "supports_writeback",
             "estimated_runtime_minutes",
+            "secret_names",
             "is_active",
             "current_version",
             "run_count",

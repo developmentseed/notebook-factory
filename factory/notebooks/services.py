@@ -11,6 +11,7 @@ from django.db import transaction
 from factory.catalog import facets
 from factory.catalog.models import AdminArea
 
+from . import environment
 from . import parameters as P
 from .models import AnalysisNotebook, NotebookRun, RunBatch, RunStatus, TriggerKind
 
@@ -45,6 +46,13 @@ def create_run(
         raise RunRequestError(f"This template accepts admin levels {notebook.area_levels}, not {area.level}.")
     if notebook.requires_stac_item and stac_item is None:
         raise RunRequestError("This template needs a STAC item.")
+    missing = environment.missing_secrets(notebook)
+    if missing:
+        raise RunRequestError(
+            "This template needs secrets it can't get: "
+            + ", ".join(missing)
+            + ". Ask someone who manages secrets to add or grant them."
+        )
     params = P.validate(notebook.parameter_schema, parameters or {})
 
     emails = [e.strip() for e in (notify_emails or []) if e and e.strip()]

@@ -15,7 +15,7 @@ from django.utils import timezone
 
 from .. import uploads
 from ..models import NotebookRun, RunStatus, WritebackStatus
-from . import executor, inputs, publisher, renderer, sources
+from . import executor, inputs, publisher, redact, renderer, sources
 from .context import RunContext
 
 log = logging.getLogger(__name__)
@@ -70,6 +70,7 @@ def run_pipeline(run_id: str) -> NotebookRun:
             params = {**injected, **(run.parameters or {})}
             executor.execute(run, ctx, params)
             run.log("papermill: notebook executed")
+            redact.redact_run(run, ctx)
 
         stage = RunStatus.RENDERING
         run.set_status(RunStatus.RENDERING, "Rendering static HTML with MyST")
@@ -93,12 +94,15 @@ def run_pipeline(run_id: str) -> NotebookRun:
         run.log(f"published: {run.output_url}")
     except Exception as exc:  # noqa: BLE001
         log.exception("Run %s failed during %s", run.id, stage)
-        run.error = f"{type(exc).__name__}: {exc}"
+        error = f"{type(exc).__name__}: {exc}"
         if settings.DEBUG:
-            run.error += "\n\n" + traceback.format_exc()
+            error += "\n\n" + traceback.format_exc()
+        # A failing cell's error (and the output lines logged so far) may contain a secret.
+        run.error = redact.redact_text(error, ctx.secrets)[0]
         run.save(update_fields=["error", "updated_at"])
+        redact.redact_log(run, ctx.secrets)
         run.set_status(RunStatus.FAILED, f"Failed while {stage}", failed_stage=stage)
-        run.log(f"failed during {stage}: {exc}", level="error")
+        run.log(redact.redact_text(f"failed during {stage}: {exc}", ctx.secrets)[0], level="error")
     finally:
         if not settings.NOTEBOOK_FACTORY["KEEP_WORKDIRS"]:
             shutil.rmtree(ctx.workdir, ignore_errors=True)

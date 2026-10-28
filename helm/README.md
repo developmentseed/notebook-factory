@@ -62,7 +62,7 @@ Beat only schedules: the Montandon poll and the hourly cleanup run on the worker
 | Value | Purpose |
 |---|---|
 | `host` | Public hostname. Sets the ingress host, `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, `PUBLIC_BASE_URL` and `PUBLISHED_PUBLIC_BASE_URL`. |
-| `existingSecret` | Secret holding `DATABASE_URL`, `SECRET_KEY`, the storage credentials and optionally `MONTANDON_API_TOKEN`. |
+| `existingSecret` | Secret holding `DATABASE_URL`, `SECRET_KEY`, the storage credentials and optionally `MONTANDON_API_TOKEN`. Template secrets set to "read from the workers' environment variable" must be in it too; notebooks only see them when declared and granted on the Secrets page. |
 | `env` | Any other setting from `.env.example`, such as `PUBLISHED_STORAGE_BACKEND`, `S3_*` or `AZURE_*`. |
 | `publishedProxy.upstream` | Bucket root as an anonymous reader sees it, for example `https://<account>.blob.core.windows.net/<container>`. Objects must be publicly readable. |
 | `ingress.className`, `ingress.annotations`, `ingress.tlsSecretName` | Ingress controller and certificate. |

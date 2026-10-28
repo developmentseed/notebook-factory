@@ -7,9 +7,11 @@ template repository and in object storage respectively.
 
 from __future__ import annotations
 
+import os
 import uuid
 
 from django.conf import settings
+from django.core.validators import RegexValidator
 from django.db import models
 from django.urls import reverse
 from django.utils import timezone
@@ -33,6 +35,11 @@ SNAPSHOT_FIELDS = (
     "stac_hints",
     "supports_writeback",
     "estimated_runtime_minutes",
+    "secret_names",
+)
+
+env_name_validator = RegexValidator(
+    r"^[A-Z][A-Z0-9_]*$", "Use an environment variable name: capitals, digits and _, e.g. MAPBOX_TOKEN."
 )
 
 
@@ -78,6 +85,11 @@ class AnalysisNotebook(models.Model):
         default=False, help_text="Notebook produces a STAC collection to write back to the item's catalog"
     )
     estimated_runtime_minutes = models.PositiveIntegerField(null=True, blank=True)
+    secret_names = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Secrets the notebook reads from its environment; each must also be granted to the template",
+    )
     is_active = models.BooleanField(default=True)
     current_version = models.ForeignKey(
         "TemplateVersion",
@@ -157,6 +169,7 @@ class TemplateVersion(models.Model):
     stac_hints = models.JSONField(default=dict, blank=True)
     supports_writeback = models.BooleanField(default=False)
     estimated_runtime_minutes = models.PositiveIntegerField(null=True, blank=True)
+    secret_names = models.JSONField(default=list, blank=True)
 
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -180,6 +193,60 @@ class TemplateVersion(models.Model):
 
     def snapshot(self) -> dict:
         return {**{f: getattr(self, f) for f in SNAPSHOT_FIELDS}, "label": self.label}
+
+
+class TemplateSecret(models.Model):
+    """A value a template's kernel gets as an environment variable, if the template declares and is granted it.
+
+    The value is stored here (plain text, never shown again) or read from a worker
+    environment variable (`from_env`), so it can stay in the deployment's secret store.
+    """
+
+    name = models.CharField(
+        max_length=80, unique=True, validators=[env_name_validator], help_text="Environment variable name"
+    )
+    description = models.CharField(max_length=300, blank=True)
+    value = models.TextField(blank=True, help_text="Stored in plain text and never shown again")
+    from_env = models.CharField(
+        max_length=80,
+        blank=True,
+        validators=[env_name_validator],
+        help_text="Or: read the value from this environment variable of the workers",
+    )
+    templates = models.ManyToManyField(
+        AnalysisNotebook, blank=True, related_name="secrets", help_text="Templates that may use it"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(value="") ^ models.Q(from_env=""), name="templatesecret_value_xor_env"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return self.name
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        from .environment import reserved_name
+
+        why = reserved_name(self.name)
+        if why:
+            raise ValidationError({"name": f"{self.name} can't be a secret: {why}."})
+        if bool(self.value) == bool(self.from_env):
+            raise ValidationError("Set either a value or a worker environment variable.")
+
+    @property
+    def source_display(self) -> str:
+        return f"from ${self.from_env}" if self.from_env else "value stored"
+
+    def resolve(self) -> str:
+        return self.value or os.environ.get(self.from_env, "")
 
 
 class RunStatus(models.TextChoices):

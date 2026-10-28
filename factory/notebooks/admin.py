@@ -1,3 +1,4 @@
+from django import forms
 from django.contrib import admin
 from django.urls import reverse
 from django.utils.html import format_html
@@ -9,6 +10,7 @@ from .models import (
     RunBatch,
     RunFacet,
     RunLogEntry,
+    TemplateSecret,
     TemplateVersion,
 )
 
@@ -130,3 +132,33 @@ class NotebookRunAdmin(admin.ModelAdmin):
 class RunBatchAdmin(admin.ModelAdmin):
     list_display = ("id", "notebook", "description", "trigger", "created_by", "created_at")
     raw_id_fields = ("created_by",)
+
+
+class TemplateSecretAdminForm(forms.ModelForm):
+    value = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=False),
+        help_text="Never shown again. Leave blank to keep the current value.",
+    )
+
+    class Meta:
+        model = TemplateSecret
+        fields = ["name", "description", "value", "from_env", "templates"]
+
+    def clean(self):
+        data = super().clean()
+        if not data.get("value") and not data.get("from_env") and self.instance.pk:
+            data["value"] = self.instance.value
+        if data.get("from_env"):
+            data["value"] = ""
+        return data
+
+
+@admin.register(TemplateSecret)
+class TemplateSecretAdmin(admin.ModelAdmin):
+    """The value is write-only; templates get it only when they declare the name and are granted it."""
+
+    form = TemplateSecretAdminForm
+    list_display = ("name", "description", "from_env", "updated_at")
+    search_fields = ("name", "description")
+    filter_horizontal = ("templates",)

@@ -26,7 +26,15 @@ from factory.notebooks import parameters as P
 from factory.notebooks import schema_builder as SB
 from factory.notebooks import templates as T
 from factory.notebooks.bundles import inspect_template
-from factory.notebooks.models import AnalysisNotebook, NotebookRun, RunBatch, RunStatus, TriggerKind
+from factory.notebooks.environment import secret_status
+from factory.notebooks.models import (
+    AnalysisNotebook,
+    NotebookRun,
+    RunBatch,
+    RunStatus,
+    TemplateSecret,
+    TriggerKind,
+)
 from factory.notebooks.parameters import ParameterError
 from factory.notebooks.pipeline.inputs import RESERVED_PARAMETERS
 from factory.notebooks.services import RunRequestError, cancel_run, create_batch, create_run, retry_run
@@ -41,6 +49,7 @@ from .forms import (
     RunRequestForm,
     StacCatalogForm,
     TemplateForm,
+    TemplateSecretForm,
     TemplateUploadForm,
     TemplateVersionForm,
     UploadForm,
@@ -480,6 +489,7 @@ def template_edit(request, slug):
         "option_groups": facets.group_options(FacetOption.objects.select_related("facet")),
         "selected_options": selected,
         "run_count": nb.runs.count(),
+        "secret_states": secret_status(nb, nb.secret_names),
     }
     return render(request, "web/template_form.html", ctx)
 
@@ -590,6 +600,57 @@ def template_delete(request, slug):
         return redirect("web:template-edit", nb.slug)
     messages.info(request, f"Deleted template {nb.title}.")
     return redirect("web:template-list")
+
+
+# ---------------------------------------------------------------------------
+# Template secrets (notebooks.change_templatesecret)
+# ---------------------------------------------------------------------------
+
+SECRET_PERM = "notebooks.change_templatesecret"
+
+
+def secret_manager_required(view):
+    return login_required(permission_required(SECRET_PERM, raise_exception=True)(view))
+
+
+@secret_manager_required
+def secret_list(request):
+    secrets = list(TemplateSecret.objects.prefetch_related("templates"))
+    needed = {}
+    for nb in AnalysisNotebook.objects.exclude(secret_names=[]).only("slug", "title", "secret_names"):
+        for name in nb.secret_names:
+            needed.setdefault(name, []).append(nb)
+    for secret in secrets:
+        granted = {t.pk for t in secret.templates.all()}
+        secret.waiting = [nb for nb in needed.pop(secret.name, []) if nb.pk not in granted]
+    return render(request, "web/secrets_list.html", {"secrets": secrets, "unknown": sorted(needed.items())})
+
+
+@secret_manager_required
+def secret_edit(request, name=None):
+    secret = get_object_or_404(TemplateSecret, name=name) if name else None
+    if secret is None and not request.user.has_perm("notebooks.add_templatesecret"):
+        return HttpResponse("You may not add secrets.", status=403)
+    initial = None if secret else {"name": request.GET.get("name", "")}
+    form = TemplateSecretForm(request.POST or None, instance=secret, initial=initial)
+    if request.method == "POST" and form.is_valid():
+        secret = form.save()
+        messages.success(request, f"Saved secret {secret}.")
+        return redirect("web:secret-list")
+    return render(request, "web/secret_form.html", {"form": form, "secret": secret})
+
+
+@secret_manager_required
+@require_POST
+def secret_delete(request, name):
+    secret = get_object_or_404(TemplateSecret, name=name)
+    if not request.user.has_perm("notebooks.delete_templatesecret"):
+        return HttpResponse("You may not delete secrets.", status=403)
+    secret.delete()
+    messages.info(
+        request, f"Deleted secret {secret}. Templates that declare it can't run until it is added again."
+    )
+    return redirect("web:secret-list")
 
 
 # ---------------------------------------------------------------------------

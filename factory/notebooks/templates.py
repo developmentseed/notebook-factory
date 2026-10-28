@@ -59,6 +59,7 @@ def meta_from_yaml(meta: dict, slug: str = "") -> tuple[dict, dict]:
         "stac_hints": meta.get("stac_hints", {}) or {},
         "supports_writeback": bool(meta.get("supports_writeback", False)),
         "estimated_runtime_minutes": meta.get("estimated_runtime_minutes"),
+        "secret_names": [str(n) for n in (meta.get("secrets") or [])],
         "label": str(meta.get("version", "") or ""),
     }
     return display, snapshot
@@ -96,6 +97,7 @@ def to_yaml(notebook: AnalysisNotebook) -> str:
         "stac_hints": notebook.stac_hints,
         "supports_writeback": notebook.supports_writeback,
         "estimated_runtime_minutes": notebook.estimated_runtime_minutes,
+        "secrets": notebook.secret_names,
         "active": notebook.is_active,
         "parameters": notebook.parameter_schema,
     }

@@ -95,8 +95,49 @@ the notebook also runs standalone in Jupyter:
 | `hazard` | str | first `hazard` option key or `""` (kept for older templates) |
 
 The kernel also gets the environment variables `STAC_API_URL` and `STAC_API_KEY` for the item's
-catalog (empty without an item). The key is never a parameter, so it does not end up in the published
-notebook.
+catalog (empty without an item), and `NOTEBOOK_RUN_ID`. The key is never a parameter, so it does not end
+up in the published notebook. Other credentials are *secrets* (below); the worker's own environment is not
+passed to the kernel.
+
+## Secrets (API tokens and other credentials)
+
+A notebook that needs a credential reads it from its environment. It never gets one as a parameter:
+parameters are written into the published notebook.
+
+1. Declare the names the notebook reads, either on the template's edit page (*Inputs → Secrets*) or in
+   `template.yml`:
+   ```yaml
+   secrets: [MAPBOX_TOKEN]
+   ```
+2. Someone with the *Can change template secret* permission adds the secret on the **Secrets** page.
+   They either store its value (plain text in the database, never shown again) or point it at an
+   environment variable of the worker pods (kept in the Kubernetes secret / Key Vault). They also
+   **grant** it to the template.
+3. Read it in the notebook:
+   ```python
+   import os
+   token = os.environ["MAPBOX_TOKEN"]
+   ```
+
+A run only gets the secrets its template version declares **and** that are granted to the template.
+Runs of a template whose declared secrets are missing or not granted are refused with a message.
+
+**What the kernel's environment holds.** Kernels do not inherit the worker's environment, so a template
+can't read `DATABASE_URL`, `SECRET_KEY` or the storage keys. They get:
+- basic variables: `PATH`, `HOME`, locale, `TMPDIR`, `PYTHON*`, `GDAL_*` / `PROJ_*`, CA bundles and proxies;
+- `NOTEBOOK_RUN_ID`, plus `STAC_API_URL` / `STAC_API_KEY` for the run's item;
+- the run's secrets.
+
+Other non-secret settings can be passed through with `NOTEBOOK_KERNEL_ENV_PASSTHROUGH` (names or `PREFIX_*`
+patterns). `NOTEBOOK_KERNEL_ENV_INHERIT=true` restores the old full inheritance. This keeps app credentials
+out of a template's reach through the environment. It is **not a sandbox**: the kernel runs as the same
+user as the worker.
+
+**Don't print secrets.** As a safety net, every secret value (and `STAC_API_KEY`) is replaced with
+`[redacted:NAME]` in the executed notebook, text files in `output_dir`, the run log and run errors, and the
+run log notes the redaction. A value that was transformed first (base64, URL-quoted…) is not recognised.
+Never put a secret in the template's files: bundles are stored in the published storage.
+
 
 A parameters cell that declares all of them:
 

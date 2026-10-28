@@ -210,7 +210,48 @@ hazard = ""
 # ...followed by the template's own parameters with their defaults
 ```
 
-The catalog's API key is passed to the kernel as the `STAC_API_KEY` environment variable (with `STAC_API_URL`), never as a parameter, so it never appears in the published page.
+The catalog's API key is passed to the kernel as the `STAC_API_KEY` environment variable (with `STAC_API_URL`), never as a parameter, so it never appears in the published page. Other credentials are secrets (next section).
+
+### Secrets
+
+A notebook that needs a credential reads it from its environment. It never gets one as a parameter:
+parameters are written into the published notebook.
+
+1. Declare the names the notebook reads, either on the template's edit page (*Inputs → Secrets*) or in
+   `template.yml`:
+   ```yaml
+   secrets: [MAPBOX_TOKEN]
+   ```
+2. Someone with the *Can change template secret* permission adds the secret on the **Secrets** page.
+   They either store its value (plain text in the database, never shown again) or point it at an
+   environment variable of the worker pods (kept in the Kubernetes secret / Key Vault). They also
+   **grant** it to the template.
+3. Read it in the notebook:
+   ```python
+   import os
+
+   token = os.environ["MAPBOX_TOKEN"]
+   ```
+
+A run only gets the secrets its template version declares **and** that are granted to the template.
+Runs of a template whose declared secrets are missing or not granted are refused with a message.
+
+**What the kernel's environment holds.** Kernels do not inherit the worker's environment, so a template
+can't read `DATABASE_URL`, `SECRET_KEY` or the storage keys. They get:
+- basic variables: `PATH`, `HOME`, locale, `TMPDIR`, `PYTHON*`, `GDAL_*` / `PROJ_*`, CA bundles and proxies;
+- `NOTEBOOK_RUN_ID`, plus `STAC_API_URL` / `STAC_API_KEY` for the run's item;
+- the run's secrets.
+
+Other non-secret settings can be passed through with `NOTEBOOK_KERNEL_ENV_PASSTHROUGH` (names or `PREFIX_*`
+patterns). `NOTEBOOK_KERNEL_ENV_INHERIT=true` restores the old full inheritance. This keeps app credentials
+out of a template's reach through the environment. It is **not a sandbox**: the kernel runs as the same
+user as the worker.
+
+**Don't print secrets.** As a safety net, every secret value (and `STAC_API_KEY`) is replaced with
+`[redacted:NAME]` in the executed notebook, text files in `output_dir`, the run log and run errors, and the
+run log notes the redaction. A value that was transformed first (base64, URL-quoted…) is not recognised.
+Never put a secret in the template's files: bundles are stored in the published storage.
+
 
 ### Output conventions
 
@@ -353,6 +394,7 @@ The settings that matter most (all are in `.env.example`):
 | `PUBLISHED_PUBLIC_BASE_URL` | Optional CDN or separate domain for published files. Recommended, especially if uploads are used. |
 | `MYST_COMMAND`, `MYST_TEMPLATE`, `MYST_HIDE_CODE` | How mystmd is invoked (e.g. `npx -y mystmd@1.10.1`), the site theme, and whether code is collapsed. |
 | `NOTEBOOK_TEMPLATES_DIR`, `NOTEBOOK_WORK_DIR` | Example templates for `sync_templates`, and where runs execute. |
+| `NOTEBOOK_KERNEL_ENV_PASSTHROUGH`, `NOTEBOOK_KERNEL_ENV_INHERIT` | Extra worker variables kernels may see (names or `PREFIX_*`), or pass the whole worker environment (not recommended). See [Secrets](#secrets). |
 | `NOTEBOOK_TEMPLATE_MAX_BYTES`, `NOTEBOOK_TEMPLATE_CACHE_DIR` | Size limit for uploaded templates, and where workers unpack them. Template bundles are kept in the published storage under `templates/`, so don't put secrets in them. |
 | `NOTEBOOK_CELL_TIMEOUT`, `NOTEBOOK_STALE_RUN_HOURS` | Per-cell timeout (seconds). Runs without progress for this long are marked failed. |
 | `NOTEBOOK_UPLOAD_MAX_BYTES`, `…_MAX_UNCOMPRESSED_BYTES`, `…_MAX_FILES` | Upload limits. |
@@ -378,7 +420,8 @@ python manage.py createsuperuser
 
 * **Adding users**: **Admin → Users → Add user**. Any active user can log in and run templates.
 * **Staff**: tick **Staff status** on a user to unlock Upload, Filters, Catalogs and the Admin link. To manage models in the Django admin, a staff user also needs *Superuser status* or the relevant model permissions.
-* **Template editors**: give a user the *notebooks | analysis notebook | Can change analysis notebook* permission (and *Can add* to create new templates), or put them in a group that has it. Superusers have it already. It is separate from Staff because an uploaded template runs its code on the workers, which hold the database, storage and catalog credentials.
+* **Template editors**: give a user the *notebooks | analysis notebook | Can change analysis notebook* permission (and *Can add* to create new templates), or put them in a group that has it. Superusers have it already. It is separate from Staff because an uploaded template runs its code on the workers.
+* **Secret managers**: the *notebooks | template secret | Can add / change / delete template secret* permissions unlock the **Secrets** page, where values are set and granted to templates. Keep this separate from template editing, so that declaring a secret in a template is not enough to read it.
 * **API tokens**: **Admin → Auth Token → Tokens → Add**, or:
 
 ```sh

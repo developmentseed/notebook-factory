@@ -99,7 +99,7 @@ def test_pipeline_passes_stac_item_and_catalog_env_to_kernel(
     out = local_storage / "runs" / str(run.id) / "outputs"
     assert json.loads((out / "env.json").read_text()) == {
         "STAC_API_URL": "https://montandon.example.org/stac",
-        "STAC_API_KEY": "monty-secret",
+        "STAC_API_KEY": "[redacted:STAC_API_KEY]",  # the kernel got the key; the published copy is redacted
         "NOTEBOOK_RUN_ID": str(run.id),
     }
     assert json.loads((out / "stac.json").read_text()) == {

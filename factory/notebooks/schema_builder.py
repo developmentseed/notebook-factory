@@ -29,6 +29,7 @@ TYPES = ["string", "number", "integer", "boolean", "array"]
 WIDGETS = ["", "select", "radio", "checkboxes", "slider", "textarea"]
 # Reserved names a template may still declare as a user parameter (UC1 lets the user pick the hazard).
 OVERRIDABLE = {"hazard"}
+CREDENTIAL_RE = re.compile(r"token|secret|password|passwd|api_?key|credential|(^|_)key$", re.I)
 # Schema keys the row editor shows; anything else is kept in `extra`.
 ROW_KEYS = {
     "type",
@@ -159,7 +160,50 @@ def missing_modules(nb, bundle_files: list[str], notebook_path: str) -> list[str
     return missing
 
 
-def notebook_warnings(nb, bundle_files: list[str], notebook_path: str) -> list[str]:
+def env_reads(nb) -> set[str]:
+    """Names read with os.environ[...] / os.environ.get(...) / os.getenv(...) (literal names only)."""
+    names = set()
+    for cell in nb.cells:
+        if cell.cell_type != "code":
+            continue
+        try:
+            tree = ast.parse(_python(cell.source))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            target = None
+            if isinstance(node, ast.Subscript) and ast.unparse(node.value) in ("os.environ", "environ"):
+                target = node.slice
+            elif isinstance(node, ast.Call) and ast.unparse(node.func) in (
+                "os.environ.get",
+                "environ.get",
+                "os.getenv",
+                "getenv",
+            ):
+                target = node.args[0] if node.args else None
+            if isinstance(target, ast.Constant) and isinstance(target.value, str):
+                names.add(target.value)
+    return names
+
+
+def env_warnings(nb, secret_names=()) -> list[str]:
+    """Environment variables the notebook reads that its kernel won't have."""
+    from .environment import RUN_ENV, passes_through
+
+    unset = sorted(
+        n for n in env_reads(nb) if n not in RUN_ENV and n not in secret_names and not passes_through(n)
+    )
+    if not unset:
+        return []
+    return [
+        "The notebook reads "
+        + ", ".join(f"`{n}`" for n in unset)
+        + " from the environment. Kernels only get the template's declared and granted secrets, "
+        "so declare these under Secrets (and have them granted), or they will not be set."
+    ]
+
+
+def notebook_warnings(nb, bundle_files: list[str], notebook_path: str, secret_names=()) -> list[str]:
     out = []
     cell = parameters_cell(nb)
     if cell is None:
@@ -191,6 +235,7 @@ def notebook_warnings(nb, bundle_files: list[str], notebook_path: str) -> list[s
         out.append(
             "The notebook still has outputs; they are replaced when it runs (clearing them keeps it small)."
         )
+    out.extend(env_warnings(nb, secret_names))
     return out
 
 
@@ -422,6 +467,12 @@ def check_schema(schema: dict) -> tuple[dict[str, str], list[str]]:
                 if message != "This parameter is required.":
                     errors[name] = f"Default: {message}"
     warnings.extend(filter_warnings(schema))
+    looks_secret = [n for n in props if CREDENTIAL_RE.search(n)]
+    if looks_secret:
+        warnings.append(
+            ", ".join(f"`{n}`" for n in looks_secret)
+            + " look like credentials. Parameter values are published with the notebook; use a secret instead."
+        )
     return errors, warnings
 
 
