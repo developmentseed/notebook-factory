@@ -2,10 +2,12 @@ from django import forms
 
 from factory.catalog.models import AdminArea, Country, Facet, FacetOption
 from factory.events.matching import fetch_item
-from factory.events.models import StacCatalog, StacItem
+from factory.events.models import CatalogProfile, StacCatalog, StacItem
 from factory.events.stac_client import StacClientError
 from factory.notebooks import parameters as P
-from factory.notebooks.models import NotebookRun
+from factory.notebooks import schema_builder as SB
+from factory.notebooks.environment import reserved_name
+from factory.notebooks.models import AnalysisNotebook, NotebookRun, TemplateSecret, env_name_validator
 from factory.notebooks.uploads import UploadError, as_archive, inspect_archive
 
 
@@ -207,3 +209,230 @@ class FacetOptionForm(forms.ModelForm):
 FacetOptionFormSet = forms.inlineformset_factory(
     Facet, FacetOption, form=FacetOptionForm, extra=3, can_delete=True
 )
+
+
+# ---------------------------------------------------------------------------
+# Templates (staff with the notebooks.change_analysisnotebook permission)
+# ---------------------------------------------------------------------------
+
+
+class TemplateUploadForm(forms.Form):
+    """A template bundle (zip or .ipynb). The archive is inspected in the view, which needs the slug check."""
+
+    file = forms.FileField(
+        label="Template",
+        help_text="A .zip with the notebook and its helper files (and optionally a template.yml), or a single .ipynb",
+    )
+    notebook_path = forms.CharField(required=False, max_length=300, label="Notebook to run")
+    slug = forms.SlugField(
+        required=False,
+        max_length=80,
+        help_text="Used in URLs and the API; can't be changed later. Default: from the title",
+    )
+    title = forms.CharField(
+        required=False, max_length=200, help_text="Default: template.yml or the first heading"
+    )
+    note = forms.CharField(required=False, max_length=300, label="Version note", help_text="What changed")
+
+
+class TemplateVersionForm(forms.Form):
+    """A new bundle for an existing template."""
+
+    file = forms.FileField(
+        label="Template",
+        help_text="A .zip with the notebook and its helper files (a template.yml in it replaces the settings), or a .ipynb",
+    )
+    notebook_path = forms.CharField(required=False, max_length=300, label="Notebook to run")
+    note = forms.CharField(required=False, max_length=300, label="Version note", help_text="What changed")
+    make_current = forms.BooleanField(
+        required=False, initial=True, label="Make it the current version (new runs use it)"
+    )
+
+
+class TemplateForm(forms.ModelForm):
+    """Display fields, filters and the versioned input settings. Parameters are edited in the schema editor."""
+
+    area_levels = forms.CharField(
+        required=False, label="Admin levels", help_text="Comma separated, e.g. 1, 2. Empty = any level"
+    )
+    hint_profile = forms.ChoiceField(
+        required=False,
+        label="Catalog profile hint",
+        choices=[("", "— any —"), *CatalogProfile.choices],
+        help_text="Only offer catalogs with this profile in the run form (soft)",
+    )
+    hint_collections = forms.CharField(required=False, label="Collection hints", help_text="Comma separated")
+    hint_roles = forms.CharField(required=False, label="Role hints", help_text="Comma separated, e.g. event")
+    note = forms.CharField(
+        required=False,
+        max_length=300,
+        label="Version note",
+        help_text="Recorded when the change makes a new version",
+    )
+    secret_names = forms.CharField(
+        required=False,
+        label="Secrets",
+        help_text="Environment variables the notebook reads, comma separated, e.g. MAPBOX_TOKEN. "
+        "Each must also be granted to this template on the Secrets page.",
+    )
+
+    class Meta:
+        model = AnalysisNotebook
+        fields = [
+            "title",
+            "summary",
+            "description",
+            "is_active",
+            "version",
+            "notebook_path",
+            "requires_area",
+            "area_levels",
+            "requires_stac_item",
+            "supports_writeback",
+            "estimated_runtime_minutes",
+            "facet_options",
+        ]
+        labels = {"version": "Version label", "is_active": "Active (listed and runnable by everyone)"}
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 5}),
+            "facet_options": forms.CheckboxSelectMultiple,
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        nb = self.instance
+        version = nb.current_version if nb.pk else None
+        notebooks = [f for f in (version.files if version else []) if f.endswith(".ipynb")]
+        if len(notebooks) > 1:
+            self.fields["notebook_path"] = forms.ChoiceField(
+                choices=[(n, n) for n in notebooks], label="Notebook to run", initial=nb.notebook_path
+            )
+        else:
+            del self.fields["notebook_path"]
+        self.fields["facet_options"].queryset = self.fields["facet_options"].queryset.select_related("facet")
+        if nb.pk and not self.is_bound:
+            hints = nb.stac_hints or {}
+            self.initial.update(
+                {
+                    "area_levels": ", ".join(str(lv) for lv in nb.area_levels or []),
+                    "hint_profile": hints.get("profile", ""),
+                    "hint_collections": ", ".join(hints.get("collections") or []),
+                    "hint_roles": ", ".join(hints.get("roles") or []),
+                    "secret_names": ", ".join(nb.secret_names or []),
+                }
+            )
+
+    def clean_area_levels(self):
+        raw = self.cleaned_data.get("area_levels") or ""
+        try:
+            return sorted({int(x) for x in raw.replace(";", ",").split(",") if x.strip()})
+        except ValueError as exc:
+            raise forms.ValidationError("Use whole numbers, e.g. 1, 2.") from exc
+
+    def clean_secret_names(self):
+        names = []
+        for name in (self.cleaned_data.get("secret_names") or "").replace(";", ",").split(","):
+            name = name.strip()
+            if not name or name in names:
+                continue
+            env_name_validator(name)
+            why = reserved_name(name)
+            if why:
+                raise forms.ValidationError(f"{name} can't be a secret: {why}.")
+            names.append(name)
+        return names
+
+    def stac_hints(self) -> dict:
+        d = self.cleaned_data
+        hints = {
+            "profile": d.get("hint_profile") or "",
+            "collections": [c.strip() for c in (d.get("hint_collections") or "").split(",") if c.strip()],
+            "roles": [r.strip() for r in (d.get("hint_roles") or "").split(",") if r.strip()],
+        }
+        return {k: v for k, v in hints.items() if v}
+
+    def snapshot(self, parameter_schema: dict) -> dict:
+        d = self.cleaned_data
+        return {
+            "notebook_path": d.get("notebook_path") or self.instance.notebook_path,
+            "parameter_schema": parameter_schema,
+            "requires_area": d["requires_area"],
+            "area_levels": d["area_levels"],
+            "requires_stac_item": d["requires_stac_item"],
+            "stac_hints": self.stac_hints(),
+            "supports_writeback": d["supports_writeback"],
+            "estimated_runtime_minutes": d.get("estimated_runtime_minutes"),
+            "secret_names": d.get("secret_names") or [],
+            "label": d.get("version") or "",
+        }
+
+    def display(self) -> dict:
+        return {k: self.cleaned_data[k] for k in ("title", "summary", "description", "is_active")}
+
+
+class ParameterRowForm(forms.Form):
+    """One parameter of the schema editor (see factory.notebooks.schema_builder)."""
+
+    include = forms.BooleanField(required=False, initial=True)
+    name = forms.RegexField(regex=r"^[A-Za-z_]\w*$", max_length=80, required=False)
+    type = forms.ChoiceField(choices=[(t, t) for t in SB.TYPES])
+    item_type = forms.ChoiceField(
+        required=False,
+        choices=[("string", "string"), ("integer", "integer"), ("number", "number")],
+        label="Item type",
+    )
+    title = forms.CharField(required=False, max_length=200)
+    description = forms.CharField(required=False, max_length=500)
+    default = forms.CharField(required=False, max_length=500, help_text="Lists: comma separated")
+    choices = forms.CharField(
+        required=False, widget=forms.Textarea(attrs={"rows": 3}), help_text="One per line: value | label"
+    )
+    minimum = forms.FloatField(required=False)
+    maximum = forms.FloatField(required=False)
+    step = forms.FloatField(required=False)
+    widget = forms.ChoiceField(required=False, choices=[(w, w or "auto") for w in SB.WIDGETS])
+    required = forms.BooleanField(required=False)
+    filter = forms.ChoiceField(required=False, label="Tags filter")
+    extra = forms.CharField(required=False, widget=forms.HiddenInput)
+    order = forms.IntegerField(required=False, widget=forms.NumberInput(attrs={"class": "narrow"}))
+
+    def __init__(self, *args, facet_choices=(), **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["filter"].choices = [("", "— by name —"), *facet_choices]
+
+
+ParameterRowFormSet = forms.formset_factory(ParameterRowForm, extra=0)
+
+
+class TemplateSecretForm(forms.ModelForm):
+    """A secret for template kernels. The stored value is never shown; leave it blank to keep it."""
+
+    value = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=False, attrs={"autocomplete": "off"}),
+        help_text="Stored in plain text and never shown again. Leave blank to keep the current value.",
+    )
+
+    class Meta:
+        model = TemplateSecret
+        fields = ["name", "description", "value", "from_env", "templates"]
+        widgets = {"templates": forms.CheckboxSelectMultiple}
+        labels = {"from_env": "Or read it from the workers' environment variable", "templates": "Granted to"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.fields["name"].disabled = True
+            self.fields["name"].help_text = "Templates refer to it by this name, so it can't be changed."
+        self.fields["templates"].queryset = AnalysisNotebook.objects.order_by("title")
+
+    def clean(self):
+        data = super().clean()
+        value, from_env = data.get("value") or "", (data.get("from_env") or "").strip()
+        if value and from_env:
+            raise forms.ValidationError("Set either a value or a worker environment variable, not both.")
+        if not value and not from_env and self.instance.pk:
+            data["value"] = self.instance.value  # keep the stored value
+        if from_env:
+            data["value"] = ""  # switching to the environment drops the stored value
+        return data

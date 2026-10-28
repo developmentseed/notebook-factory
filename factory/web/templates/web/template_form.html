@@ -1,0 +1,82 @@
+{% extends "web/base.html" %}
+{% block title %}Edit {{ nb.title }} · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="{% url 'web:template-list' %}">Templates</a> › <a href="{{ nb.get_absolute_url }}">{{ nb.title }}</a> › Edit</p>
+<div class="page-head"><div><h1>Edit {{ nb.title }}</h1>
+  <p class="lead"><code>{{ nb.slug }}</code> · {% if version %}v{{ version.number }}{% if version.label %} ({{ version.label }}){% endif %} · {{ version.files|length }} file{{ version.files|length|pluralize }}{% else %}not versioned{% endif %}
+  {% if not nb.is_active %} · <span class="pill status muted">inactive</span>{% endif %}</p></div>
+  <div><a class="btn" href="{% url 'web:template-version-new' nb.slug %}">Upload new version</a> <a class="btn" href="{% url 'web:template-versions' nb.slug %}">Versions</a> <a class="btn" href="{% url 'web:run-new' nb.slug %}">Test run</a></div></div>
+
+<form method="post" class="wizard" id="template-form">
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div class="msg error">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+
+  <section class="step">
+    <h2><span class="num">1</span> Details</h2>
+    <div class="param-grid">
+      {% include "web/partials/form_field.html" with field=form.title %}
+      {% include "web/partials/form_field.html" with field=form.summary %}
+    </div>
+    {% include "web/partials/form_field.html" with field=form.description %}
+    {% include "web/partials/form_field.html" with field=form.is_active %}
+  </section>
+
+  <section class="step">
+    <h2><span class="num">2</span> Filters</h2>
+    <p class="muted small">Options this template applies to. Where a filter has exactly one option ticked, its runs are tagged with it; several = the choices offered in the run form.</p>
+    <div class="param-grid">
+    {% for facet, options in option_groups %}
+      <div class="field"><label>{{ facet.label }}</label>
+        <div class="choices">{% for o in options %}<label class="check"><input type="checkbox" name="facet_options" value="{{ o.pk }}" {% if o.pk in selected_options %}checked{% endif %}> {% if o.icon %}{{ o.icon }} {% endif %}{{ o.label }}</label>{% endfor %}</div>
+      </div>
+    {% empty %}<p class="muted">No filters are defined. <a href="{% url 'web:facet-list' %}">Add some</a>.</p>
+    {% endfor %}
+    </div>
+  </section>
+
+  <section class="step">
+    <h2><span class="num">3</span> Inputs</h2>
+    <div class="param-grid">
+      {% if form.notebook_path %}{% include "web/partials/form_field.html" with field=form.notebook_path %}{% endif %}
+      {% include "web/partials/form_field.html" with field=form.requires_area %}
+      {% include "web/partials/form_field.html" with field=form.area_levels %}
+      {% include "web/partials/form_field.html" with field=form.requires_stac_item %}
+      {% include "web/partials/form_field.html" with field=form.hint_profile %}
+      {% include "web/partials/form_field.html" with field=form.hint_collections %}
+      {% include "web/partials/form_field.html" with field=form.hint_roles %}
+      {% include "web/partials/form_field.html" with field=form.supports_writeback %}
+      {% include "web/partials/form_field.html" with field=form.estimated_runtime_minutes %}
+    </div>
+    {% include "web/partials/form_field.html" with field=form.secret_names %}
+    {% if secret_states %}<p class="small">{% for name, state in secret_states %}<code>{{ name }}</code> {% if state == "granted" %}<span class="pill status ok">granted</span>{% elif state == "not granted" %}<span class="pill status err">not granted</span>{% else %}<span class="pill status err">no such secret</span>{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}
+      {% if perms.notebooks.change_templatesecret %} — <a href="{% url 'web:secret-list' %}">manage secrets</a>{% else %} — runs are refused until every secret is granted; ask an admin.{% endif %}</p>{% endif %}
+    <p class="muted small">Secrets reach the notebook as environment variables (<code>os.environ["NAME"]</code>), never as parameters, so they are not published. Values the notebook prints are redacted, but don't print them.</p>
+  </section>
+
+  <section class="step">
+    <h2><span class="num">4</span> Parameters</h2>
+    <p class="muted small">These become the run form. Names must match variables in the notebook's <code>parameters</code> cell.</p>
+    {% include "web/partials/template_schema.html" %}
+  </section>
+
+  <section class="step">
+    <h2><span class="num">5</span> Save</h2>
+    <div class="param-grid">
+      {% include "web/partials/form_field.html" with field=form.version %}
+      {% include "web/partials/form_field.html" with field=form.note %}
+    </div>
+    <p class="muted small">{% if version and version.runs.exists %}v{{ version.number }} has been used by runs, so changing inputs or parameters saves a new version (v{{ version.number|add:1 }}); its runs keep pointing at v{{ version.number }}.{% elif version %}No run has used v{{ version.number }} yet, so changes update it in place.{% endif %} Title, summary, description, filters and the active flag are not versioned.</p>
+    <button class="btn primary large" type="submit">Save</button>
+  </section>
+</form>
+
+<section class="panel" style="margin-top:2rem">
+  <h2>Delete</h2>
+  {% if run_count %}<p class="muted">This template has {{ run_count }} run{{ run_count|pluralize }}, so it can't be deleted; untick <em>Active</em> to hide it.</p>
+  {% else %}
+  <form method="post" action="{% url 'web:template-delete' nb.slug %}" onsubmit="return confirm('Delete {{ nb.title|escapejs }}, its versions{% if nb.trigger_rules.exists %} and its trigger rules{% endif %}?')">{% csrf_token %}
+    <p class="muted small">It has never run. Its versions{% if nb.trigger_rules.exists %} and <strong>{{ nb.trigger_rules.count }} trigger rule{{ nb.trigger_rules.count|pluralize }}</strong>{% endif %} are deleted too.</p>
+    <button class="btn danger">Delete template</button></form>
+  {% endif %}
+</section>
+{% endblock %}

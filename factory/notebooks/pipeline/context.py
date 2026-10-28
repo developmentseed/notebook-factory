@@ -16,6 +16,9 @@ class RunContext:
     executed_path: Path | None = None
     html_dir: Path | None = None
     injected: dict = field(default_factory=dict)
+    secrets: dict = field(
+        default_factory=dict
+    )  # {env name: value} given to the kernel; redacted from outputs
 
     @classmethod
     def create(cls, run_id: str) -> RunContext:

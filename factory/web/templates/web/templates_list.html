@@ -1,11 +1,12 @@
 {% extends "web/base.html" %}
 {% block title %}Templates · {{ SITE_NAME }}{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Analysis templates</h1><p class="lead">A template is a recipe: a notebook that declares its parameters. Pick one, choose an area and parameters, and run it.</p></div></div>
+<div class="page-head"><div><h1>Analysis templates</h1><p class="lead">A template is a recipe: a notebook that declares its parameters. Pick one, choose an area and parameters, and run it.</p></div>
+  {% if can_edit and perms.notebooks.add_analysisnotebook %}<div><a class="btn primary" href="{% url 'web:template-new' %}">New template</a></div>{% endif %}</div>
 <div class="cards">
   {% for nb in templates %}
   <a class="card" href="{{ nb.get_absolute_url }}">
-    <div class="card-top"><span></span>{% if nb.version %}<span class="muted small">v{{ nb.version }}</span>{% endif %}</div>
+    <div class="card-top"><span>{% if not nb.is_active %}<span class="pill status muted">inactive</span>{% endif %}</span>{% if nb.version %}<span class="muted small">v{{ nb.version }}</span>{% endif %}</div>
     <h3>{{ nb.title }}</h3>
     <p class="meta">{{ nb.summary }}</p>
     <div class="card-foot">
@@ -14,7 +15,7 @@
     </div>
   </a>
   {% empty %}
-  <div class="empty"><p>No templates loaded. Run <code>python manage.py sync_templates</code>.</p></div>
+  <div class="empty"><p>No templates yet.{% if can_edit %} <a href="{% url 'web:template-new' %}">Upload one</a>, or import the examples with <code>python manage.py sync_templates</code>.{% endif %}</p></div>
   {% endfor %}
 </div>
 {% endblock %}

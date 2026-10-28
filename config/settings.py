@@ -270,6 +270,10 @@ NOTEBOOK_FACTORY = {
     "UPLOAD_WORKERS": env.int("NOTEBOOK_UPLOAD_WORKERS", default=8),
     # papermill
     "KERNEL_NAME": env("NOTEBOOK_KERNEL_NAME", default="python3"),
+    # Kernels only inherit allowlisted worker variables (see factory/notebooks/environment.py), plus these
+    # names or PREFIX_* patterns. INHERIT=true passes the whole worker environment (app credentials included).
+    "KERNEL_ENV_PASSTHROUGH": env.list("NOTEBOOK_KERNEL_ENV_PASSTHROUGH", default=[]),
+    "KERNEL_ENV_INHERIT": env.bool("NOTEBOOK_KERNEL_ENV_INHERIT", default=False),
     "EXECUTION_TIMEOUT": env.int("NOTEBOOK_EXECUTION_TIMEOUT", default=60 * 60),
     "CELL_TIMEOUT": env.int("NOTEBOOK_CELL_TIMEOUT", default=60 * 20),
     # MyST rendering
@@ -291,6 +295,12 @@ NOTEBOOK_FACTORY = {
         "NOTEBOOK_UPLOAD_MAX_UNCOMPRESSED_BYTES", default=1024 * 1024 * 1024
     ),
     "UPLOAD_MAX_FILES": env.int("NOTEBOOK_UPLOAD_MAX_FILES", default=2000),
+    # Uploaded template bundles (zip or bare .ipynb), and where workers unpack them (keyed by content hash).
+    "TEMPLATE_MAX_BYTES": env.int("NOTEBOOK_TEMPLATE_MAX_BYTES", default=50 * 1024 * 1024),
+    "TEMPLATE_CACHE_DIR": Path(
+        env("NOTEBOOK_TEMPLATE_CACHE_DIR", default=str(BASE_DIR / "data" / "template-cache"))
+    ),
+    "TEMPLATE_CACHE_MAX_AGE_HOURS": env.int("NOTEBOOK_TEMPLATE_CACHE_MAX_AGE_HOURS", default=24 * 7),
     # Simplification tolerance (degrees) for GeoJSON served to the map picker.
     "AREA_SIMPLIFY_TOLERANCE": env.float("AREA_SIMPLIFY_TOLERANCE", default=0.005),
 }

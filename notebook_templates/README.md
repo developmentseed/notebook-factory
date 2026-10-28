@@ -1,16 +1,23 @@
 # Notebook templates
 
-Each template is a folder:
+Templates are uploaded and edited in the app (**Templates → New template**; see the user guide,
+"Creating notebook templates"). Every change that affects how a template runs is kept as a version.
+The folders here are **examples**. Import them once with `manage.py sync_templates`, or zip one and
+upload it.
+
+A template is a folder (zip it to upload it):
 
 ```
-notebook_templates/<slug>/
-├── template.yml     metadata + parameter schema (loaded by `manage.py sync_templates`)
+<slug>/
+├── template.yml     settings + parameter schema (optional when uploading: they can be set in the app)
 ├── notebook.ipynb   the template; first code cell tagged `parameters`
-└── ...              helper modules / small data files (the whole folder is copied for each run)
+└── ...              helper modules / small data files (shipped with every run)
 ```
 
-Templates can also live in a git repository: set `source_kind=git`, `source_repo`, `source_ref`
-and `notebook_path` on the `AnalysisNotebook` in the admin; the worker clones (shallow) and caches it.
+`sync_templates` turns a new folder into a template, and a changed folder into a new version. It
+never replaces a version made in the app unless you pass `--force`. Add `--dry-run` to see what it
+would do. Templates can also live in a git repository: push versions from CI with
+`POST /api/templates/<slug>/versions/`, or set `source_kind=git` in the admin.
 
 ## template.yml
 
@@ -45,7 +52,7 @@ parameters:               # JSON Schema (object); becomes the form + validation
 ```
 
 Filters and their options are managed by staff on the **Filters** page; `filters:` keys and option
-keys must already exist there (unknown ones are skipped with a warning when `sync_templates` runs).
+keys must already exist there (unknown ones are skipped with a warning).
 The older `use_case:` and `hazards:` keys are still read as `filters.use_case` / `filters.hazard`.
 
 A parameter whose name is a filter key (like `hazard` above) tags the run with the chosen option, so
@@ -88,8 +95,49 @@ the notebook also runs standalone in Jupyter:
 | `hazard` | str | first `hazard` option key or `""` (kept for older templates) |
 
 The kernel also gets the environment variables `STAC_API_URL` and `STAC_API_KEY` for the item's
-catalog (empty without an item). The key is never a parameter, so it does not end up in the published
-notebook.
+catalog (empty without an item), and `NOTEBOOK_RUN_ID`. The key is never a parameter, so it does not end
+up in the published notebook. Other credentials are *secrets* (below); the worker's own environment is not
+passed to the kernel.
+
+## Secrets (API tokens and other credentials)
+
+A notebook that needs a credential reads it from its environment. It never gets one as a parameter:
+parameters are written into the published notebook.
+
+1. Declare the names the notebook reads, either on the template's edit page (*Inputs → Secrets*) or in
+   `template.yml`:
+   ```yaml
+   secrets: [MAPBOX_TOKEN]
+   ```
+2. Someone with the *Can change template secret* permission adds the secret on the **Secrets** page.
+   They either store its value (plain text in the database, never shown again) or point it at an
+   environment variable of the worker pods (kept in the Kubernetes secret / Key Vault). They also
+   **grant** it to the template.
+3. Read it in the notebook:
+   ```python
+   import os
+   token = os.environ["MAPBOX_TOKEN"]
+   ```
+
+A run only gets the secrets its template version declares **and** that are granted to the template.
+Runs of a template whose declared secrets are missing or not granted are refused with a message.
+
+**What the kernel's environment holds.** Kernels do not inherit the worker's environment, so a template
+can't read `DATABASE_URL`, `SECRET_KEY` or the storage keys. They get:
+- basic variables: `PATH`, `HOME`, locale, `TMPDIR`, `PYTHON*`, `GDAL_*` / `PROJ_*`, CA bundles and proxies;
+- `NOTEBOOK_RUN_ID`, plus `STAC_API_URL` / `STAC_API_KEY` for the run's item;
+- the run's secrets.
+
+Other non-secret settings can be passed through with `NOTEBOOK_KERNEL_ENV_PASSTHROUGH` (names or `PREFIX_*`
+patterns). `NOTEBOOK_KERNEL_ENV_INHERIT=true` restores the old full inheritance. This keeps app credentials
+out of a template's reach through the environment. It is **not a sandbox**: the kernel runs as the same
+user as the worker.
+
+**Don't print secrets.** As a safety net, every secret value (and `STAC_API_KEY`) is replaced with
+`[redacted:NAME]` in the executed notebook, text files in `output_dir`, the run log and run errors, and the
+run log notes the redaction. A value that was transformed first (base64, URL-quoted…) is not recognised.
+Never put a secret in the template's files: bundles are stored in the published storage.
+
 
 A parameters cell that declares all of them:
 

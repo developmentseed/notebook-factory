@@ -49,7 +49,7 @@ Beat only schedules: the Montandon poll and the hourly cleanup run on the worker
 
 | Component | Notes |
 |---|---|
-| `web` | Runs `migrate`, `collectstatic` and `sync_templates` on start, so keep `web.replicas: 1`. Readiness checks `/healthz`, which queries the database; liveness is a TCP check so a database outage does not restart it. |
+| `web` | Runs `migrate` and `collectstatic` on start, so keep `web.replicas: 1`. Templates are uploaded in the app; import the examples once with `kubectl exec … python manage.py sync_templates`. Readiness checks `/healthz`, which queries the database; liveness is a TCP check so a database outage does not restart it. |
 | `worker` | Two runs at a time per pod (`CELERY_CONCURRENCY`). Scale with `worker.replicas`. |
 | `beat` | Always one replica, `Recreate` strategy, so there are never two schedulers. |
 | `redis` | Broker and result backend. The append-only file on a PVC keeps queued runs across restarts. Rollouts stop the old pod first because the volume is ReadWriteOnce. |
@@ -62,7 +62,7 @@ Beat only schedules: the Montandon poll and the hourly cleanup run on the worker
 | Value | Purpose |
 |---|---|
 | `host` | Public hostname. Sets the ingress host, `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, `PUBLIC_BASE_URL` and `PUBLISHED_PUBLIC_BASE_URL`. |
-| `existingSecret` | Secret holding `DATABASE_URL`, `SECRET_KEY`, the storage credentials and optionally `MONTANDON_API_TOKEN`. |
+| `existingSecret` | Secret holding `DATABASE_URL`, `SECRET_KEY`, the storage credentials and optionally `MONTANDON_API_TOKEN`. Template secrets set to "read from the workers' environment variable" must be in it too; notebooks only see them when declared and granted on the Secrets page. |
 | `env` | Any other setting from `.env.example`, such as `PUBLISHED_STORAGE_BACKEND`, `S3_*` or `AZURE_*`. |
 | `publishedProxy.upstream` | Bucket root as an anonymous reader sees it, for example `https://<account>.blob.core.windows.net/<container>`. Objects must be publicly readable. |
 | `ingress.className`, `ingress.annotations`, `ingress.tlsSecretName` | Ingress controller and certificate. |

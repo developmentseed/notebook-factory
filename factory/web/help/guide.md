@@ -104,15 +104,36 @@ An item's page shows its properties, the runs that used it, and the templates th
 
 ## Creating notebook templates
 
-*Staff.* Templates are notebooks plus a small YAML file. They live in the templates folder (`notebook_templates/` by default, set by `NOTEBOOK_TEMPLATES_DIR`) and are loaded into the database with a management command. They can also be kept in a git repository.
+*Template editors* (staff with the **Can change analysis notebook** permission; see [Users, permissions and API tokens](#users-permissions-and-api-tokens)). A template is a notebook with a cell tagged `parameters`, plus settings: what it needs (an area, a STAC item), its parameters (which become the run form) and its filters. Templates are uploaded and edited in the app, and every change that affects how they run is kept as a **version**.
+
+### Uploading a template
+
+1. Under **Templates**, click **New template** ([`/templates/-/new/`]({{BASE_URL}}templates/-/new/)) and pick a `.zip` of the template's folder, or a single `.ipynb`. The page checks the file straight away. It lists the notebooks in the zip, the parameters it detects, and any problems: no `parameters` cell, imports that are not installed on the workers, or reserved parameters that are not declared.
+2. Click **Upload and review**. The template is created **inactive**, so only template editors see it.
+3. On the edit page, check the details, filters, inputs and **parameters**. Parameters are detected from the `parameters` cell: one per `name = value` line, with its type taken from the value and a trailing `# comment` used as the description. Reserved names are skipped. Refine each parameter (title, choices as `value | label` lines, minimum / maximum / step, widget, required, the filter it tags) or switch to **YAML** to edit the JSON Schema directly. **Check and preview** shows the run form exactly as users will see it.
+4. Use **Test run** to try it, then tick **Active** and save to publish it.
+
+A `template.yml` next to the notebook (see below) fills in all the settings, so a folder exported from the app (or kept in git) can be uploaded as it is. Every file next to the notebook is shipped with it and is available when it runs. The notebook may only import packages that are installed in the worker image.
+
+### Versions
+
+A version freezes the notebook and its files together with the parameters and inputs that match them. Each run records the version it executed, which is shown next to the template on the run page.
+
+* **Upload new version** replaces the notebook and files. Without a `template.yml` in the upload, the current settings are kept and new variables in the `parameters` cell are added. Untick *Make it the current version* to stage a version without switching to it.
+* Saving the edit page changes the current version **in place while no run has used it**. Once a run has used it, saving makes a new version that reuses the same files.
+* **Versions** lists them all. **Make current** rolls back (or forward), and **Download** gives a zip with a `template.yml` generated from the settings.
+* Queued and running runs always finish on the version they were started with. **Retry** uses the current version, and says so if the old parameters no longer fit.
+* When the parameters change, trigger rules whose fixed parameters would no longer validate are listed as warnings.
+
+Title, summary, description, filters and the active flag are not versioned. A template that has never run can be deleted, together with its versions and trigger rules. Otherwise, untick *Active* to hide it.
 
 ### Folder layout
 
 ```
-notebook_templates/<slug>/
-├── template.yml     metadata + parameter schema
+<slug>/
+├── template.yml     settings + parameter schema (optional when uploading in the app)
 ├── notebook.ipynb   the notebook; its first code cell is tagged `parameters`
-└── ...              helper modules / small data files (the whole folder is copied for each run)
+└── ...              helper modules / small data files (shipped with every run)
 ```
 
 ### template.yml
@@ -189,7 +210,48 @@ hazard = ""
 # ...followed by the template's own parameters with their defaults
 ```
 
-The catalog's API key is passed to the kernel as the `STAC_API_KEY` environment variable (with `STAC_API_URL`), never as a parameter, so it never appears in the published page.
+The catalog's API key is passed to the kernel as the `STAC_API_KEY` environment variable (with `STAC_API_URL`), never as a parameter, so it never appears in the published page. Other credentials are secrets (next section).
+
+### Secrets
+
+A notebook that needs a credential reads it from its environment. It never gets one as a parameter:
+parameters are written into the published notebook.
+
+1. Declare the names the notebook reads, either on the template's edit page (*Inputs → Secrets*) or in
+   `template.yml`:
+   ```yaml
+   secrets: [MAPBOX_TOKEN]
+   ```
+2. Someone with the *Can change template secret* permission adds the secret on the **Secrets** page.
+   They either store its value (plain text in the database, never shown again) or point it at an
+   environment variable of the worker pods (kept in the Kubernetes secret / Key Vault). They also
+   **grant** it to the template.
+3. Read it in the notebook:
+   ```python
+   import os
+
+   token = os.environ["MAPBOX_TOKEN"]
+   ```
+
+A run only gets the secrets its template version declares **and** that are granted to the template.
+Runs of a template whose declared secrets are missing or not granted are refused with a message.
+
+**What the kernel's environment holds.** Kernels do not inherit the worker's environment, so a template
+can't read `DATABASE_URL`, `SECRET_KEY` or the storage keys. They get:
+- basic variables: `PATH`, `HOME`, locale, `TMPDIR`, `PYTHON*`, `GDAL_*` / `PROJ_*`, CA bundles and proxies;
+- `NOTEBOOK_RUN_ID`, plus `STAC_API_URL` / `STAC_API_KEY` for the run's item;
+- the run's secrets.
+
+Other non-secret settings can be passed through with `NOTEBOOK_KERNEL_ENV_PASSTHROUGH` (names or `PREFIX_*`
+patterns). `NOTEBOOK_KERNEL_ENV_INHERIT=true` restores the old full inheritance. This keeps app credentials
+out of a template's reach through the environment. It is **not a sandbox**: the kernel runs as the same
+user as the worker.
+
+**Don't print secrets.** As a safety net, every secret value (and `STAC_API_KEY`) is replaced with
+`[redacted:NAME]` in the executed notebook, text files in `output_dir`, the run log and run errors, and the
+run log notes the redaction. A value that was transformed first (base64, URL-quoted…) is not recognised.
+Never put a secret in the template's files: bundles are stored in the published storage.
+
 
 ### Output conventions
 
@@ -198,17 +260,23 @@ The catalog's API key is passed to the kernel as the `STAC_API_KEY` environment 
 * Code cells are collapsed in the published page. Tag a cell `show-input` to keep it open, or `remove-input` to hide its code entirely.
 * Write-back: a template with `supports_writeback` writes `output_dir/stac/collection.json` and `output_dir/stac/items/*.json`. These are pushed to the item's catalog if that catalog has write-back enabled.
 
-### Loading templates
+### Importing templates from a folder
+
+The example templates in `notebook_templates/` (or `NOTEBOOK_TEMPLATES_DIR`), and templates kept in git, can be imported from the command line:
 
 ```sh
-python manage.py sync_templates                       # load / update every folder in NOTEBOOK_TEMPLATES_DIR
-python manage.py sync_templates --deactivate-missing  # also hide templates whose folder was removed
+python manage.py sync_templates                       # new folders become templates; changed folders, new versions
+python manage.py sync_templates --dry-run             # show what would change
+python manage.py sync_templates --only-missing        # only import templates that don't exist yet
+python manage.py sync_templates --force               # also add versions over ones made in the app
+python manage.py sync_templates --overwrite-metadata  # also update title, summary, filters, active
+python manage.py sync_templates --convert             # turn templates still served from the folder into uploaded ones
 python manage.py run_notebook <slug> --area NPL.1_1 -p threshold=0.4   # test a run synchronously from the CLI
 ```
 
-Re-run `sync_templates` after changing `template.yml` or the notebook. Unknown filter keys or options in `template.yml` are skipped with a warning.
+A folder only becomes a new version when its files or settings changed. A version made in the app is never replaced unless you pass `--force`. On existing templates, title, summary, description, filters and the active flag are only updated with `--overwrite-metadata`. Unknown filter keys or options in `template.yml` are skipped with a warning. The web container no longer imports templates when it starts, so edits made in the app stick.
 
-**Templates in git.** In the Django admin (**Admin → Analysis notebooks**), set *source kind* to `git`, and fill in the repository, ref and notebook path. The worker clones and caches the repository. The admin is also where you edit a template's title, description, filter options or active flag without touching files. Untick *is active* to hide a template.
+**Templates in git.** CI can push a new version on each merge with the API (see [Using the API](#using-the-api)). Alternatively, in the Django admin, set *source kind* to `git` and fill in the repository, ref and notebook path; the worker clones and caches the repository.
 
 ## Uploading notebooks
 
@@ -325,7 +393,9 @@ The settings that matter most (all are in `.env.example`):
 | `AZURE_ACCOUNT_NAME`, `AZURE_ACCOUNT_KEY` or `AZURE_CONNECTION_STRING`, `AZURE_CONTAINER` | `azure` backend. Without a key, the app signs in with `DefaultAzureCredential`. |
 | `PUBLISHED_PUBLIC_BASE_URL` | Optional CDN or separate domain for published files. Recommended, especially if uploads are used. |
 | `MYST_COMMAND`, `MYST_TEMPLATE`, `MYST_HIDE_CODE` | How mystmd is invoked (e.g. `npx -y mystmd@1.10.1`), the site theme, and whether code is collapsed. |
-| `NOTEBOOK_TEMPLATES_DIR`, `NOTEBOOK_WORK_DIR` | Where templates live, and where runs execute. |
+| `NOTEBOOK_TEMPLATES_DIR`, `NOTEBOOK_WORK_DIR` | Example templates for `sync_templates`, and where runs execute. |
+| `NOTEBOOK_KERNEL_ENV_PASSTHROUGH`, `NOTEBOOK_KERNEL_ENV_INHERIT` | Extra worker variables kernels may see (names or `PREFIX_*`), or pass the whole worker environment (not recommended). See [Secrets](#secrets). |
+| `NOTEBOOK_TEMPLATE_MAX_BYTES`, `NOTEBOOK_TEMPLATE_CACHE_DIR` | Size limit for uploaded templates, and where workers unpack them. Template bundles are kept in the published storage under `templates/`, so don't put secrets in them. |
 | `NOTEBOOK_CELL_TIMEOUT`, `NOTEBOOK_STALE_RUN_HOURS` | Per-cell timeout (seconds). Runs without progress for this long are marked failed. |
 | `NOTEBOOK_UPLOAD_MAX_BYTES`, `…_MAX_UNCOMPRESSED_BYTES`, `…_MAX_FILES` | Upload limits. |
 | `STAC_TIMEOUT`, `STAC_POLL_INTERVAL_SECONDS`, `STAC_POLL_LOOKBACK_DAYS` | STAC HTTP timeout, how often the poller runs, and how far back it looks the first time. |
@@ -350,6 +420,8 @@ python manage.py createsuperuser
 
 * **Adding users**: **Admin → Users → Add user**. Any active user can log in and run templates.
 * **Staff**: tick **Staff status** on a user to unlock Upload, Filters, Catalogs and the Admin link. To manage models in the Django admin, a staff user also needs *Superuser status* or the relevant model permissions.
+* **Template editors**: give a user the *notebooks | analysis notebook | Can change analysis notebook* permission (and *Can add* to create new templates), or put them in a group that has it. Superusers have it already. It is separate from Staff because an uploaded template runs its code on the workers.
+* **Secret managers**: the *notebooks | template secret | Can add / change / delete template secret* permissions unlock the **Secrets** page, where values are set and granted to templates. Keep this separate from template editing, so that declaring a secret in a template is not enough to read it.
 * **API tokens**: **Admin → Auth Token → Tokens → Add**, or:
 
 ```sh
@@ -392,7 +464,7 @@ To check the result, open [`/api/countries/`]({{BASE_URL}}api/countries/) and `/
 
 * **Filters**: create them on **Filters** before syncing templates, because `template.yml` refers to their option keys. `seed_demo` creates *Hazard* and *Use case* with sensible options.
 * **Catalogs**: add each STAC API on **Catalogs** and click *Test connection*. `seed_demo` adds Montandon (staging), using `MONTANDON_API_TOKEN` as its key if set. Otherwise, add the key on the catalog page.
-* **Templates**: put folders in `NOTEBOOK_TEMPLATES_DIR` and run `python manage.py sync_templates` (`seed_demo` does this too). See [Creating notebook templates](#creating-notebook-templates).
+* **Templates**: upload them under **Templates → New template**, or import the examples in `NOTEBOOK_TEMPLATES_DIR` once with `python manage.py sync_templates` (`seed_demo` does this too). See [Creating notebook templates](#creating-notebook-templates).
 
 `seed_demo` is safe to re-run. It also creates two **disabled** example trigger rules.
 
@@ -452,7 +524,7 @@ To debug a template outside the web app, `python manage.py run_notebook <slug> -
 | `seed_demo [--countries NPL,VNM] [--levels 0,1,2] [--skip-boundaries]` | Demo setup: filters, boundaries, templates, the Montandon catalog and example rules. |
 | `import_gadm ISO3 [ISO3 …] [--levels 0,1,2] [--cache-dir DIR]` | Download and import GADM 4.1 boundaries. |
 | `import_admin_areas PATH --level N [--source gadm|cod|custom] [--country ISO3] [--code-field F --name-field F --parent-field F] [--layer N]` | Import boundaries from a file. |
-| `sync_templates [--dir DIR] [--deactivate-missing]` | Load templates from disk. |
+| `sync_templates [--dir DIR] [--dry-run] [--only-missing] [--force] [--overwrite-metadata] [--convert] [--deactivate-missing]` | Import template folders (new templates, or new versions when changed). |
 | `run_notebook SLUG [--area CODE|ID] [--stac-item PK|ID] [--catalog SLUG --collection ID --item ID] [-p key=value …] [--async]` | Run a template from the CLI (inline, or queued with `--async`). |
 | `ingest_item --catalog SLUG (--file PATH | --collection ID --item ID) [--no-fire]` | Store a STAC item and fire matching trigger rules. |
 | `poll_catalogs [--dry-run]` | Poll catalogs with enabled rules once. |
@@ -565,6 +637,22 @@ curl -X POST $NF/runs/upload/ -H "Authorization: Token $TOKEN" \
   -F title="Flood exposure, Koshi" -F summary="One-off analysis" \
   -F area=12 -F 'filters={"hazard": ["flood"]}'
 ```
+
+**Templates** (template editors; see [Creating notebook templates](#creating-notebook-templates)). A new template starts inactive; the response lists `warnings`:
+
+```sh
+curl -X POST $NF/templates/ -H "Authorization: Token $TOKEN" \
+  -F file=@my-template.zip -F slug=flood-exposure -F 'metadata={"version": "1.0"}'
+curl -X PATCH $NF/templates/flood-exposure/ -H "Authorization: Token $TOKEN" -H "Content-Type: application/json" \
+  -d '{"is_active": true, "filters": {"hazard": ["flood"]}}'
+curl -X POST $NF/templates/flood-exposure/versions/ -H "Authorization: Token $TOKEN" \
+  -F file=@my-template.zip -F note="CI build $GIT_SHA"          # add make_current=false to stage it
+curl $NF/templates/flood-exposure/versions/ -H "Authorization: Token $TOKEN"
+curl -X POST $NF/templates/flood-exposure/versions/2/make-current/ -H "Authorization: Token $TOKEN"
+curl "$NF/templates/?include_inactive=1" -H "Authorization: Token $TOKEN"
+```
+
+`metadata` takes `template.yml` keys and overrides the `template.yml` in the zip.
 
 **Manage filters** (staff):
 

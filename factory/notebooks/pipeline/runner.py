@@ -15,7 +15,7 @@ from django.utils import timezone
 
 from .. import uploads
 from ..models import NotebookRun, RunStatus, WritebackStatus
-from . import executor, inputs, publisher, renderer, sources
+from . import executor, inputs, publisher, redact, renderer, sources
 from .context import RunContext
 
 log = logging.getLogger(__name__)
@@ -41,10 +41,22 @@ def run_pipeline(run_id: str) -> NotebookRun:
         else:
             run.set_status(RunStatus.FETCHING, "Resolving template and preparing inputs", cell=0, total=0)
             run.log(f"worker picked up run {run.short_id}")
-            sources.resolve_template(run.notebook, ctx)
-            run.log(
-                f"template: {run.notebook.slug} ({run.notebook.version or 'unversioned'}) from {run.notebook.get_source_kind_display().lower()}"
-            )
+            version = run.template_version
+            sources.resolve_template(run.notebook, ctx, version)
+            if version is not None:
+                source = (
+                    "uploaded bundle"
+                    if version.archive_key
+                    else run.notebook.get_source_kind_display().lower()
+                )
+                run.log(
+                    f"template: {run.notebook.slug} v{version.number}"
+                    f"{f' ({version.label})' if version.label else ''} from {source}"
+                )
+            else:
+                run.log(
+                    f"template: {run.notebook.slug} ({run.notebook.version or 'unversioned'}) from {run.notebook.get_source_kind_display().lower()}"
+                )
             injected = inputs.prepare_inputs(run, ctx)
             if run.area_id:
                 run.log(f"inputs: area {run.area.name} (L{run.area.level}) + subdivisions written to inputs/")
@@ -58,6 +70,7 @@ def run_pipeline(run_id: str) -> NotebookRun:
             params = {**injected, **(run.parameters or {})}
             executor.execute(run, ctx, params)
             run.log("papermill: notebook executed")
+            redact.redact_run(run, ctx)
 
         stage = RunStatus.RENDERING
         run.set_status(RunStatus.RENDERING, "Rendering static HTML with MyST")
@@ -81,12 +94,15 @@ def run_pipeline(run_id: str) -> NotebookRun:
         run.log(f"published: {run.output_url}")
     except Exception as exc:  # noqa: BLE001
         log.exception("Run %s failed during %s", run.id, stage)
-        run.error = f"{type(exc).__name__}: {exc}"
+        error = f"{type(exc).__name__}: {exc}"
         if settings.DEBUG:
-            run.error += "\n\n" + traceback.format_exc()
+            error += "\n\n" + traceback.format_exc()
+        # A failing cell's error (and the output lines logged so far) may contain a secret.
+        run.error = redact.redact_text(error, ctx.secrets)[0]
         run.save(update_fields=["error", "updated_at"])
+        redact.redact_log(run, ctx.secrets)
         run.set_status(RunStatus.FAILED, f"Failed while {stage}", failed_stage=stage)
-        run.log(f"failed during {stage}: {exc}", level="error")
+        run.log(redact.redact_text(f"failed during {stage}: {exc}", ctx.secrets)[0], level="error")
     finally:
         if not settings.NOTEBOOK_FACTORY["KEEP_WORKDIRS"]:
             shutil.rmtree(ctx.workdir, ignore_errors=True)

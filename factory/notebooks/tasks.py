@@ -20,9 +20,16 @@ def execute_run(self, run_id: str):
 def cleanup_workdirs():
     from django.conf import settings
 
+    from .bundles import prune_cache
     from .services import fail_stale_runs
 
     removed = _cleanup()
     failed = fail_stale_runs(settings.NOTEBOOK_FACTORY["STALE_RUN_HOURS"])
-    log.info("cleanup: removed %d work directories, failed %d stale runs", removed, failed)
-    return {"workdirs_removed": removed, "stale_failed": failed}
+    pruned = prune_cache(settings.NOTEBOOK_FACTORY["TEMPLATE_CACHE_MAX_AGE_HOURS"])
+    log.info(
+        "cleanup: removed %d work directories, failed %d stale runs, pruned %d cached bundles",
+        removed,
+        failed,
+        pruned,
+    )
+    return {"workdirs_removed": removed, "stale_failed": failed, "bundles_pruned": pruned}

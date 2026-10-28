@@ -1,0 +1,61 @@
+{% load web_extras %}
+<div id="schema-editor" class="schema-editor">
+  <input type="hidden" name="schema_mode" value="{{ mode }}">
+  <div class="tabs">
+    <button type="button" class="btn small {% if mode == 'rows' %}primary{% endif %}" {% if mode != 'rows' %}hx-post="{% url 'web:template-schema' nb.slug %}" hx-vals='{"action": "to_rows"}' hx-include="#schema-editor, [name=csrfmiddlewaretoken]" hx-target="#schema-editor" hx-swap="outerHTML"{% endif %}>Parameters</button>
+    <button type="button" class="btn small {% if mode == 'yaml' %}primary{% endif %}" {% if mode != 'yaml' %}hx-post="{% url 'web:template-schema' nb.slug %}" hx-vals='{"action": "to_yaml"}' hx-include="#schema-editor, [name=csrfmiddlewaretoken]" hx-target="#schema-editor" hx-swap="outerHTML"{% endif %}>YAML (JSON Schema)</button>
+  </div>
+  {% for e in general_errors %}<div class="msg error">{{ e }}</div>{% endfor %}
+
+  {% if mode == 'yaml' %}
+    <textarea name="schema_yaml" rows="18" class="mono">{{ schema_yaml }}</textarea>
+    <small class="muted">Keys: type, title, description, default, enum, x-enum-labels, minimum, maximum, multipleOf, x-widget, x-filter, items (lists). See the guide.</small>
+    {% for name, error in schema_errors.items %}<p class="error small"><code>{{ name }}</code>: {{ error }}</p>{% endfor %}
+  {% else %}
+    {{ formset.management_form }}
+    {% for rf in formset %}
+    {% with row_error=schema_errors|get:rf.name.value %}
+    <div class="param-row {% if rf.errors or row_error %}has-error{% endif %}">
+      <div class="param-row-main">
+        <label class="check" title="Include in the form">{{ rf.include }}</label>
+        <div class="field"><label>Name</label>{{ rf.name }}</div>
+        <div class="field"><label>Type</label>{{ rf.type }}</div>
+        <div class="field"><label>Title</label>{{ rf.title }}</div>
+        <div class="field"><label>Default</label>{{ rf.default }}</div>
+        <label class="check">{{ rf.required }} required</label>
+      </div>
+      {% if row_error %}<small class="error">{{ row_error }}</small>{% endif %}
+      {% for field in rf %}{% if field.errors %}<small class="error">{{ field.label }}: {{ field.errors|join:" " }}</small>{% endif %}{% endfor %}
+      <details {% if rf.choices.value or rf.errors or row_error %}open{% endif %}>
+        <summary class="small">Choices, limits and widget</summary>
+        <div class="param-grid">
+          <div class="field"><label>Choices</label>{{ rf.choices }}<small class="muted">One per line: <code>value | label</code>. Lists need choices.</small></div>
+          <div class="field"><label>Description</label>{{ rf.description }}
+            <label>List item type</label>{{ rf.item_type }}</div>
+          <div class="field"><label>Minimum</label>{{ rf.minimum }}<label>Maximum</label>{{ rf.maximum }}<label>Step</label>{{ rf.step }}</div>
+          <div class="field"><label>Widget</label>{{ rf.widget }}<label>Tags filter</label>{{ rf.filter }}<small class="muted">Runs are tagged with the chosen value in this filter (by default the filter with the parameter's name).</small>
+            <label>Order</label>{{ rf.order }}</div>
+        </div>
+        {{ rf.extra }}{% if rf.extra.value %}<small class="muted">Also keeps: <code>{{ rf.extra.value }}</code></small>{% endif %}
+      </details>
+    </div>
+    {% endwith %}
+    {% empty %}<p class="muted">No parameters.</p>
+    {% endfor %}
+  {% endif %}
+
+  <p class="schema-actions">
+    {% if mode == 'rows' %}<button type="button" class="btn small" hx-post="{% url 'web:template-schema' nb.slug %}" hx-vals='{"action": "add_row"}' hx-include="#schema-editor, [name=csrfmiddlewaretoken]" hx-target="#schema-editor" hx-swap="outerHTML">+ Add parameter</button>{% endif %}
+    <button type="button" class="btn small" hx-post="{% url 'web:template-schema' nb.slug %}" hx-vals='{"action": "detect"}' hx-include="#schema-editor, [name=csrfmiddlewaretoken]" hx-target="#schema-editor" hx-swap="outerHTML" title="Add parameters found in the notebook's parameters cell">Re-detect from notebook</button>
+    <button type="button" class="btn small" hx-post="{% url 'web:template-schema' nb.slug %}" hx-vals='{"action": "preview"}' hx-include="#schema-editor, [name=csrfmiddlewaretoken]" hx-target="#schema-editor" hx-swap="outerHTML">Check and preview</button>
+  </p>
+  {% for w in schema_warnings %}<p class="msg warning small">{{ w }}</p>{% endfor %}
+
+  <details class="panel preview" open>
+    <summary><strong>Run form preview</strong></summary>
+    {% if fields %}<fieldset disabled class="plain">{% include "web/partials/param_fields.html" %}</fieldset>
+    {% elif schema_errors or general_errors %}<p class="muted">Fix the errors above to see the preview.</p>
+    {% else %}<p class="muted">This template has no user parameters.</p>{% endif %}
+    <p class="muted small">Injected by the app (not form fields): {% for r in reserved %}<code>{{ r }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}.</p>
+  </details>
+</div>

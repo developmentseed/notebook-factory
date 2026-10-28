@@ -1,7 +1,7 @@
 {% extends "web/base.html" %}
 {% block title %}Run {{ run.short_id }} · {{ run.title }}{% endblock %}
 {% block content %}
-<p class="crumbs"><a href="{% url 'web:browse' %}">Analyses</a> › {% if run.notebook %}<a href="{{ run.notebook.get_absolute_url }}">{{ run.notebook.title }}</a>{% else %}<a href="{% url 'web:browse' %}?template=_upload&amp;status=all">Uploaded</a>{% endif %} › Run <code>{{ run.short_id }}</code></p>
+<p class="crumbs"><a href="{% url 'web:browse' %}">Analyses</a> › {% if run.notebook %}<a href="{{ run.notebook.get_absolute_url }}">{{ run.notebook.title }}</a>{% if run.template_version %} <span class="muted small" title="Template version this run executed">v{{ run.template_version.number }}{% if run.template_version.label %} ({{ run.template_version.label }}){% endif %}</span>{% endif %}{% else %}<a href="{% url 'web:browse' %}?template=_upload&amp;status=all">Uploaded</a>{% endif %} › Run <code>{{ run.short_id }}</code></p>
 {% include "web/partials/run_status.html" %}
 {% if run.is_upload or run.summary or run.description %}{% include "web/partials/run_details.html" %}{% endif %}
 {% include "web/partials/run_tags.html" with run=tags.run can_edit=tags.can_edit editing=tags.editing tag_fields=tags.tag_fields %}

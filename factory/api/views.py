@@ -3,9 +3,10 @@ from django.db.models import Count
 from django.http import JsonResponse
 from django.views.decorators.cache import cache_page
 from django_filters import rest_framework as filters
+from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import (
     SAFE_METHODS,
     BasePermission,
@@ -19,10 +20,12 @@ from factory.catalog import facets
 from factory.catalog.models import AdminArea, Country, Facet, FacetOption
 from factory.events.models import StacCatalog, StacItem, TriggerRule
 from factory.events.stac_client import StacClientError
+from factory.notebooks import templates as T
+from factory.notebooks.bundles import inspect_template
 from factory.notebooks.models import AnalysisNotebook, NotebookRun, RunBatch, TriggerKind
 from factory.notebooks.parameters import ParameterError
 from factory.notebooks.services import RunRequestError, cancel_run, create_batch, create_run, retry_run
-from factory.notebooks.uploads import UploadError, create_upload
+from factory.notebooks.uploads import ArchiveError, UploadError, create_upload
 
 from . import serializers as S
 
@@ -108,16 +111,133 @@ class AdminAreaViewSet(viewsets.ReadOnlyModelViewSet):
         return JsonResponse(area.as_feature())
 
 
-class AnalysisNotebookViewSet(FacetFilterMixin, viewsets.ReadOnlyModelViewSet):
-    queryset = (
-        AnalysisNotebook.objects.filter(is_active=True)
-        .prefetch_related("facet_options__facet")
-        .annotate(run_count=Count("runs", distinct=True))
-    )
+class TemplatePermission(BasePermission):
+    """Anyone reads; writing needs the Django model permissions (uploaded templates execute code)."""
+
+    def has_permission(self, request, view):
+        if request.method in SAFE_METHODS:
+            return True
+        user = request.user
+        if not (user and user.is_authenticated):
+            return False
+        if view.action == "create":
+            return user.has_perm("notebooks.add_analysisnotebook")
+        return user.has_perm("notebooks.change_analysisnotebook")
+
+
+class AnalysisNotebookViewSet(
+    FacetFilterMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
     serializer_class = S.AnalysisNotebookSerializer
+    permission_classes = [TemplatePermission]
     lookup_field = "slug"
     filterset_fields = ["requires_stac_item", "requires_area"]
     search_fields = ["title", "summary", "description"]
+
+    def get_queryset(self):
+        qs = (
+            AnalysisNotebook.objects.select_related("current_version")
+            .prefetch_related("facet_options__facet")
+            .annotate(run_count=Count("runs", distinct=True))
+            .order_by("title")
+        )
+        editor = self.request.user.has_perm("notebooks.change_analysisnotebook")
+        wants_all = self.request.method not in SAFE_METHODS or self.request.query_params.get(
+            "include_inactive"
+        )
+        if not (editor and wants_all):
+            qs = qs.filter(is_active=True)
+        return qs
+
+    def _detail(self, request, slug, code=status.HTTP_200_OK, warnings=()):
+        nb = self.get_queryset().get(slug=slug)
+        data = S.AnalysisNotebookSerializer(nb, context={"request": request}).data
+        return Response({**data, "warnings": list(warnings)}, status=code)
+
+    def _manifest(self, d):
+        manifest = inspect_template(d["file"], d["file"].name, d.get("notebook_path", ""))
+        if manifest.notebook is None:
+            raise ArchiveError(
+                "The archive holds several notebooks; set notebook_path to one of: "
+                + ", ".join(manifest.notebooks)
+            )
+        manifest.meta = {**manifest.meta, **d.get("metadata", {})}
+        return manifest
+
+    @extend_schema(request=S.TemplateCreateSerializer, responses=S.AnalysisNotebookSerializer)
+    def create(self, request):
+        """Upload a new template (.zip or .ipynb). It starts inactive; PATCH is_active to publish it."""
+        ser = S.TemplateCreateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+        try:
+            nb, warnings = T.create_from_manifest(
+                self._manifest(d),
+                slug=d.get("slug", ""),
+                title=d.get("title", ""),
+                user=request.user,
+                note=d.get("note", ""),
+            )
+        except (ArchiveError, T.TemplateError) as exc:
+            return Response({"file": [str(exc)]}, status=400)
+        return self._detail(request, nb.slug, status.HTTP_201_CREATED, warnings)
+
+    @extend_schema(request=S.TemplateUpdateSerializer, responses=S.AnalysisNotebookSerializer)
+    def partial_update(self, request, slug=None):
+        """Change the template's title, summary, description, active flag or filters (not versioned)."""
+        nb = self.get_object()
+        ser = S.TemplateUpdateSerializer(data=request.data, partial=True)
+        ser.is_valid(raise_exception=True)
+        d = dict(ser.validated_data)
+        filters = d.pop("filters", None)
+        for key, value in d.items():
+            setattr(nb, key, value)
+        nb.save()
+        if filters is not None:
+            nb.facet_options.set(T.options_from_yaml({"filters": filters}, nb.slug))
+        return self._detail(request, nb.slug)
+
+    @extend_schema(
+        methods=["POST"], request=S.TemplateVersionCreateSerializer, responses=S.TemplateVersionSerializer
+    )
+    @action(detail=True, methods=["get", "post"], parser_classes=[MultiPartParser, FormParser, JSONParser])
+    def versions(self, request, slug=None):
+        """GET: the template's versions. POST (multipart): upload a new version of its bundle."""
+        nb = self.get_object()
+        if request.method == "GET":
+            versions = nb.versions.select_related("created_by", "notebook")
+            return Response(S.TemplateVersionSerializer(versions, many=True).data)
+        ser = S.TemplateVersionCreateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+        try:
+            version, warnings = T.add_version_from_manifest(
+                nb,
+                self._manifest(d),
+                user=request.user,
+                note=d.get("note", ""),
+                make_current=d["make_current"],
+            )
+        except (ArchiveError, T.TemplateError) as exc:
+            return Response({"file": [str(exc)]}, status=400)
+        return Response(
+            {**S.TemplateVersionSerializer(version).data, "warnings": warnings},
+            status=status.HTTP_201_CREATED,
+        )
+
+    @extend_schema(request=None, responses=S.AnalysisNotebookSerializer)
+    @action(detail=True, methods=["post"], url_path=r"versions/(?P<number>\d+)/make-current")
+    def make_current(self, request, slug=None, number=None):
+        """Make an earlier (or a not yet current) version the one new runs use."""
+        nb = self.get_object()
+        version = nb.versions.filter(number=number).first()
+        if version is None:
+            return Response({"detail": "No such version."}, status=404)
+        T.set_current(nb, version)
+        return self._detail(request, nb.slug, warnings=T.trigger_rule_problems(nb, version.parameter_schema))
 
 
 class RunFilter(filters.FilterSet):

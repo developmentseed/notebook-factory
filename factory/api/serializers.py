@@ -6,7 +6,7 @@ from factory.events.matching import fetch_item
 from factory.events.models import StacCatalog, StacItem, TriggerRule
 from factory.events.stac_client import StacClientError
 from factory.notebooks import parameters as P
-from factory.notebooks.models import AnalysisNotebook, NotebookRun, RunBatch, RunLogEntry
+from factory.notebooks.models import AnalysisNotebook, NotebookRun, RunBatch, RunLogEntry, TemplateVersion
 
 
 class FacetOptionSerializer(serializers.ModelSerializer):
@@ -83,10 +83,54 @@ class AdminAreaSerializer(serializers.ModelSerializer):
         ]
 
 
+class TemplateVersionSerializer(serializers.ModelSerializer):
+    created_by = serializers.StringRelatedField()
+    is_current = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = TemplateVersion
+        fields = [
+            "number",
+            "label",
+            "note",
+            "is_current",
+            "notebook_path",
+            "sha256",
+            "files",
+            "source_repo",
+            "source_ref",
+            "parameter_schema",
+            "requires_area",
+            "area_levels",
+            "requires_stac_item",
+            "stac_hints",
+            "supports_writeback",
+            "estimated_runtime_minutes",
+            "secret_names",
+            "created_by",
+            "created_at",
+        ]
+
+
+class CurrentVersionField(serializers.SerializerMethodField):
+    def to_representation(self, obj):
+        v = obj.current_version
+        if v is None:
+            return None
+        return {
+            "number": v.number,
+            "label": v.label,
+            "sha256": v.sha256,
+            "notebook_path": v.notebook_path,
+            "created_at": v.created_at,
+        }
+
+
 class AnalysisNotebookSerializer(serializers.ModelSerializer):
     filters = FiltersField()
     parameter_defaults = serializers.SerializerMethodField()
     run_count = serializers.IntegerField(read_only=True)
+    current_version = CurrentVersionField()
 
     class Meta:
         model = AnalysisNotebook
@@ -109,7 +153,9 @@ class AnalysisNotebookSerializer(serializers.ModelSerializer):
             "stac_hints",
             "supports_writeback",
             "estimated_runtime_minutes",
+            "secret_names",
             "is_active",
+            "current_version",
             "run_count",
             "created_at",
             "updated_at",
@@ -184,6 +230,9 @@ class RunLogEntrySerializer(serializers.ModelSerializer):
 class NotebookRunSerializer(serializers.ModelSerializer):
     notebook = serializers.SlugRelatedField(slug_field="slug", read_only=True)
     notebook_title = serializers.CharField(source="notebook.title", read_only=True, default=None)
+    template_version = serializers.SlugRelatedField(
+        slug_field="number", read_only=True, help_text="Template version number the run executes"
+    )
     is_upload = serializers.BooleanField(read_only=True)
     area = AdminAreaSerializer(read_only=True)
     filters = FiltersField()
@@ -201,6 +250,7 @@ class NotebookRunSerializer(serializers.ModelSerializer):
             "id",
             "notebook",
             "notebook_title",
+            "template_version",
             "is_upload",
             "title",
             "subtitle",
@@ -394,3 +444,63 @@ class TriggerRuleSerializer(serializers.ModelSerializer):
             "rerun_on_update",
             "last_triggered_at",
         ]
+
+
+def _metadata(value):
+    """template.yml overrides: a JSON object, or YAML / JSON text (multipart forms send text)."""
+    import yaml
+
+    if isinstance(value, str):
+        try:
+            value = yaml.safe_load(value) if value.strip() else {}
+        except yaml.YAMLError as exc:
+            raise serializers.ValidationError(f"Not valid YAML / JSON: {exc}") from exc
+    if not isinstance(value, dict):
+        raise serializers.ValidationError("Expected an object with template.yml keys.")
+    return value
+
+
+class TemplateCreateSerializer(serializers.Serializer):
+    """POST /api/templates/ (multipart): a new template from a .zip or .ipynb. It starts inactive."""
+
+    file = serializers.FileField()
+    notebook_path = serializers.CharField(
+        required=False, allow_blank=True, help_text="Notebook inside the zip; needed when it holds several"
+    )
+    slug = serializers.SlugField(required=False, allow_blank=True, max_length=80)
+    title = serializers.CharField(required=False, allow_blank=True, max_length=200)
+    note = serializers.CharField(required=False, allow_blank=True, max_length=300)
+    metadata = serializers.JSONField(
+        binary=True,
+        required=False,
+        default=dict,
+        help_text="template.yml keys; override the zip's template.yml",
+    )
+
+    def validate_metadata(self, value):
+        return _metadata(value)
+
+
+class TemplateVersionCreateSerializer(TemplateCreateSerializer):
+    """POST /api/templates/<slug>/versions/ (multipart): a new version of the bundle."""
+
+    slug = None
+    title = None
+    make_current = serializers.BooleanField(required=False, default=True)
+
+
+class TemplateUpdateSerializer(serializers.Serializer):
+    """PATCH /api/templates/<slug>/: fields that are not versioned."""
+
+    title = serializers.CharField(required=False, max_length=200)
+    summary = serializers.CharField(required=False, allow_blank=True, max_length=300)
+    description = serializers.CharField(required=False, allow_blank=True)
+    is_active = serializers.BooleanField(required=False)
+    filters = serializers.JSONField(
+        required=False, help_text='e.g. {"hazard": ["flood"], "use_case": ["uc1"]}'
+    )
+
+    def validate_filters(self, value):
+        if not isinstance(value, dict) or not all(isinstance(v, list) for v in value.values()):
+            raise serializers.ValidationError('Expected an object of lists, e.g. {"hazard": ["flood"]}.')
+        return _validate_filter_keys(value)

@@ -1,0 +1,33 @@
+{% extends "web/base.html" %}
+{% block title %}New template · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="{% url 'web:template-list' %}">Templates</a> › New</p>
+<h1>Upload a template</h1>
+<p class="lead">A template is a notebook that runs for every request, with a cell tagged <code>parameters</code>. Upload it here; the next page lets you review its parameters, inputs and filters before making it active.</p>
+{% if form.non_field_errors %}<div class="msg error">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+<form method="post" enctype="multipart/form-data" class="panel">
+  {% csrf_token %}
+  <div class="field {% if form.file.errors %}has-error{% endif %}">
+    <label for="id_file">{{ form.file.label }} <span class="req">*</span></label>
+    <input type="file" name="file" id="id_file" accept=".zip,.ipynb" required
+           hx-post="{% url 'web:template-inspect' %}" hx-trigger="change" hx-encoding="multipart/form-data"
+           hx-include="#id_file, [name=csrfmiddlewaretoken]" hx-target="#template-inspect" hx-swap="innerHTML">
+    <small class="muted">{{ form.file.help_text }}. Every file next to the notebook is available to it when it runs.</small>
+    {% if form.file.errors %}<small class="error">{{ form.file.errors|join:" " }}</small>{% endif %}
+  </div>
+  <div id="template-inspect">{% include "web/partials/template_inspect.html" with selected=form.notebook_path.value %}</div>
+  {% if form.notebook_path.errors %}<p class="error">{{ form.notebook_path.errors|join:" " }}</p>{% endif %}
+  <div class="param-grid">
+    {% for f in form %}{% if f.name in "slug title note" %}
+    <div class="field {% if f.errors %}has-error{% endif %}">
+      <label for="{{ f.id_for_label }}">{{ f.label }}</label>{{ f }}
+      {% if f.help_text %}<small class="muted">{{ f.help_text }}</small>{% endif %}
+      {% if f.errors %}<small class="error">{{ f.errors|join:" " }}</small>{% endif %}
+    </div>
+    {% endif %}{% endfor %}
+  </div>
+  <p class="muted small">The template starts <strong>inactive</strong>: only template editors can see and test-run it until you make it active.
+     A <code>template.yml</code> next to the notebook (see <a href="{% url 'web:help' %}#creating-notebook-templates">the guide</a>) fills in the settings; otherwise parameters are detected from the <code>parameters</code> cell.</p>
+  <p><button class="btn primary" type="submit">Upload and review →</button></p>
+</form>
+{% endblock %}
