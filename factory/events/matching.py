@@ -18,6 +18,9 @@ def upsert_item(
     """Create or update a StacItem from a raw STAC item. Returns (stac_item, created, changed)."""
     collection = collection or item.get("collection") or ""
     fields = extract(catalog.profile, item)
+    if collection and not item.get("collection"):
+        # refs include `stac:<collection>/<id>`; some APIs leave `collection` out of the item
+        fields["event_refs"] = extract(catalog.profile, {**item, "collection": collection})["event_refs"]
     existing = StacItem.objects.filter(catalog=catalog, collection=collection, item_id=item["id"]).first()
     if existing is None:
         obj = StacItem.objects.create(catalog=catalog, collection=collection, item_id=item["id"], **fields)

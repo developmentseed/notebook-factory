@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import urlencode
 
 import markdown
 import yaml
@@ -12,6 +13,7 @@ from django.db.models import Count, ProtectedError, Q, Value
 from django.db.models.functions import Coalesce, NullIf
 from django.http import HttpResponse, HttpResponseNotFound, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.safestring import mark_safe
 from django.views.decorators.clickjacking import xframe_options_exempt
@@ -20,7 +22,17 @@ from django.views.static import serve
 
 from factory.catalog import facets
 from factory.catalog.models import AdminArea, Country, Facet, FacetOption
-from factory.events.models import PollerState, StacCatalog, StacItem, TriggerRule
+from factory.events import disasters as D
+from factory.events import refs as event_refs
+from factory.events.matching import upsert_item
+from factory.events.models import (
+    EventLinkOverride,
+    LinkVerdict,
+    PollerState,
+    StacCatalog,
+    StacItem,
+    TriggerRule,
+)
 from factory.events.stac_client import StacClient, StacClientError
 from factory.notebooks import parameters as P
 from factory.notebooks import schema_builder as SB
@@ -46,6 +58,7 @@ from .forms import (
     FacetOptionFormSet,
     ParameterRowFormSet,
     RunDetailsForm,
+    RunDisastersForm,
     RunRequestForm,
     StacCatalogForm,
     TemplateForm,
@@ -117,7 +130,15 @@ def _filtered_runs(request):
         "status": g.get("status", "published"),
         "period": g.get("period", ""),
         "sort": g.get("sort", "-created_at"),
+        "disaster": g.get("disaster", "").strip(),
     }
+    disaster = None
+    if not f["disaster"] and event_refs.parse(f["q"]):
+        # a disaster ID typed in the search box shows that disaster's analyses
+        f["disaster"], f["q"] = f["q"], ""
+    if f["disaster"]:
+        disaster, qs = _disaster_runs(f["disaster"], qs)
+    f["disaster_obj"] = disaster
     if f["q"]:
         qs = qs.filter(
             Q(notebook__title__icontains=f["q"])
@@ -152,6 +173,22 @@ def _filtered_runs(request):
     elif f["sort"] in {"-created_at", "created_at", "area__name"}:
         qs = qs.order_by(f["sort"])
     return qs, f
+
+
+def _resolve_disaster(text):
+    """(disaster or None, error message) for an ID; catalog failures fall back to stored items."""
+    try:
+        return D.resolve(text), ""
+    except D.DisasterError as exc:
+        return None, str(exc)
+
+
+def _disaster_runs(text, qs):
+    disaster, _ = _resolve_disaster(text)
+    if disaster is not None:
+        return disaster, D.runs_for(disaster, qs)
+    refs = event_refs.parse(text) or [text]
+    return None, qs.filter(Q(event_refs__overlap=refs) | Q(stac_item__event_refs__overlap=refs)).distinct()
 
 
 def browse(request):
@@ -230,6 +267,8 @@ def run_new(request, slug):
             iso3 = (stac_item.country_codes or [None])[0]
             if iso3:
                 initial["country"] = Country.objects.filter(pk=iso3).first()
+    if request.GET.get("disaster"):
+        initial["event_refs"] = event_refs.parse(request.GET["disaster"])
     if request.GET.get("area"):
         area = AdminArea.objects.light().filter(pk=request.GET["area"]).first()
         if area:
@@ -266,6 +305,7 @@ def run_new(request, slug):
                         notify_emails=d["notify_emails"],
                         stac_item=d.get("stac_item"),
                         filters=tags,
+                        event_refs=d["event_refs"],
                         description=f"{d['areas'][0].country.name} · {len(d['areas'])} areas",
                         allow_inactive=True,
                     )
@@ -277,6 +317,7 @@ def run_new(request, slug):
                     area=d["areas"][0] if d["areas"] else None,
                     stac_item=d.get("stac_item"),
                     filters=tags,
+                    event_refs=d["event_refs"],
                     user=request.user,
                     trigger=TriggerKind.MANUAL,
                     notify_emails=d["notify_emails"],
@@ -665,7 +706,46 @@ def run_detail(request, pk):
         return render(request, "web/partials/run_status.html", ctx)
     ctx["tags"] = _run_tags_ctx(request, run)
     ctx["can_edit"] = _can_edit_tags(request.user, run)
+    ctx["disasters"] = _run_disasters_ctx(request, run)
     return render(request, "web/run_detail.html", ctx)
+
+
+def _run_disasters_ctx(request, run, editing=False, form=None):
+    return {
+        "run": run,
+        "can_edit": _can_edit_tags(request.user, run),
+        "editing": editing,
+        "form": form or RunDisastersForm(initial={"event_refs": run.event_refs}),
+        "own": [_ref_chip(r) for r in run.event_refs],
+        "inherited": [
+            _ref_chip(r)
+            for r in (run.stac_item.event_refs if run.stac_item_id else [])
+            if r not in run.event_refs and not r.startswith(("stac:", "corrstem:"))
+        ],
+    }
+
+
+def _ref_chip(r):
+    return {"ref": r, "label": event_refs.label(r)}
+
+
+@login_required
+def run_disasters(request, pk):
+    """Show / edit the disaster IDs a run is linked to besides its STAC item's (HTMX partial)."""
+    run = get_object_or_404(NotebookRun.objects.with_related(), pk=pk)
+    if not _can_edit_tags(request.user, run):
+        return HttpResponse("Only the requester or staff can edit disaster links.", status=403)
+    if request.method == "POST":
+        form = RunDisastersForm(request.POST)
+        if form.is_valid():
+            run.event_refs = form.cleaned_data["event_refs"]
+            run.save(update_fields=["event_refs", "updated_at"])
+            run.log(f"disaster links edited by {request.user.get_username()}")
+            return render(request, "web/partials/run_disasters.html", _run_disasters_ctx(request, run))
+        return render(
+            request, "web/partials/run_disasters.html", _run_disasters_ctx(request, run, True, form)
+        )
+    return render(request, "web/partials/run_disasters.html", _run_disasters_ctx(request, run, editing=True))
 
 
 def _can_edit_tags(user, run) -> bool:
@@ -793,6 +873,7 @@ def upload_new(request):
                 area=d["area"],
                 stac_item=d["stac_item"],
                 filters=tags,
+                event_refs=d["event_refs"],
                 user=request.user,
             )
         except UploadError as exc:
@@ -802,7 +883,7 @@ def upload_new(request):
             return redirect(run)
     ctx = {
         "form": form,
-        "detail_fields": [form["title"], form["summary"], form["description"]],
+        "detail_fields": [form["title"], form["summary"], form["description"], form["event_refs"]],
         "manifest": form.manifest,
         "countries": Country.objects.filter(areas__isnull=False).distinct().order_by("name"),
         "levels": sorted(set(AdminArea.objects.values_list("level", flat=True).distinct())),
@@ -843,6 +924,123 @@ def stac_picker_partial(request, slug):
     """Re-render the catalog → collection → item picker from its own inputs (HTMX)."""
     nb = get_object_or_404(AnalysisNotebook, slug=slug, is_active=True)
     return render(request, "web/partials/stac_picker.html", {"picker": stac_picker.build(nb, request.GET)})
+
+
+# ---------------------------------------------------------------------------
+# Disasters
+# ---------------------------------------------------------------------------
+
+
+def disaster_search(request):
+    """Find a disaster by any of its IDs; free text searches stored items and lists recent disasters."""
+    q = request.GET.get("q", "").strip()
+    ctx = {"q": q, "error": "", "items": [], "recent": _recent_disasters()}
+    if q and event_refs.parse(q):
+        disaster, error = _resolve_disaster(q)
+        if disaster is not None:
+            return redirect("web:disaster-detail", ref=disaster.key)
+        ctx["error"] = error or f"No disaster found for {q}."
+    elif q:
+        ctx["items"] = (
+            StacItem.objects.select_related("catalog")
+            .filter(
+                Q(title__icontains=q) | Q(description__icontains=q) | Q(country_codes__contains=[q.upper()])
+            )
+            .annotate(run_count=Count("runs", distinct=True))
+            .order_by("-occurred_at")[:30]
+        )
+    return render(request, "web/disaster_search.html", ctx)
+
+
+def _recent_disasters(limit=20):
+    """Stored items that have analyses, newest first: entry points to disaster pages."""
+    items = (
+        StacItem.objects.filter(runs__isnull=False)
+        .annotate(run_count=Count("runs", distinct=True))
+        .order_by("-occurred_at", "-first_seen_at")
+        .distinct()[:limit]
+    )
+    out = []
+    for item in items:
+        ref = next((r for r in item.event_refs if not r.startswith(("stac:", "corr:", "corrstem:"))), None)
+        out.append({"item": item, "ref": ref or f"stac:{item.collection}/{item.item_id}"})
+    return out
+
+
+def disaster_detail(request, ref):
+    disaster, error = _resolve_disaster(ref)
+    if disaster is None:
+        messages.error(request, error or f"No disaster found for {ref}.")
+        return redirect(f"{reverse('web:disaster-search')}?{urlencode({'q': ref})}")
+    if disaster.key != ref:
+        return redirect("web:disaster-detail", ref=disaster.key)
+    runs = D.runs_for(disaster, NotebookRun.objects.with_related()).order_by("-created_at")
+    can_link = request.user.is_authenticated
+    ctx = {
+        "d": disaster,
+        "runs": runs,
+        "possible_runs": D.possibly_related_runs(disaster) if can_link else [],
+        "id_chips": [
+            {"ref": r, "label": event_refs.label(r), "url": event_refs.external_url(r)}
+            for r in disaster.headline_refs
+        ],
+        "templates": AnalysisNotebook.objects.filter(is_active=True) if request.user.is_authenticated else [],
+        "is_staff": request.user.is_staff,
+    }
+    return render(request, "web/disaster_detail.html", ctx)
+
+
+@staff_required
+@require_POST
+def disaster_override(request):
+    """Confirm or remove an item from a disaster (or undo that)."""
+    key, item_ref, verdict = (request.POST.get(k, "") for k in ("key", "item_ref", "verdict"))
+    catalog = get_object_or_404(StacCatalog, pk=request.POST.get("catalog"))
+    lookup = {"catalog": catalog, "disaster_ref": key, "item_ref": item_ref}
+    if verdict in LinkVerdict.values:
+        EventLinkOverride.objects.update_or_create(
+            **lookup, defaults={"verdict": verdict, "created_by": request.user}
+        )
+    else:
+        EventLinkOverride.objects.filter(**lookup).delete()
+    D.invalidate()
+    messages.success(request, "Saved the correction.")
+    return redirect("web:disaster-detail", ref=key)
+
+
+@login_required
+@require_POST
+def disaster_link_run(request):
+    key = request.POST.get("key", "")
+    run = get_object_or_404(NotebookRun, pk=request.POST.get("run"))
+    if not _can_edit_tags(request.user, run):
+        return HttpResponse("Only the requester or staff can link this analysis.", status=403)
+    disaster, error = _resolve_disaster(key)
+    if disaster is None:
+        messages.error(request, error or "That disaster could not be found.")
+        return redirect("web:disaster-search")
+    run.event_refs = list(dict.fromkeys([*run.event_refs, *D.link_refs(disaster)]))
+    run.save(update_fields=["event_refs", "updated_at"])
+    run.log(f"linked to disaster {disaster.key} by {request.user.get_username()}")
+    messages.success(request, f"Linked {run.title} to this disaster.")
+    return redirect("web:disaster-detail", ref=disaster.key)
+
+
+@login_required
+def disaster_new_run(request):
+    """Start a run for a disaster: stores its anchor item and opens the run form with it selected."""
+    key = request.GET.get("key", "")
+    nb = _visible_template(request, request.GET.get("template", ""))
+    disaster, error = _resolve_disaster(key)
+    if disaster is None:
+        messages.error(request, error or "That disaster could not be found.")
+        return redirect("web:disaster-search")
+    params = {"disaster": disaster.key}
+    catalog = StacCatalog.objects.filter(pk=disaster.catalog_id).first()
+    if catalog is not None and disaster.anchor.item.get("id"):
+        item, _, _ = upsert_item(catalog, disaster.anchor.item, collection=disaster.anchor.collection)
+        params["stac_item"] = item.pk
+    return redirect(f"{reverse('web:run-new', args=[nb.slug])}?{urlencode(params)}")
 
 
 # ---------------------------------------------------------------------------

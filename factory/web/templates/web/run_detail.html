@@ -5,6 +5,7 @@
 {% include "web/partials/run_status.html" %}
 {% if run.is_upload or run.summary or run.description %}{% include "web/partials/run_details.html" %}{% endif %}
 {% include "web/partials/run_tags.html" with run=tags.run can_edit=tags.can_edit editing=tags.editing tag_fields=tags.tag_fields %}
+{% include "web/partials/run_disasters.html" with run=disasters.run can_edit=disasters.can_edit editing=disasters.editing form=disasters.form own=disasters.own inherited=disasters.inherited %}
 {% endblock %}
 {% block scripts %}
 <script>

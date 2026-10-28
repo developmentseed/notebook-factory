@@ -13,7 +13,8 @@
 </div>
 <div class="browse">
   <form class="filters" method="get" hx-get="{% url 'web:browse' %}" hx-target="#results" hx-trigger="change, keyup changed delay:400ms from:#q" hx-push-url="true">
-    <input id="q" type="search" name="q" placeholder="Search analyses, countries, STAC items…" value="{{ filters.q }}">
+    <input id="q" type="search" name="q" placeholder="Search analyses, countries, disaster IDs…" value="{% if filters.q %}{{ filters.q }}{% elif filters.disaster and not request.GET.disaster %}{{ filters.disaster }}{% endif %}">
+    {% if request.GET.disaster %}<input type="hidden" name="disaster" value="{{ request.GET.disaster }}">{% endif %}
     <fieldset><legend>Country</legend>
       <label><input type="radio" name="country" value="" {% if not filters.country %}checked{% endif %}> All</label>
       {% for c in countries %}<label><input type="radio" name="country" value="{{ c.iso3 }}" {% if filters.country == c.iso3 %}checked{% endif %}> {{ c.name }}</label>{% endfor %}

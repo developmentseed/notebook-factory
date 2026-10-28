@@ -66,6 +66,8 @@
       <div class="param-grid">{% include "web/partials/tag_inputs.html" %}</div>{% endif %}
     </div>
     {% endif %}
+    {% if stac_item and not nb.requires_stac_item %}<input type="hidden" name="stac_item" value="{{ stac_item.pk }}"><p class="small">About STAC item <a href="{{ stac_item.get_absolute_url }}">{{ stac_item|truncatechars:60 }}</a>.</p>{% endif %}
+    {% include "web/partials/form_field.html" with field=form.event_refs %}
     <label>Also notify (emails, comma separated) <input type="text" name="notify_emails" value="{{ form.notify_emails.value|default:'' }}" placeholder="colleague@example.org"></label>
     {% if form.notify_emails.errors %}<p class="error">{{ form.notify_emails.errors|join:" " }}</p>{% endif %}
     <div class="review panel">

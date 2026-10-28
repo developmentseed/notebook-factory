@@ -1,4 +1,14 @@
 {% load humanize web_extras %}
+{% if filters.disaster %}
+<div class="disaster-banner">
+  {% if filters.disaster_obj %}
+  <span>Analyses for disaster <strong>{{ filters.disaster_obj.title }}</strong> <span class="muted small">({{ filters.disaster }})</span></span>
+  <a class="btn small" href="{% url 'web:disaster-detail' filters.disaster_obj.key %}">Disaster page →</a>
+  {% else %}
+  <span>Analyses linked to <code>{{ filters.disaster }}</code></span>
+  {% endif %}
+</div>
+{% endif %}
 <div class="results-head"><span>{{ total }} analys{{ total|pluralize:"is,es" }}</span></div>
 {% if page.object_list %}
 <div class="cards">

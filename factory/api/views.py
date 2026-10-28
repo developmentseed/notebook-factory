@@ -5,7 +5,7 @@ from django.views.decorators.cache import cache_page
 from django_filters import rest_framework as filters
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, status, viewsets
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import (
     SAFE_METHODS,
@@ -18,6 +18,8 @@ from rest_framework.response import Response
 
 from factory.catalog import facets
 from factory.catalog.models import AdminArea, Country, Facet, FacetOption
+from factory.events import disasters as D
+from factory.events import refs as event_refs
 from factory.events.models import StacCatalog, StacItem, TriggerRule
 from factory.events.stac_client import StacClientError
 from factory.notebooks import templates as T
@@ -251,10 +253,26 @@ class RunFilter(filters.FilterSet):
     batch = filters.UUIDFilter(field_name="batch_id")
     since = filters.IsoDateTimeFilter(field_name="created_at", lookup_expr="gte")
     until = filters.IsoDateTimeFilter(field_name="created_at", lookup_expr="lte")
+    disaster = filters.CharFilter(
+        method="filter_disaster",
+        help_text="Any disaster ID (GLIDE, go:7464, EMSR798, corr_id…): runs about that disaster",
+    )
 
     class Meta:
         model = NotebookRun
         fields = []
+
+    def filter_disaster(self, qs, name, value):
+        from django.db.models import Q
+
+        try:
+            disaster = D.resolve(value)
+        except D.DisasterError:
+            disaster = None
+        if disaster is not None:
+            return D.runs_for(disaster, qs)
+        refs = event_refs.parse(value) or [value]
+        return qs.filter(Q(event_refs__overlap=refs) | Q(stac_item__event_refs__overlap=refs)).distinct()
 
     def filter_country(self, qs, name, value):
         value = value.upper()
@@ -309,6 +327,7 @@ class NotebookRunViewSet(
                     notify_emails=d["notify_emails"],
                     stac_item=d.get("stac_item"),
                     filters=d["filters"],
+                    event_refs=d["event_refs"],
                 )
                 return Response(S.RunBatchSerializer(batch).data, status=status.HTTP_202_ACCEPTED)
             run = create_run(
@@ -317,6 +336,7 @@ class NotebookRunViewSet(
                 area=d.get("area"),
                 stac_item=d.get("stac_item"),
                 filters=d["filters"],
+                event_refs=d["event_refs"],
                 user=request.user,
                 trigger=TriggerKind.API,
                 notify_emails=d["notify_emails"],
@@ -351,6 +371,7 @@ class NotebookRunViewSet(
                 area=d.get("area"),
                 stac_item=d.get("stac_item"),
                 filters=d["filters"],
+                event_refs=d["event_refs"],
                 user=request.user,
             )
         except UploadError as exc:
@@ -371,6 +392,26 @@ class NotebookRunViewSet(
         return Response(
             S.NotebookRunSerializer(run, context={"request": request}).data, status=status.HTTP_202_ACCEPTED
         )
+
+
+@extend_schema(
+    parameters=[{"name": "q", "in": "query", "required": True, "schema": {"type": "string"}}],
+    responses=S.DisasterSerializer,
+)
+@api_view(["GET"])
+def disaster_resolve(request):
+    """The disaster named by any of its IDs: every source's item grouped as it, and the runs about it."""
+    q = request.query_params.get("q", "")
+    if not event_refs.parse(q):
+        return Response({"detail": "Not a disaster ID we recognise."}, status=400)
+    try:
+        disaster = D.resolve(q)
+    except D.DisasterError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+    if disaster is None:
+        return Response({"detail": "No disaster found."}, status=404)
+    run_ids = D.runs_for(disaster).order_by("-created_at").values_list("pk", flat=True)
+    return Response(S.DisasterSerializer(disaster, context={"run_ids": list(run_ids)}).data)
 
 
 class RunBatchViewSet(viewsets.ReadOnlyModelViewSet):

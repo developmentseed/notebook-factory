@@ -3,7 +3,7 @@ Catalog profiles: how the derived StacItem fields are read from a raw STAC item.
 
 `generic` uses only core STAC properties. `montandon` also reads the monty:*
 extension (correlation id, ISO3 country codes), which is what country filters
-on trigger rules match against. Filter options (e.g. hazards) are not part of
+on trigger rules match against, and the source ids that disaster search uses. Filter options (e.g. hazards) are not part of
 the profile: any catalog's items are tagged via each filter's `stac_property`
 (see factory.catalog.facets.for_stac_item).
 """
@@ -18,6 +18,7 @@ from django.contrib.gis.geos import GEOSGeometry
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
+from . import refs
 from .models import CatalogProfile
 
 
@@ -55,6 +56,7 @@ def _generic(item: dict) -> dict:
         "bbox": item.get("bbox"),
         "geom": _geom(item),
         "raw": item,
+        "event_refs": refs.item_refs(item, monty=False),
     }
 
 
@@ -65,6 +67,7 @@ def _montandon(item: dict) -> dict:
         {
             "correlation_id": props.get("monty:corr_id") or "",
             "country_codes": [c.upper() for c in (props.get("monty:country_codes") or [])],
+            "event_refs": refs.item_refs(item, monty=True),
         }
     )
     return fields
