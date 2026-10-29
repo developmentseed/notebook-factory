@@ -137,3 +137,16 @@ progress { width: 100%; height: 8px; accent-color: var(--orange); }
 .schema-actions { display: flex; gap: .4rem; flex-wrap: wrap; }
 fieldset.plain { border: 0; padding: 0; margin: 0; min-width: 0; }
 .preview { margin-top: 1rem; }
+
+/* Disasters */
+.topbar-search input { width: 17rem; max-width: 30vw; padding: .35rem .6rem; font-size: .85rem; }
+@media (max-width: 900px) { .topbar-search { display: none; } }
+.disaster-banner { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; background: var(--orange-soft); border-radius: var(--radius); padding: .6rem .9rem; margin-bottom: .8rem; font-size: .92rem; }
+.id-chips { display: flex; flex-wrap: wrap; gap: .35rem; margin: .4rem 0 1rem; }
+.id-chip { display: inline-block; padding: .15rem .6rem; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); font-size: .8rem; color: var(--ink-2); }
+a.id-chip:hover { text-decoration: none; border-color: var(--muted-2); }
+.disaster-map { height: 280px; border-radius: var(--radius); border: 1px solid var(--line); margin-bottom: 1rem; }
+.sources td .score { font-variant-numeric: tabular-nums; }
+.sources details summary { cursor: pointer; color: var(--muted); font-size: .85rem; }
+.sources form.inline button { font-size: .8rem; }
+.disaster-list li { margin: .35rem 0; }

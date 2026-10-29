@@ -21,5 +21,6 @@ urlpatterns = [
     path("schema/", SpectacularAPIView.as_view(), name="schema"),
     path("docs/", SpectacularSwaggerView.as_view(url_name="api:schema"), name="docs"),
     path("auth/", include("rest_framework.urls")),
+    path("disasters/resolve/", views.disaster_resolve, name="disaster-resolve"),
     path("", include(router.urls)),
 ]

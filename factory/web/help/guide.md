@@ -36,7 +36,7 @@ The **Analyses** page ([`/`]({{BASE_URL}})) lists runs as cards, newest first. B
 
 The sidebar narrows the list. Results update as you type or click:
 
-* **Search** matches the template title, the run's title, summary and description, the area and country, and the STAC item's title, id and correlation id.
+* **Search** matches the template title, the run's title, summary and description, the area and country, and the STAC item's title, id and correlation id. If you type a disaster ID (a GLIDE number, `go:7464`, `EMSR798`…), the list shows that disaster's analyses instead (see [Finding a disaster](#finding-a-disaster)).
 * **Country** limits results to one country.
 * **Filters** such as *Hazard* or *Use case* (whichever staff have set to show in browse). Ticking several options of the same filter shows runs with *any* of them. Selections in different filters must *all* match.
 * **Source** is a specific template or *Uploaded notebooks*.
@@ -47,6 +47,34 @@ The sidebar narrows the list. Results update as you type or click:
 The URL updates as you filter, so you can bookmark or share a filtered view.
 
 Click a card to open it. Published runs open in the viewer. Runs still in progress, and failed runs, open the run page.
+
+## Finding a disaster
+
+A disaster is reported by many sources, each with its own ID. **Disasters** ([`/disasters/`]({{BASE_URL}}disasters/)) and the search box in the top bar take any of these IDs and open one page for the disaster:
+
+| You have | Type |
+|---|---|
+| GLIDE number | `EQ-2025-000043-MMR` (or without the country, `EQ-2025-000043`) |
+| IFRC GO emergency | `go:7464`, or the GO URL `https://go.ifrc.org/emergencies/7464` |
+| Copernicus EMS activation | `EMSR798`, or its rapidmapping URL |
+| EM-DAT | `2025-0223-MMR` |
+| USGS event | `us7000pn9s`, or its event page URL |
+| GDACS event | `EQ1474477`, or a GDACS report URL with `eventid=` |
+| Other Montandon sources | `idmc-idu:30892`, `pdc:393198`, … (source name, colon, its event id) |
+| monty:corr_id | `20250328-MMR-1007580-GH0101-1-GCDB` |
+| A STAC item | its Montandon item id or URL, or `collection/item-id` |
+
+No single ID ties a disaster together in Montandon. Sources often have different `monty:corr_id`s for the same event, and GDACS adds its episode number to its own. So the page is put together on the fly. It finds the item you named, then searches the catalog's event collections for the same hazard in the same countries, a few days to a few months around it (depending on the hazard). Items join the disaster when they share a corr_id (without the episode), link to each other, or are close in time and place. GLIDE, EM-DAT, IFRC GO and IDMC only give a date and a point somewhere in the country, so for these the date counts and the distance hardly does. Every ID of the same disaster opens the same page.
+
+The page shows:
+
+* the IDs of every source reporting the disaster, linking to the source's own site where there is one;
+* **Analyses**: runs whose STAC item belongs to the disaster, or that are linked to one of its IDs;
+* **New analysis for this disaster**: opens a template's run form with the disaster's main item as the STAC item and its ID filled in;
+* **Possibly related analyses** (logged in): runs not linked to any disaster that were made for the same countries and hazard around that time. **Link to this disaster** adds the disaster's ID to the run;
+* **Sources**: the grouped items, with how sure the match is and why, and below them items that are **possibly the same disaster**. *Staff* can remove an item that doesn't belong (**Not the same**) or confirm a possible one (**Same disaster**). Corrections apply to everyone and can be undone.
+
+Free text (e.g. *Myanmar earthquake*) searches only the STAC items already stored here, because the catalog can't be searched by text. Results are cached for an hour. If the catalog can't be reached, the page falls back to stored items and says so.
 
 ## Viewing an analysis
 
@@ -75,6 +103,10 @@ A run you started (or any run, if you are staff) can be edited from its page:
 
 * **Details**: title, summary and a Markdown description. These replace the template's defaults on cards and in search.
 * **Tags**: the run's filter options, for example correcting its hazard. Tags set by hand always win over tags derived automatically (see [Managing filters](#managing-filters)).
+
+### Linking to disasters
+
+The **Disasters** panel on the run page shows the disaster IDs of the run's STAC item and any added by hand. The requester or staff can click **Edit disaster links** to add IDs (one per line, in any form the disaster search accepts). This is how runs without a STAC item, such as uploads, are found from a disaster's page. The run form and the upload form have the same **Disaster IDs** field.
 
 ### Batches
 
@@ -330,8 +362,8 @@ A filter can't be deleted while a run, template, item or trigger rule uses it. R
 |---|---|
 | **Name**, **Slug** | The slug is used in the API (`stac_catalog`, `catalog__slug`). |
 | **URL** | The STAC API root, e.g. `https://earth-search.aws.element84.com/v1`. |
-| **API key** | Optional. Sent as `Authorization: Bearer <key>`. It is never shown again. Leave the field blank when editing to keep the stored key, or tick *remove* to clear it. It is stored unencrypted. |
-| **Profile** | `generic` reads core STAC properties only. `montandon` also reads `monty:corr_id` (shown as the correlation id) and `monty:country_codes`, which are used by trigger-rule country filters and to preselect a country. |
+| **API key** | Optional. Sent as `Authorization: Bearer <key>`. Disaster pages use it too, to look items up live. It is never shown again. Leave the field blank when editing to keep the stored key, or tick *remove* to clear it. It is stored unencrypted. |
+| **Profile** | `generic` reads core STAC properties only. `montandon` also reads `monty:corr_id` (shown as the correlation id) and `monty:country_codes`, which are used by trigger-rule country filters and to preselect a country, and the source ids (`monty:src_event_id`, GLIDE numbers) that disaster pages are built from. Disaster pages look items up live in the first active Montandon catalog. |
 | **Write-back enabled** | Lets templates with `supports_writeback` push results to this catalog (needs a key with write rights). Off by default. |
 | **Active** | Inactive catalogs are hidden from pickers and the poller. |
 
@@ -558,7 +590,8 @@ Templates, runs and STAC items accept any filter key: `?hazard=flood&hazard=cycl
 | Endpoint | Methods | Notes |
 |---|---|---|
 | `/api/templates/` | GET | Lookup by slug. Includes the parameter schema and defaults. Filter: `requires_stac_item`, `requires_area`. |
-| `/api/runs/` | GET, POST | Filter: `notebook`, `country`, `area`, `stac_item`, `catalog`, `status`, `trigger`, `batch`, `since`, `until`. |
+| `/api/runs/` | GET, POST | Filter: `notebook`, `country`, `area`, `stac_item`, `catalog`, `status`, `trigger`, `batch`, `since`, `until`, `disaster` (any disaster ID). POST and upload accept `event_refs`, a list of disaster IDs. Runs return `event_refs` (their own) and `disaster_refs` (with their STAC item's). |
+| `/api/disasters/resolve/?q=<id>` | GET | The disaster named by any of its IDs: `key`, `title`, `countries`, `start`/`end`, `id_refs`, the grouped `members`, `possible` matches and the ids of its `runs`. 400 if the ID isn't recognised, 404 if nothing is found, 502 if the catalog is unreachable. |
 | `/api/runs/<id>/` | GET | Adds `log` and `notify_emails`. |
 | `/api/runs/<id>/cancel/`, `/retry/` | POST | Logged in. |
 | `/api/runs/upload/` | POST (multipart) | Staff. Publishes a notebook without executing it. |

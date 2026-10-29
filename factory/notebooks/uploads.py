@@ -185,6 +185,7 @@ def create_upload(
     area=None,
     stac_item=None,
     filters: dict[str, list[str]] | None = None,
+    event_refs: list[str] | None = None,
     user=None,
     enqueue: bool = True,
 ) -> NotebookRun:
@@ -208,6 +209,7 @@ def create_upload(
             upload_path=manifest.notebook,
             area=area,
             stac_item=stac_item,
+            event_refs=list(event_refs or []),
             triggered_by=user if getattr(user, "is_authenticated", False) else None,
             notify_emails=emails,
         )
@@ -235,6 +237,7 @@ def retry_upload(run: NotebookRun, user=None) -> NotebookRun:
         area=run.area,
         stac_item=run.stac_item,
         filters=facets.manual_tags(run),
+        event_refs=run.event_refs,
         user=user or run.triggered_by,
     )
 

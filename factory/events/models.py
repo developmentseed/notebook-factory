@@ -5,7 +5,10 @@ into automatic notebook runs.
 
 from __future__ import annotations
 
+from django.conf import settings
 from django.contrib.gis.db import models as gis_models
+from django.contrib.postgres.fields import ArrayField
+from django.contrib.postgres.indexes import GinIndex
 from django.db import models
 from django.urls import reverse
 
@@ -23,8 +26,9 @@ class StacCatalog(models.Model):
     url = models.URLField(
         max_length=400, help_text="STAC API root, e.g. https://earth-search.aws.element84.com/v1"
     )
-    api_key = models.CharField(
-        max_length=500, blank=True, help_text="Sent as 'Authorization: Bearer <key>' when set"
+    api_key = models.TextField(
+        blank=True,
+        help_text="Sent as 'Authorization: Bearer <key>' when set (Montandon tokens are long JWTs)",
     )
     profile = models.CharField(
         max_length=20,
@@ -93,6 +97,12 @@ class StacItem(models.Model):
     bbox = models.JSONField(null=True, blank=True)
     geom = gis_models.GeometryField(srid=4326, null=True, blank=True)
     raw = models.JSONField(default=dict, blank=True, help_text="The STAC item as fetched")
+    event_refs = ArrayField(
+        models.CharField(max_length=250),
+        default=list,
+        blank=True,
+        help_text="IDs naming the disaster, e.g. glide:EQ-2025-000043-MMR (see factory.events.refs)",
+    )
     first_seen_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -103,6 +113,7 @@ class StacItem(models.Model):
                 fields=["catalog", "collection", "item_id"], name="uniq_stacitem_catalog_collection_item"
             )
         ]
+        indexes = [GinIndex(fields=["event_refs"], name="stacitem_event_refs_gin")]
 
     def __str__(self) -> str:
         return self.title or self.item_id
@@ -241,3 +252,37 @@ class ItemRuleLink(models.Model):
 
     def __str__(self) -> str:
         return f"{self.rule_id} → {self.item_id}"
+
+
+class LinkVerdict(models.TextChoices):
+    SAME = "same", "Same disaster"
+    DIFFERENT = "different", "Not the same disaster"
+
+
+class EventLinkOverride(models.Model):
+    """A staff correction to the automatic grouping of a disaster's items.
+
+    `disaster_ref` is any ref of the disaster as it was shown (usually its key);
+    `item_ref` is the primary ref of the item that was confirmed or removed. A
+    verdict applies whenever the disaster being built carries `disaster_ref`.
+    """
+
+    catalog = models.ForeignKey(StacCatalog, on_delete=models.CASCADE, related_name="link_overrides")
+    disaster_ref = models.CharField(max_length=250, db_index=True)
+    item_ref = models.CharField(max_length=250, db_index=True)
+    verdict = models.CharField(max_length=10, choices=LinkVerdict.choices)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["catalog", "disaster_ref", "item_ref"], name="uniq_eventlinkoverride"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.item_ref} {self.get_verdict_display().lower()} as {self.disaster_ref}"

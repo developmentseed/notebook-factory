@@ -13,6 +13,7 @@
   <a class="brand" href="{% url 'web:browse' %}"><span class="brand-mark">M</span><span>{{ SITE_NAME }}</span></a>
   <nav>
     <a href="{% url 'web:browse' %}" class="{% if request.resolver_match.url_name == 'browse' %}active{% endif %}">Analyses</a>
+    <a href="{% url 'web:disaster-search' %}" class="{% if 'disaster' in request.resolver_match.url_name %}active{% endif %}">Disasters</a>
     <a href="{% url 'web:template-list' %}" class="{% if 'template' in request.resolver_match.url_name %}active{% endif %}">Templates</a>
     <a href="{% url 'web:stac-item-list' %}" class="{% if 'stac-item' in request.resolver_match.url_name %}active{% endif %}">STAC items</a>
     {% if user.is_staff %}<a href="{% url 'web:upload-new' %}" class="{% if 'upload' in request.resolver_match.url_name %}active{% endif %}">Upload</a>{% endif %}
@@ -22,6 +23,9 @@
     <a href="{% url 'api:docs' %}">API</a>
     <a href="{% url 'web:help' %}" class="{% if request.resolver_match.url_name == 'help' %}active{% endif %}">Help</a>
   </nav>
+  <form class="topbar-search" method="get" action="{% url 'web:disaster-search' %}" role="search">
+    <input type="search" name="q" aria-label="Find a disaster" placeholder="Find a disaster: GLIDE, EMSR, go:7464…" value="{% if 'disaster' in request.resolver_match.url_name %}{{ request.GET.q }}{% endif %}">
+  </form>
   <div class="topbar-right">
     {% if user.is_authenticated %}
       <a class="bell" href="{% url 'web:notifications' %}" title="Notifications">🔔{% if unread_notifications %}<span class="badge">{{ unread_notifications }}</span>{% endif %}</a>

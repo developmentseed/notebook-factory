@@ -1,6 +1,7 @@
 from django import forms
 
 from factory.catalog.models import AdminArea, Country, Facet, FacetOption
+from factory.events import refs as event_refs
 from factory.events.matching import fetch_item
 from factory.events.models import CatalogProfile, StacCatalog, StacItem
 from factory.events.stac_client import StacClientError
@@ -32,6 +33,35 @@ def resolve_stac_item(data) -> StacItem | None:
     return data.get("stac_item")
 
 
+class EventRefsField(forms.CharField):
+    """Disaster IDs typed one per line or comma separated (GLIDE, EMSR, go:7464, corr_id…) → refs."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("required", False)
+        kwargs.setdefault("label", "Disaster IDs")
+        kwargs.setdefault(
+            "help_text",
+            "GLIDE number, IFRC GO emergency (go:7464), EMSR activation, monty:corr_id… one per line",
+        )
+        kwargs.setdefault("widget", forms.Textarea(attrs={"rows": 2}))
+        super().__init__(**kwargs)
+
+    def prepare_value(self, value):
+        return "\n".join(value) if isinstance(value, list | tuple) else value
+
+    def clean(self, value):
+        text = super().clean(value) or ""
+        out, unknown = [], []
+        for token in (t.strip() for t in text.replace(",", "\n").splitlines()):
+            if not token:
+                continue
+            parsed = event_refs.parse(token)
+            (out.extend(parsed) if parsed else unknown.append(token))
+        if unknown:
+            raise forms.ValidationError(f"Not a disaster ID we recognise: {', '.join(unknown)}")
+        return list(dict.fromkeys(out))
+
+
 class RunRequestForm(forms.Form):
     """Area, STAC item + notification part of the run wizard. Parameter fields are added dynamically."""
 
@@ -45,6 +75,7 @@ class RunRequestForm(forms.Form):
     stac_catalog = forms.ModelChoiceField(queryset=StacCatalog.objects.filter(is_active=True), required=False)
     stac_collection = forms.CharField(required=False, max_length=120)
     stac_item_id = forms.CharField(required=False, max_length=200)
+    event_refs = EventRefsField()
     notify_emails = forms.CharField(required=False, label="Also notify (emails, comma separated)")
 
     def __init__(self, notebook, *args, **kwargs):
@@ -110,6 +141,7 @@ class UploadForm(forms.Form):
     stac_catalog = forms.ModelChoiceField(queryset=StacCatalog.objects.filter(is_active=True), required=False)
     stac_collection = forms.CharField(required=False, max_length=120)
     stac_item_id = forms.CharField(required=False, max_length=200)
+    event_refs = EventRefsField()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -436,3 +468,7 @@ class TemplateSecretForm(forms.ModelForm):
         if from_env:
             data["value"] = ""  # switching to the environment drops the stored value
         return data
+
+
+class RunDisastersForm(forms.Form):
+    event_refs = EventRefsField(help_text="Besides the STAC item's. One per line; empty removes them.")

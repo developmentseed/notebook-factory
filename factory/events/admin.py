@@ -2,7 +2,7 @@ from django.contrib import admin, messages
 from django.contrib.gis import admin as gis_admin
 from django.utils import timezone
 
-from .models import ItemRuleLink, PollerState, StacCatalog, StacItem, TriggerRule
+from .models import EventLinkOverride, ItemRuleLink, PollerState, StacCatalog, StacItem, TriggerRule
 from .stac_client import StacClientError
 
 
@@ -85,3 +85,11 @@ class PollerStateAdmin(admin.ModelAdmin):
 class ItemRuleLinkAdmin(admin.ModelAdmin):
     list_display = ("item", "rule", "fired_at")
     raw_id_fields = ("item",)
+
+
+@admin.register(EventLinkOverride)
+class EventLinkOverrideAdmin(admin.ModelAdmin):
+    list_display = ("disaster_ref", "item_ref", "verdict", "catalog", "created_by", "created_at")
+    list_filter = ("verdict", "catalog")
+    search_fields = ("disaster_ref", "item_ref")
+    readonly_fields = ("created_at",)

@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 from factory.catalog.facets import group_options
 from factory.catalog.models import AdminArea, Country, Facet, FacetOption
+from factory.events import refs as event_refs
 from factory.events.matching import fetch_item
 from factory.events.models import StacCatalog, StacItem, TriggerRule
 from factory.events.stac_client import StacClientError
@@ -215,6 +216,7 @@ class StacItemSerializer(serializers.ModelSerializer):
             "occurred_at",
             "ended_at",
             "bbox",
+            "event_refs",
             "stac_url",
             "first_seen_at",
             "updated_at",
@@ -237,6 +239,12 @@ class NotebookRunSerializer(serializers.ModelSerializer):
     area = AdminAreaSerializer(read_only=True)
     filters = FiltersField()
     stac_item = StacItemSerializer(read_only=True)
+    disaster_refs = serializers.ListField(
+        source="all_event_refs",
+        child=serializers.CharField(),
+        read_only=True,
+        help_text="The run's disaster refs plus its STAC item's",
+    )
     triggered_by = serializers.CharField(source="triggered_by.username", read_only=True, default=None)
     title = serializers.CharField(read_only=True)
     subtitle = serializers.CharField(read_only=True)
@@ -261,6 +269,8 @@ class NotebookRunSerializer(serializers.ModelSerializer):
             "area",
             "filters",
             "stac_item",
+            "event_refs",
+            "disaster_refs",
             "trigger",
             "triggered_by",
             "batch",
@@ -300,6 +310,32 @@ class NotebookRunDetailSerializer(NotebookRunSerializer):
         fields = NotebookRunSerializer.Meta.fields + ["log", "notify_emails"]
 
 
+class EventRefsField(serializers.ListField):
+    """Disaster IDs in any form `factory.events.refs.parse` accepts, stored as refs."""
+
+    child = serializers.CharField()
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("required", False)
+        kwargs.setdefault("default", list)
+        kwargs.setdefault(
+            "help_text",
+            'Disasters this run is about, e.g. ["EQ-2025-000043-MMR", "go:7464", "EMSR798"]',
+        )
+        super().__init__(**kwargs)
+
+    def to_internal_value(self, data):
+        if isinstance(data, str):  # multipart forms send one string
+            data = [t for t in data.replace("\n", ",").split(",") if t.strip()]
+        out, unknown = [], []
+        for token in super().to_internal_value(data):
+            parsed = event_refs.parse(token)
+            (out.extend(parsed) if parsed else unknown.append(token))
+        if unknown:
+            raise serializers.ValidationError(f"Not a disaster ID we recognise: {', '.join(unknown)}")
+        return list(dict.fromkeys(out))
+
+
 class RunCreateSerializer(serializers.Serializer):
     """POST /api/runs/ — one area, several areas, or a whole admin level of a country.
 
@@ -328,6 +364,7 @@ class RunCreateSerializer(serializers.Serializer):
     stac_collection = serializers.CharField(required=False)
     stac_item_id = serializers.CharField(required=False)
     notify_emails = serializers.ListField(child=serializers.EmailField(), required=False, default=list)
+    event_refs = EventRefsField()
     filters = serializers.DictField(
         child=serializers.ListField(child=serializers.CharField()),
         required=False,
@@ -393,6 +430,7 @@ class UploadCreateSerializer(serializers.Serializer):
     )
     stac_collection = serializers.CharField(required=False)
     stac_item_id = serializers.CharField(required=False)
+    event_refs = EventRefsField()
     filters = serializers.JSONField(
         binary=True,
         required=False,
@@ -504,3 +542,36 @@ class TemplateUpdateSerializer(serializers.Serializer):
         if not isinstance(value, dict) or not all(isinstance(v, list) for v in value.values()):
             raise serializers.ValidationError('Expected an object of lists, e.g. {"hazard": ["flood"]}.')
         return _validate_filter_keys(value)
+
+
+class DisasterMemberSerializer(serializers.Serializer):
+    ref = serializers.CharField()
+    source = serializers.CharField()
+    collection = serializers.CharField()
+    item_id = serializers.CharField()
+    title = serializers.CharField()
+    start = serializers.DateTimeField(allow_null=True)
+    countries = serializers.ListField(child=serializers.CharField())
+    magnitude = serializers.FloatField(allow_null=True)
+    score = serializers.FloatField()
+    reason = serializers.CharField()
+    stac_url = serializers.CharField()
+
+
+class DisasterSerializer(serializers.Serializer):
+    key = serializers.CharField(help_text="Canonical ref; /disasters/<key>/ in the web UI")
+    title = serializers.CharField()
+    countries = serializers.ListField(child=serializers.CharField())
+    hazard_codes = serializers.ListField(child=serializers.CharField())
+    start = serializers.DateTimeField(allow_null=True)
+    end = serializers.DateTimeField(allow_null=True)
+    id_refs = serializers.ListField(child=serializers.CharField(), help_text="One ref per source id")
+    refs = serializers.ListField(child=serializers.CharField(), help_text="Every ref; runs match on these")
+    anchor = DisasterMemberSerializer()
+    members = DisasterMemberSerializer(many=True)
+    possible = DisasterMemberSerializer(many=True)
+    error = serializers.CharField()
+    runs = serializers.SerializerMethodField()
+
+    def get_runs(self, obj) -> list[str]:
+        return [str(pk) for pk in self.context.get("run_ids", [])]

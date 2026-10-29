@@ -1,0 +1,16 @@
+<tr>
+  <td>{{ label }}</td>
+  <td><a href="{{ m.link }}" rel="noopener">{{ m.title|truncatechars:70 }}</a>{% if m.magnitude %} <span class="muted small">M{{ m.magnitude }}</span>{% endif %}<br><code class="small muted">{{ m.ref }}</code></td>
+  <td class="small">{{ m.start|date:"Y-m-d H:i"|default:"—" }}</td>
+  <td class="small"><span class="score">{{ m.score|floatformat:2 }}</span> · {{ m.reason }}</td>
+  {% if is_staff %}
+  <td>{% if m.ref != d.anchor.ref %}
+    <form method="post" action="{% url 'web:disaster-override' %}" class="inline">{% csrf_token %}
+      <input type="hidden" name="key" value="{{ d.key }}"><input type="hidden" name="catalog" value="{{ d.catalog_id }}"><input type="hidden" name="item_ref" value="{{ m.ref }}">
+      {% if removed or m.override == "same" %}<button class="link small" name="verdict" value="">Undo</button>
+      {% elif possible %}<button class="link small" name="verdict" value="same">Same disaster</button>
+      {% else %}<button class="link small" name="verdict" value="different">Not the same</button>{% endif %}
+    </form>
+  {% endif %}</td>
+  {% endif %}
+</tr>

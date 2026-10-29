@@ -11,6 +11,8 @@ import os
 import uuid
 
 from django.conf import settings
+from django.contrib.postgres.fields import ArrayField
+from django.contrib.postgres.indexes import GinIndex
 from django.core.validators import RegexValidator
 from django.db import models
 from django.urls import reverse
@@ -374,6 +376,12 @@ class NotebookRun(models.Model):
     stac_item = models.ForeignKey(
         "events.StacItem", null=True, blank=True, on_delete=models.SET_NULL, related_name="runs"
     )
+    event_refs = ArrayField(
+        models.CharField(max_length=250),
+        default=list,
+        blank=True,
+        help_text="Disasters this run is about besides its STAC item's, e.g. glide:EQ-2025-000043-MMR",
+    )
 
     facet_options = models.ManyToManyField(
         "catalog.FacetOption", through="RunFacet", blank=True, related_name="runs"
@@ -426,6 +434,7 @@ class NotebookRun(models.Model):
                 name="run_has_notebook_unless_upload",
             )
         ]
+        indexes = [GinIndex(fields=["event_refs"], name="run_event_refs_gin")]
 
     def __str__(self) -> str:
         return f"{self.title} · {self.short_id}"
@@ -475,6 +484,12 @@ class NotebookRun(models.Model):
         from factory.catalog.facets import group_options
 
         return group_options(rf.option for rf in self.run_facets.all())
+
+    @property
+    def all_event_refs(self) -> list[str]:
+        """The run's own disaster refs plus its STAC item's."""
+        item_refs = self.stac_item.event_refs if self.stac_item_id else []
+        return list(dict.fromkeys([*self.event_refs, *item_refs]))
 
     @property
     def filter_values(self) -> dict[str, list[str]]:

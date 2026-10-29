@@ -14,6 +14,7 @@ from datetime import datetime
 
 import httpx
 from django.conf import settings
+from django.core.cache import cache
 
 log = logging.getLogger(__name__)
 
@@ -147,3 +148,19 @@ class StacClient:
 
     def __exit__(self, *exc):
         self.close()
+
+
+def catalog_collections(catalog) -> list[dict]:
+    """[{id, title}] for a catalog, cached; editing the catalog invalidates the cache."""
+    key = f"stac:collections:{catalog.pk}:{catalog.updated_at.timestamp()}"
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+    with catalog.client() as client:
+        raw = client.collections()
+    out = sorted(
+        ({"id": c["id"], "title": c.get("title") or c["id"]} for c in raw if c.get("id")),
+        key=lambda c: c["id"],
+    )
+    cache.set(key, out, settings.STAC["COLLECTIONS_CACHE_SECONDS"])
+    return out

@@ -141,3 +141,25 @@ def executor_leaves():
     executor = MigrationExecutor(connection)
     executor.loader.build_graph()
     return executor.loader.graph.leaf_nodes()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_event_refs_are_backfilled_from_stored_items():
+    try:
+        old = _migrate([("events", "0007_drop_hazard")])
+        Catalog = old.get_model("events", "StacCatalog")
+        Item = old.get_model("events", "StacItem")
+        monty = Catalog.objects.create(name="M", slug="m", url="https://m.example.org", profile="montandon")
+        generic = Catalog.objects.create(name="G", slug="g", url="https://g.example.org")
+        raw = {
+            "id": "glide-event-EQ-2025-000043-MMR",
+            "properties": {"monty:corr_id": "20250328-MMR-1-GH0101-1-GCDB"},
+        }
+        Item.objects.create(catalog=monty, collection="glide-events", item_id=raw["id"], raw=raw)
+        Item.objects.create(catalog=generic, collection="s2", item_id="tile", raw={})
+        new = _migrate([("events", "0008_event_refs")])
+        refs = dict(new.get_model("events", "StacItem").objects.values_list("item_id", "event_refs"))
+        assert refs["tile"] == ["stac:s2/tile"]
+        assert {"glide:EQ-2025-000043-MMR", "corrstem:20250328-MMR-1-GH0101"} <= set(refs[raw["id"]])
+    finally:
+        _migrate(executor_leaves())

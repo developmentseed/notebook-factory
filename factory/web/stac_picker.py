@@ -9,30 +9,12 @@ ticks "show all"; they are never enforced on submit.
 
 from __future__ import annotations
 
-from django.conf import settings
-from django.core.cache import cache
 from django.urls import reverse
 
 from factory.events.models import StacCatalog
-from factory.events.stac_client import StacClientError
+from factory.events.stac_client import StacClientError, catalog_collections
 
 ITEM_LIMIT = 25
-
-
-def catalog_collections(catalog: StacCatalog) -> list[dict]:
-    """[{id, title}] for a catalog, cached; editing the catalog invalidates the cache."""
-    key = f"stac:collections:{catalog.pk}:{catalog.updated_at.timestamp()}"
-    cached = cache.get(key)
-    if cached is not None:
-        return cached
-    with catalog.client() as client:
-        raw = client.collections()
-    out = sorted(
-        ({"id": c["id"], "title": c.get("title") or c["id"]} for c in raw if c.get("id")),
-        key=lambda c: c["id"],
-    )
-    cache.set(key, out, settings.STAC["COLLECTIONS_CACHE_SECONDS"])
-    return out
 
 
 def _search_items(catalog: StacCatalog, collection: str, query: str) -> list[dict]:
