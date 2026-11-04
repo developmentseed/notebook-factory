@@ -6,10 +6,10 @@ description: '**Use Case 1 · Risk · before the event.** Compares a hazard rast
   return period and as an annual average) and facility counts per subdivision.
 
 
-  > Needs the hazard rasters under `DATASETS_DIR`. Population (WorldPop 1 km) is downloaded once per
-  country and cached there; health facilities come from OpenStreetMap (Layercake). Hazards without data
-  yet (wildfire, heatwave) and other infrastructure layers fail with a clear error instead of showing
-  fake data.'
+  > Needs the hazard rasters (flood, cyclone, earthquake) at `datasets_url`, a folder or URL. Population
+  (WorldPop 1 km) is downloaded once per country into a scratch cache; health facilities come from
+  OpenStreetMap (Layercake). Hazards without data yet (wildfire, heatwave) and other infrastructure
+  layers fail with a clear error instead of showing fake data.'
 filters:
   use_case:
   - uc1
@@ -98,5 +98,10 @@ parameters:
           schools: Schools (no data yet)
           airports: Airports (no data yet)
           roads: Primary roads (no data yet)
+    datasets_url:
+      type: string
+      title: Hazard datasets location
+      description: Folder or URL (https://, s3://, az://) that holds the hazard rasters under wrl/216_hazard/.
   required:
   - hazard
+  - datasets_url
