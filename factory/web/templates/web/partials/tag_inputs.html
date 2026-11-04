@@ -1,0 +1,14 @@
+{% for t in tag_fields %}
+<div class="field" data-tag="{{ t.facet.key }}">
+  <label for="{{ t.name }}">{{ t.facet.label }}</label>
+  {% if t.facet.multiple %}
+    <div class="choices">{% for o in t.options %}<label class="check"><input type="checkbox" name="{{ t.name }}" value="{{ o.key }}" {% if o.key in t.selected %}checked{% endif %}> {% if o.icon %}{{ o.icon }} {% endif %}{{ o.label }}</label>{% endfor %}</div>
+  {% else %}
+    <select name="{{ t.name }}" id="{{ t.name }}">
+      <option value="">{{ empty_label|default:"— not set —" }}</option>
+      {% for o in t.options %}<option value="{{ o.key }}" {% if o.key in t.selected %}selected{% endif %}>{% if o.icon %}{{ o.icon }} {% endif %}{{ o.label }}</option>{% endfor %}
+    </select>
+  {% endif %}
+  {% if t.facet.description %}<small class="muted">{{ t.facet.description }}</small>{% endif %}
+</div>
+{% endfor %}

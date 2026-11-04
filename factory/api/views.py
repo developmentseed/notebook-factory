@@ -3,23 +3,65 @@ from django.db.models import Count
 from django.http import JsonResponse
 from django.views.decorators.cache import cache_page
 from django_filters import rest_framework as filters
+from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, status, viewsets
-from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
+from rest_framework.decorators import action, api_view
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from rest_framework.permissions import (
+    SAFE_METHODS,
+    BasePermission,
+    IsAdminUser,
+    IsAuthenticated,
+    IsAuthenticatedOrReadOnly,
+)
 from rest_framework.response import Response
 
-from factory.catalog.models import AdminArea, Country, Hazard
-from factory.events.models import Event, EventTriggerRule
+from factory.catalog import facets
+from factory.catalog.models import AdminArea, Country, Facet, FacetOption
+from factory.events import disasters as D
+from factory.events import refs as event_refs
+from factory.events.models import StacCatalog, StacItem, TriggerRule
+from factory.events.stac_client import StacClientError
+from factory.notebooks import templates as T
+from factory.notebooks.bundles import inspect_template
 from factory.notebooks.models import AnalysisNotebook, NotebookRun, RunBatch, TriggerKind
 from factory.notebooks.parameters import ParameterError
 from factory.notebooks.services import RunRequestError, cancel_run, create_batch, create_run, retry_run
+from factory.notebooks.uploads import ArchiveError, UploadError, create_upload
 
 from . import serializers as S
 
 
-class HazardViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Hazard.objects.all()
-    serializer_class = S.HazardSerializer
+class ReadAnyWriteStaff(BasePermission):
+    def has_permission(self, request, view):
+        return request.method in SAFE_METHODS or bool(request.user and request.user.is_staff)
+
+
+class FacetFilterMixin:
+    """Apply ?<facet_key>=<option> query params (any option within a filter, all filters together)."""
+
+    facet_relation = "facet_options"
+
+    def filter_queryset(self, queryset):
+        queryset = super().filter_queryset(queryset)
+        return facets.filter_queryset(queryset, self.request.query_params, rel=self.facet_relation)
+
+
+class FacetViewSet(viewsets.ModelViewSet):
+    """Filters (e.g. hazard, use case) with their options. Anyone can read; staff can edit."""
+
+    queryset = Facet.objects.prefetch_related("options")
+    serializer_class = S.FacetSerializer
+    permission_classes = [ReadAnyWriteStaff]
+    lookup_field = "key"
+    pagination_class = None
+
+
+class FacetOptionViewSet(viewsets.ModelViewSet):
+    queryset = FacetOption.objects.select_related("facet")
+    serializer_class = S.FacetOptionSerializer
+    permission_classes = [ReadAnyWriteStaff]
+    filterset_fields = ["facet__key"]
     pagination_class = None
 
 
@@ -71,54 +113,201 @@ class AdminAreaViewSet(viewsets.ReadOnlyModelViewSet):
         return JsonResponse(area.as_feature())
 
 
-class AnalysisNotebookViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = (
-        AnalysisNotebook.objects.filter(is_active=True)
-        .prefetch_related("hazards")
-        .annotate(run_count=Count("runs"))
-    )
+class TemplatePermission(BasePermission):
+    """Anyone reads; writing needs the Django model permissions (uploaded templates execute code)."""
+
+    def has_permission(self, request, view):
+        if request.method in SAFE_METHODS:
+            return True
+        user = request.user
+        if not (user and user.is_authenticated):
+            return False
+        if view.action == "create":
+            return user.has_perm("notebooks.add_analysisnotebook")
+        return user.has_perm("notebooks.change_analysisnotebook")
+
+
+class AnalysisNotebookViewSet(
+    FacetFilterMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
     serializer_class = S.AnalysisNotebookSerializer
+    permission_classes = [TemplatePermission]
     lookup_field = "slug"
-    filterset_fields = ["use_case", "hazards__key", "requires_event", "requires_area"]
+    filterset_fields = ["requires_stac_item", "requires_area"]
     search_fields = ["title", "summary", "description"]
+
+    def get_queryset(self):
+        qs = (
+            AnalysisNotebook.objects.select_related("current_version")
+            .prefetch_related("facet_options__facet")
+            .annotate(run_count=Count("runs", distinct=True))
+            .order_by("title")
+        )
+        editor = self.request.user.has_perm("notebooks.change_analysisnotebook")
+        wants_all = self.request.method not in SAFE_METHODS or self.request.query_params.get(
+            "include_inactive"
+        )
+        if not (editor and wants_all):
+            qs = qs.filter(is_active=True)
+        return qs
+
+    def _detail(self, request, slug, code=status.HTTP_200_OK, warnings=()):
+        nb = self.get_queryset().get(slug=slug)
+        data = S.AnalysisNotebookSerializer(nb, context={"request": request}).data
+        return Response({**data, "warnings": list(warnings)}, status=code)
+
+    def _manifest(self, d):
+        manifest = inspect_template(d["file"], d["file"].name, d.get("notebook_path", ""))
+        if manifest.notebook is None:
+            raise ArchiveError(
+                "The archive holds several notebooks; set notebook_path to one of: "
+                + ", ".join(manifest.notebooks)
+            )
+        manifest.meta = {**manifest.meta, **d.get("metadata", {})}
+        return manifest
+
+    @extend_schema(request=S.TemplateCreateSerializer, responses=S.AnalysisNotebookSerializer)
+    def create(self, request):
+        """Upload a new template (.zip or .ipynb). It starts inactive; PATCH is_active to publish it."""
+        ser = S.TemplateCreateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+        try:
+            nb, warnings = T.create_from_manifest(
+                self._manifest(d),
+                slug=d.get("slug", ""),
+                title=d.get("title", ""),
+                user=request.user,
+                note=d.get("note", ""),
+            )
+        except (ArchiveError, T.TemplateError) as exc:
+            return Response({"file": [str(exc)]}, status=400)
+        return self._detail(request, nb.slug, status.HTTP_201_CREATED, warnings)
+
+    @extend_schema(request=S.TemplateUpdateSerializer, responses=S.AnalysisNotebookSerializer)
+    def partial_update(self, request, slug=None):
+        """Change the template's title, summary, description, active flag or filters (not versioned)."""
+        nb = self.get_object()
+        ser = S.TemplateUpdateSerializer(data=request.data, partial=True)
+        ser.is_valid(raise_exception=True)
+        d = dict(ser.validated_data)
+        filters = d.pop("filters", None)
+        for key, value in d.items():
+            setattr(nb, key, value)
+        nb.save()
+        if filters is not None:
+            nb.facet_options.set(T.options_from_yaml({"filters": filters}, nb.slug))
+        return self._detail(request, nb.slug)
+
+    @extend_schema(
+        methods=["POST"], request=S.TemplateVersionCreateSerializer, responses=S.TemplateVersionSerializer
+    )
+    @action(detail=True, methods=["get", "post"], parser_classes=[MultiPartParser, FormParser, JSONParser])
+    def versions(self, request, slug=None):
+        """GET: the template's versions. POST (multipart): upload a new version of its bundle."""
+        nb = self.get_object()
+        if request.method == "GET":
+            versions = nb.versions.select_related("created_by", "notebook")
+            return Response(S.TemplateVersionSerializer(versions, many=True).data)
+        ser = S.TemplateVersionCreateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+        try:
+            version, warnings = T.add_version_from_manifest(
+                nb,
+                self._manifest(d),
+                user=request.user,
+                note=d.get("note", ""),
+                make_current=d["make_current"],
+            )
+        except (ArchiveError, T.TemplateError) as exc:
+            return Response({"file": [str(exc)]}, status=400)
+        return Response(
+            {**S.TemplateVersionSerializer(version).data, "warnings": warnings},
+            status=status.HTTP_201_CREATED,
+        )
+
+    @extend_schema(request=None, responses=S.AnalysisNotebookSerializer)
+    @action(detail=True, methods=["post"], url_path=r"versions/(?P<number>\d+)/make-current")
+    def make_current(self, request, slug=None, number=None):
+        """Make an earlier (or a not yet current) version the one new runs use."""
+        nb = self.get_object()
+        version = nb.versions.filter(number=number).first()
+        if version is None:
+            return Response({"detail": "No such version."}, status=404)
+        T.set_current(nb, version)
+        return self._detail(request, nb.slug, warnings=T.trigger_rule_problems(nb, version.parameter_schema))
 
 
 class RunFilter(filters.FilterSet):
     notebook = filters.CharFilter(field_name="notebook__slug")
-    use_case = filters.CharFilter(field_name="notebook__use_case")
     country = filters.CharFilter(method="filter_country")
     area = filters.NumberFilter(field_name="area_id")
-    hazard = filters.CharFilter(field_name="hazard__key")
-    event = filters.NumberFilter(field_name="event_id")
+    stac_item = filters.NumberFilter(field_name="stac_item_id")
+    catalog = filters.CharFilter(field_name="stac_item__catalog__slug")
     status = filters.CharFilter()
     trigger = filters.CharFilter()
     batch = filters.UUIDFilter(field_name="batch_id")
     since = filters.IsoDateTimeFilter(field_name="created_at", lookup_expr="gte")
     until = filters.IsoDateTimeFilter(field_name="created_at", lookup_expr="lte")
+    disaster = filters.CharFilter(
+        method="filter_disaster",
+        help_text="Any disaster ID (GLIDE, go:7464, EMSR798, corr_id…): runs about that disaster",
+    )
 
     class Meta:
         model = NotebookRun
         fields = []
 
+    def filter_disaster(self, qs, name, value):
+        from django.db.models import Q
+
+        try:
+            disaster = D.resolve(value)
+        except D.DisasterError:
+            disaster = None
+        if disaster is not None:
+            return D.runs_for(disaster, qs)
+        refs = event_refs.parse(value) or [value]
+        return qs.filter(Q(event_refs__overlap=refs) | Q(stac_item__event_refs__overlap=refs)).distinct()
+
     def filter_country(self, qs, name, value):
         value = value.upper()
         from django.db.models import Q
 
-        return qs.filter(Q(area__country_id=value) | Q(event__country_codes__contains=[value]))
+        return qs.filter(Q(area__country_id=value) | Q(stac_item__country_codes__contains=[value]))
 
 
 class NotebookRunViewSet(
-    mixins.CreateModelMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet
+    FacetFilterMixin,
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
 ):
     queryset = NotebookRun.objects.with_related()
     filterset_class = RunFilter
-    search_fields = ["notebook__title", "area__name", "event__title", "event__monty_corr_id"]
+    search_fields = [
+        "notebook__title",
+        "display_title",
+        "summary",
+        "description",
+        "area__name",
+        "stac_item__title",
+        "stac_item__item_id",
+        "stac_item__correlation_id",
+    ]
     ordering_fields = ["created_at", "finished_at", "status"]
     permission_classes = [IsAuthenticatedOrReadOnly]
 
     def get_serializer_class(self):
         if self.action == "create":
             return S.RunCreateSerializer
+        if self.action == "upload":
+            return S.UploadCreateSerializer
         if self.action == "retrieve":
             return S.NotebookRunDetailSerializer
         return S.NotebookRunSerializer
@@ -136,14 +325,18 @@ class NotebookRunViewSet(
                     user=request.user,
                     trigger=TriggerKind.API,
                     notify_emails=d["notify_emails"],
-                    event=d.get("event"),
+                    stac_item=d.get("stac_item"),
+                    filters=d["filters"],
+                    event_refs=d["event_refs"],
                 )
                 return Response(S.RunBatchSerializer(batch).data, status=status.HTTP_202_ACCEPTED)
             run = create_run(
                 d["notebook"],
                 d["parameters"],
                 area=d.get("area"),
-                event=d.get("event"),
+                stac_item=d.get("stac_item"),
+                filters=d["filters"],
+                event_refs=d["event_refs"],
                 user=request.user,
                 trigger=TriggerKind.API,
                 notify_emails=d["notify_emails"],
@@ -152,6 +345,37 @@ class NotebookRunViewSet(
             return Response({"parameters": exc.errors}, status=400)
         except RunRequestError as exc:
             return Response({"detail": str(exc)}, status=400)
+        return Response(
+            S.NotebookRunSerializer(run, context={"request": request}).data, status=status.HTTP_202_ACCEPTED
+        )
+
+    @action(
+        detail=False,
+        methods=["post"],
+        permission_classes=[IsAdminUser],
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def upload(self, request):
+        """Publish an already executed notebook (staff only); it is rendered, not executed."""
+        ser = S.UploadCreateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+        try:
+            run = create_upload(
+                d["file"],
+                filename=d["file"].name,
+                notebook_path=d.get("notebook_path", ""),
+                title=d.get("title", ""),
+                summary=d.get("summary", ""),
+                description=d.get("description", ""),
+                area=d.get("area"),
+                stac_item=d.get("stac_item"),
+                filters=d["filters"],
+                event_refs=d["event_refs"],
+                user=request.user,
+            )
+        except UploadError as exc:
+            return Response({"file": [str(exc)]}, status=400)
         return Response(
             S.NotebookRunSerializer(run, context={"request": request}).data, status=status.HTTP_202_ACCEPTED
         )
@@ -170,22 +394,72 @@ class NotebookRunViewSet(
         )
 
 
+@extend_schema(
+    parameters=[{"name": "q", "in": "query", "required": True, "schema": {"type": "string"}}],
+    responses=S.DisasterSerializer,
+)
+@api_view(["GET"])
+def disaster_resolve(request):
+    """The disaster named by any of its IDs: every source's item grouped as it, and the runs about it."""
+    q = request.query_params.get("q", "")
+    if not event_refs.parse(q):
+        return Response({"detail": "Not a disaster ID we recognise."}, status=400)
+    try:
+        disaster = D.resolve(q)
+    except D.DisasterError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+    if disaster is None:
+        return Response({"detail": "No disaster found."}, status=404)
+    run_ids = D.runs_for(disaster).order_by("-created_at").values_list("pk", flat=True)
+    return Response(S.DisasterSerializer(disaster, context={"run_ids": list(run_ids)}).data)
+
+
 class RunBatchViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = RunBatch.objects.select_related("notebook")
     serializer_class = S.RunBatchSerializer
 
 
-class EventViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Event.objects.select_related("hazard")
-    serializer_class = S.EventSerializer
-    filterset_fields = ["collection", "hazard__key", "monty_corr_id"]
-    search_fields = ["title", "monty_corr_id", "stac_id"]
+class ReadAuthenticatedWriteStaff(BasePermission):
+    def has_permission(self, request, view):
+        user = request.user
+        if request.method in SAFE_METHODS:
+            return bool(user and user.is_authenticated)
+        return bool(user and user.is_staff)
+
+
+class StacCatalogViewSet(viewsets.ModelViewSet):
+    queryset = StacCatalog.objects.all()
+    serializer_class = S.StacCatalogSerializer
+    permission_classes = [ReadAuthenticatedWriteStaff]
+    lookup_field = "slug"
+    pagination_class = None
+    filterset_fields = ["profile", "is_active"]
+
+    @action(detail=True, methods=["get"])
+    def collections(self, request, slug=None):
+        """Collections offered by the catalog (fetched live)."""
+        catalog = self.get_object()
+        try:
+            with catalog.client() as client:
+                collections = client.collections()
+        except StacClientError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response([{"id": c.get("id"), "title": c.get("title")} for c in collections])
+
+
+class StacItemViewSet(FacetFilterMixin, viewsets.ReadOnlyModelViewSet):
+    queryset = StacItem.objects.select_related("catalog").prefetch_related("facet_options__facet")
+    serializer_class = S.StacItemSerializer
+    filterset_fields = ["catalog__slug", "collection", "correlation_id"]
+    search_fields = ["title", "correlation_id", "item_id"]
     ordering_fields = ["occurred_at", "first_seen_at"]
 
 
-class EventTriggerRuleViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = EventTriggerRule.objects.select_related("notebook").prefetch_related("hazards")
-    serializer_class = S.EventTriggerRuleSerializer
+class TriggerRuleViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = TriggerRule.objects.select_related("notebook", "catalog").prefetch_related(
+        "facet_options__facet"
+    )
+    serializer_class = S.TriggerRuleSerializer
     pagination_class = None
 
 

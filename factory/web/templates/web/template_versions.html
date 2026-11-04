@@ -1,0 +1,25 @@
+{% extends "web/base.html" %}
+{% load humanize %}
+{% block title %}Versions · {{ nb.title }} · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="{% url 'web:template-list' %}">Templates</a> › <a href="{{ nb.get_absolute_url }}">{{ nb.title }}</a> › Versions</p>
+<div class="page-head"><div><h1>Versions of {{ nb.title }}</h1>
+  <p class="lead">Each version freezes the notebook bundle with its parameters and inputs. Runs record the version they executed; making an older version current rolls back.</p></div>
+  <div><a class="btn primary" href="{% url 'web:template-version-new' nb.slug %}">Upload new version</a> <a class="btn" href="{% url 'web:template-edit' nb.slug %}">Edit</a></div></div>
+<table class="table">
+  <thead><tr><th>Version</th><th>Note</th><th>Source</th><th>Parameters</th><th>Runs</th><th>By</th><th></th></tr></thead>
+  <tbody>
+  {% for v in versions %}
+    <tr><td><strong>v{{ v.number }}</strong>{% if v.label %} <span class="muted">({{ v.label }})</span>{% endif %}{% if v.is_current %} <span class="pill status ok">current</span>{% endif %}</td>
+        <td>{{ v.note|default:"—" }}</td>
+        <td class="small">{% if v.archive_key %}<code>{{ v.notebook_path }}</code><br><span class="muted">{{ v.files|length }} file{{ v.files|length|pluralize }} · {{ v.sha256|slice:":12" }}</span>{% elif v.source_repo %}git {{ v.source_ref|default:"HEAD" }}{% else %}templates dir{% endif %}</td>
+        <td>{{ v.parameter_schema.properties|length|default:0 }}</td>
+        <td>{{ v.run_count }}</td>
+        <td class="small">{{ v.created_by|default:"—" }}<br><span class="muted">{{ v.created_at|naturaltime }}</span></td>
+        <td class="small">{% if not v.is_current %}<form method="post" action="{% url 'web:template-version-current' nb.slug v.number %}" class="inline" onsubmit="return confirm('Make v{{ v.number }} current? New runs will use it.')">{% csrf_token %}<button class="link">Make current</button></form>{% endif %}
+          {% if v.archive_key %}<br><a href="{% url 'web:template-version-download' nb.slug v.number %}">Download</a>{% endif %}</td></tr>
+  {% empty %}<tr><td colspan="7" class="muted">No versions.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

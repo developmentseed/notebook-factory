@@ -1,0 +1,40 @@
+{% extends "web/base.html" %}
+{% load humanize %}
+{% block title %}Disasters · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Disasters</h1>
+    <p class="lead">Find every analysis about one disaster, whichever ID you have: a GLIDE number, an IFRC GO emergency, a Copernicus EMS activation, an EM-DAT, USGS or GDACS id, a monty:corr_id or a STAC item. All the sources reporting the disaster are grouped on one page.</p>
+  </div>
+</div>
+<form method="get" class="panel" style="display:flex; gap:.6rem; align-items:center; margin-bottom:1rem">
+  <input type="search" name="q" value="{{ q }}" autofocus style="flex:1" placeholder="EQ-2025-000043-MMR · EMSR798 · go:7464 · https://go.ifrc.org/emergencies/7464 · us7000pn9s · 2025-0223-MMR">
+  <button class="btn primary">Find</button>
+</form>
+{% if error %}<div class="msg error">{{ error }}</div>{% endif %}
+{% if q and not error %}
+  <h2>Stored STAC items matching “{{ q }}”</h2>
+  {% if items %}
+  <ul class="disaster-list">
+    {% for item in items %}
+    <li><a href="{% url 'web:disaster-detail' 'stac:'|add:item.collection|add:'/'|add:item.item_id %}">{{ item }}</a>
+      <span class="muted small">{{ item.countries_display }} · {{ item.occurred_at|date:"Y-m-d"|default:"—" }} · <code>{{ item.collection }}</code>{% if item.run_count %} · {{ item.run_count }} analys{{ item.run_count|pluralize:"is,es" }}{% endif %}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">No stored item matches. Search works best with an ID; the catalog can't be searched by free text.</p>
+  {% endif %}
+{% endif %}
+<h2>Disasters with analyses</h2>
+{% if recent %}
+<ul class="disaster-list">
+  {% for row in recent %}
+  <li><a href="{% url 'web:disaster-detail' row.ref %}">{{ row.item }}</a>
+    <span class="muted small">{{ row.item.countries_display }} · {{ row.item.occurred_at|date:"Y-m-d"|default:"—" }} · {{ row.item.run_count }} analys{{ row.item.run_count|pluralize:"is,es" }}</span></li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="muted">No analysis is linked to a disaster yet. Start one from a disaster page, or add disaster IDs to an analysis.</p>
+{% endif %}
+{% endblock %}

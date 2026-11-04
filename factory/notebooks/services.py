@@ -1,4 +1,4 @@
-"""Create and enqueue runs. Used by the web UI, the API, the CLI and the event poller."""
+"""Create and enqueue runs. Used by the web UI, the API, the CLI and the STAC poller."""
 
 from __future__ import annotations
 
@@ -8,8 +8,10 @@ from concurrent.futures import ThreadPoolExecutor
 from django.conf import settings
 from django.db import transaction
 
-from factory.catalog.models import AdminArea, Hazard
+from factory.catalog import facets
+from factory.catalog.models import AdminArea
 
+from . import environment
 from . import parameters as P
 from .models import AnalysisNotebook, NotebookRun, RunBatch, RunStatus, TriggerKind
 
@@ -20,41 +22,38 @@ class RunRequestError(ValueError):
     pass
 
 
-def _resolve_hazard(notebook: AnalysisNotebook, params: dict, hazard: Hazard | None) -> Hazard | None:
-    if hazard:
-        return hazard
-    key = params.get("hazard")
-    if key:
-        h = Hazard.objects.filter(key=key).first()
-        if h:
-            return h
-    if notebook.hazards.count() == 1:
-        return notebook.hazards.first()
-    return None
-
-
 def create_run(
     notebook: AnalysisNotebook,
     parameters: dict | None = None,
     *,
     area: AdminArea | None = None,
-    event=None,
-    hazard: Hazard | None = None,
+    stac_item=None,
+    filters: dict[str, list[str]] | None = None,
+    event_refs: list[str] | None = None,
     user=None,
     trigger: str = TriggerKind.MANUAL,
     trigger_rule=None,
     notify_emails: list[str] | None = None,
     batch: RunBatch | None = None,
     enqueue: bool = True,
+    allow_inactive: bool = False,
 ) -> NotebookRun:
-    if not notebook.is_active:
+    """`allow_inactive` lets template editors test a template before activating it."""
+    if not notebook.is_active and not allow_inactive:
         raise RunRequestError("This template is not active.")
     if notebook.requires_area and area is None:
         raise RunRequestError("This template needs a target admin area.")
     if area is not None and notebook.area_levels and area.level not in notebook.area_levels:
         raise RunRequestError(f"This template accepts admin levels {notebook.area_levels}, not {area.level}.")
-    if notebook.requires_event and event is None:
-        raise RunRequestError("This template needs a Montandon event.")
+    if notebook.requires_stac_item and stac_item is None:
+        raise RunRequestError("This template needs a STAC item.")
+    missing = environment.missing_secrets(notebook)
+    if missing:
+        raise RunRequestError(
+            "This template needs secrets it can't get: "
+            + ", ".join(missing)
+            + ". Ask someone who manages secrets to add or grant them."
+        )
     params = P.validate(notebook.parameter_schema, parameters or {})
 
     emails = [e.strip() for e in (notify_emails or []) if e and e.strip()]
@@ -64,16 +63,18 @@ def create_run(
     with transaction.atomic():
         run = NotebookRun.objects.create(
             notebook=notebook,
+            template_version_id=notebook.current_version_id,
             batch=batch,
             parameters=params,
             area=area,
-            event=event,
-            hazard=_resolve_hazard(notebook, params, hazard),
+            stac_item=stac_item,
+            event_refs=list(event_refs or []),
             triggered_by=user if getattr(user, "is_authenticated", False) else None,
             trigger=trigger,
             trigger_rule=trigger_rule,
             notify_emails=emails,
         )
+        facets.set_run_facets(run, facets.resolve_run(notebook, params, stac_item, filters))
         run.log("run created and queued")
         if enqueue:
             transaction.on_commit(lambda: enqueue_run(run))
@@ -89,8 +90,11 @@ def create_batch(
     user=None,
     trigger: str = TriggerKind.MANUAL,
     notify_emails: list[str] | None = None,
-    event=None,
+    stac_item=None,
+    filters: dict[str, list[str]] | None = None,
+    event_refs: list[str] | None = None,
     trigger_rule=None,
+    allow_inactive: bool = False,
 ) -> RunBatch:
     """Fan a single request out across many areas (one run per area)."""
     areas = list(areas)
@@ -109,12 +113,15 @@ def create_batch(
                 notebook,
                 parameters,
                 area=area,
-                event=event,
+                stac_item=stac_item,
+                filters=filters,
+                event_refs=event_refs,
                 user=user,
                 trigger=trigger,
                 trigger_rule=trigger_rule,
                 notify_emails=notify_emails,
                 batch=batch,
+                allow_inactive=allow_inactive,
             )
     return batch
 
@@ -171,19 +178,25 @@ def cancel_run(run: NotebookRun) -> bool:
     return True
 
 
-def retry_run(run: NotebookRun, user=None) -> NotebookRun:
-    """Create a fresh run with the same inputs."""
+def retry_run(run: NotebookRun, user=None, allow_inactive: bool = False) -> NotebookRun:
+    """Create a fresh run with the same inputs, on the template's current version."""
+    if run.is_upload:
+        from .uploads import retry_upload
+
+        return retry_upload(run, user=user)
     return create_run(
         run.notebook,
         run.parameters,
         area=run.area,
-        event=run.event,
-        hazard=run.hazard,
+        stac_item=run.stac_item,
+        filters=facets.manual_tags(run),
+        event_refs=run.event_refs,
         user=user or run.triggered_by,
         trigger=run.trigger,
         trigger_rule=run.trigger_rule,
         notify_emails=run.notify_emails,
         batch=run.batch,
+        allow_inactive=allow_inactive,
     )
 
 

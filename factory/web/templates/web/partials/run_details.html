@@ -1,0 +1,21 @@
+{% load web_extras %}
+<section id="run-details" class="panel run-details">
+  <div class="muted small">ABOUT</div>
+  {% if editing %}
+  <form hx-post="{% url 'web:run-details' run.id %}" hx-target="#run-details" hx-swap="outerHTML">
+    {% for f in form %}
+    <div class="field {% if f.errors %}has-error{% endif %}">
+      <label for="{{ f.id_for_label }}">{{ f.label }}</label>{{ f }}
+      {% if f.errors %}<small class="error">{{ f.errors|join:" " }}</small>{% endif %}
+    </div>
+    {% endfor %}
+    <p><button class="btn primary small" type="submit">Save details</button>
+       <button class="btn small" type="button" hx-get="{{ run.get_absolute_url }}" hx-select="#run-details" hx-target="#run-details" hx-swap="outerHTML">Cancel</button></p>
+  </form>
+  {% else %}
+    {% if run.summary %}<p><strong>{{ run.summary }}</strong></p>{% endif %}
+    {% if run.description %}<div class="prose">{{ run.description|markdown }}</div>{% endif %}
+    {% if not run.summary and not run.description %}<p class="muted small">No description.</p>{% endif %}
+    {% if can_edit %}<button class="link small" hx-get="{% url 'web:run-details' run.id %}" hx-target="#run-details" hx-swap="outerHTML">Edit details</button>{% endif %}
+  {% endif %}
+</section>

@@ -13,8 +13,9 @@ import traceback
 from django.conf import settings
 from django.utils import timezone
 
+from .. import uploads
 from ..models import NotebookRun, RunStatus, WritebackStatus
-from . import executor, inputs, publisher, renderer, sources
+from . import executor, inputs, publisher, redact, renderer, sources
 from .context import RunContext
 
 log = logging.getLogger(__name__)
@@ -31,23 +32,45 @@ def run_pipeline(run_id: str) -> NotebookRun:
     ctx = RunContext.create(str(run.id))
     stage = RunStatus.FETCHING
     try:
-        run.set_status(RunStatus.FETCHING, "Resolving template and preparing inputs", cell=0, total=0)
-        run.log(f"worker picked up run {run.short_id}")
-        sources.resolve_template(run.notebook, ctx)
-        run.log(
-            f"template: {run.notebook.slug} ({run.notebook.version or 'unversioned'}) from {run.notebook.get_source_kind_display().lower()}"
-        )
-        injected = inputs.prepare_inputs(run, ctx)
-        if run.area_id:
-            run.log(f"inputs: area {run.area.name} (L{run.area.level}) + subdivisions written to inputs/")
-        if run.event_id:
-            run.log(f"inputs: event {run.event.monty_corr_id or run.event.stac_id} written to inputs/")
+        if run.is_upload:
+            # Uploaded notebooks are already executed: unpack them and go straight to rendering.
+            run.set_status(RunStatus.FETCHING, "Unpacking the uploaded archive", cell=0, total=0)
+            run.log(f"worker picked up upload {run.short_id}")
+            uploads.unpack(run, ctx)
+            run.log(f"upload: unpacked {run.upload_path}")
+        else:
+            run.set_status(RunStatus.FETCHING, "Resolving template and preparing inputs", cell=0, total=0)
+            run.log(f"worker picked up run {run.short_id}")
+            version = run.template_version
+            sources.resolve_template(run.notebook, ctx, version)
+            if version is not None:
+                source = (
+                    "uploaded bundle"
+                    if version.archive_key
+                    else run.notebook.get_source_kind_display().lower()
+                )
+                run.log(
+                    f"template: {run.notebook.slug} v{version.number}"
+                    f"{f' ({version.label})' if version.label else ''} from {source}"
+                )
+            else:
+                run.log(
+                    f"template: {run.notebook.slug} ({run.notebook.version or 'unversioned'}) from {run.notebook.get_source_kind_display().lower()}"
+                )
+            injected = inputs.prepare_inputs(run, ctx)
+            if run.area_id:
+                run.log(f"inputs: area {run.area.name} (L{run.area.level}) + subdivisions written to inputs/")
+            if run.stac_item_id:
+                run.log(
+                    f"inputs: STAC item {run.stac_item.short_ref} ({run.stac_item.catalog.name}) written to inputs/"
+                )
 
-        stage = RunStatus.EXECUTING
-        run.set_status(RunStatus.EXECUTING, "Executing notebook with papermill")
-        params = {**injected, **(run.parameters or {})}
-        executor.execute(run, ctx, params)
-        run.log("papermill: notebook executed")
+            stage = RunStatus.EXECUTING
+            run.set_status(RunStatus.EXECUTING, "Executing notebook with papermill")
+            params = {**injected, **(run.parameters or {})}
+            executor.execute(run, ctx, params)
+            run.log("papermill: notebook executed")
+            redact.redact_run(run, ctx)
 
         stage = RunStatus.RENDERING
         run.set_status(RunStatus.RENDERING, "Rendering static HTML with MyST")
@@ -60,21 +83,26 @@ def run_pipeline(run_id: str) -> NotebookRun:
         run.output_url = result["output_url"]
         run.notebook_url = result["notebook_url"]
         run.artifacts = result["artifacts"]
+        if run.is_upload:
+            run.artifacts["source.zip"] = publisher.public_url(uploads.source_key(run))
         run.save(update_fields=["output_prefix", "output_url", "notebook_url", "artifacts", "updated_at"])
 
-        if run.notebook.supports_writeback:
+        if run.notebook and run.notebook.supports_writeback:
             _writeback(run, ctx)
 
         run.set_status(RunStatus.PUBLISHED, "Published", failed_stage=None)
         run.log(f"published: {run.output_url}")
     except Exception as exc:  # noqa: BLE001
         log.exception("Run %s failed during %s", run.id, stage)
-        run.error = f"{type(exc).__name__}: {exc}"
+        error = f"{type(exc).__name__}: {exc}"
         if settings.DEBUG:
-            run.error += "\n\n" + traceback.format_exc()
+            error += "\n\n" + traceback.format_exc()
+        # A failing cell's error (and the output lines logged so far) may contain a secret.
+        run.error = redact.redact_text(error, ctx.secrets)[0]
         run.save(update_fields=["error", "updated_at"])
+        redact.redact_log(run, ctx.secrets)
         run.set_status(RunStatus.FAILED, f"Failed while {stage}", failed_stage=stage)
-        run.log(f"failed during {stage}: {exc}", level="error")
+        run.log(redact.redact_text(f"failed during {stage}: {exc}", ctx.secrets)[0], level="error")
     finally:
         if not settings.NOTEBOOK_FACTORY["KEEP_WORKDIRS"]:
             shutil.rmtree(ctx.workdir, ignore_errors=True)

@@ -1,0 +1,20 @@
+<section id="run-disasters" class="panel run-tags">
+  <div class="muted small">DISASTERS</div>
+  {% if own or inherited %}
+  <div class="id-chips">
+    {% for c in own %}<a class="id-chip" href="{% url 'web:disaster-detail' c.ref %}">{{ c.label }}</a>{% endfor %}
+    {% for c in inherited %}<a class="id-chip" href="{% url 'web:disaster-detail' c.ref %}" title="From the run's STAC item">{{ c.label }}</a>{% endfor %}
+  </div>
+  {% else %}<p class="muted small">Not linked to a disaster.</p>{% endif %}
+  {% if can_edit %}
+    {% if editing %}
+    <form hx-post="{% url 'web:run-disasters' run.id %}" hx-target="#run-disasters" hx-swap="outerHTML">
+      {% include "web/partials/form_field.html" with field=form.event_refs %}
+      <p><button class="btn primary small" type="submit">Save</button>
+         <button class="btn small" type="button" hx-get="{{ run.get_absolute_url }}" hx-select="#run-disasters" hx-target="#run-disasters" hx-swap="outerHTML">Cancel</button></p>
+    </form>
+    {% else %}
+    <button class="link small" hx-get="{% url 'web:run-disasters' run.id %}" hx-target="#run-disasters" hx-swap="outerHTML">Edit disaster links</button>
+    {% endif %}
+  {% endif %}
+</section>

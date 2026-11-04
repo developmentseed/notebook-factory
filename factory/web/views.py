@@ -1,31 +1,123 @@
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import urlencode
 
+import markdown
+import yaml
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, permission_required, user_passes_test
 from django.core.paginator import Paginator
-from django.db.models import Count, Q
+from django.db.models import Count, ProtectedError, Q, Value
+from django.db.models.functions import Coalesce, NullIf
 from django.http import HttpResponse, HttpResponseNotFound, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
+from django.utils.safestring import mark_safe
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.http import require_POST
 from django.views.static import serve
 
-from factory.catalog.models import AdminArea, Country, Hazard
-from factory.events.models import Event, EventTriggerRule, PollerState
+from factory.catalog import facets
+from factory.catalog.models import AdminArea, Country, Facet, FacetOption
+from factory.events import disasters as D
+from factory.events import refs as event_refs
+from factory.events.matching import upsert_item
+from factory.events.models import (
+    EventLinkOverride,
+    LinkVerdict,
+    PollerState,
+    StacCatalog,
+    StacItem,
+    TriggerRule,
+)
+from factory.events.stac_client import StacClient, StacClientError
 from factory.notebooks import parameters as P
-from factory.notebooks.models import AnalysisNotebook, NotebookRun, RunBatch, RunStatus, TriggerKind, UseCase
+from factory.notebooks import schema_builder as SB
+from factory.notebooks import templates as T
+from factory.notebooks.bundles import inspect_template
+from factory.notebooks.environment import secret_status
+from factory.notebooks.models import (
+    AnalysisNotebook,
+    NotebookRun,
+    RunBatch,
+    RunStatus,
+    TemplateSecret,
+    TriggerKind,
+)
 from factory.notebooks.parameters import ParameterError
+from factory.notebooks.pipeline.inputs import RESERVED_PARAMETERS
 from factory.notebooks.services import RunRequestError, cancel_run, create_batch, create_run, retry_run
+from factory.notebooks.uploads import ArchiveError, UploadError, as_archive, create_upload, inspect_archive
 
-from .forms import RunRequestForm
+from . import stac_picker
+from .forms import (
+    FacetForm,
+    FacetOptionFormSet,
+    ParameterRowFormSet,
+    RunDetailsForm,
+    RunDisastersForm,
+    RunRequestForm,
+    StacCatalogForm,
+    TemplateForm,
+    TemplateSecretForm,
+    TemplateUploadForm,
+    TemplateVersionForm,
+    UploadForm,
+)
+
+staff_required = user_passes_test(lambda u: u.is_active and u.is_staff, login_url="web:login")
+# Uploaded templates run arbitrary code on the workers, so editing them is a separate permission.
+TEMPLATE_PERM = "notebooks.change_analysisnotebook"
+
+
+def template_editor_required(view):
+    return login_required(permission_required(TEMPLATE_PERM, raise_exception=True)(view))
+
+
+def _can_edit_templates(user) -> bool:
+    return user.is_authenticated and user.has_perm(TEMPLATE_PERM)
+
+
+def _browse_facets(params, qs=None):
+    """[{facet, options, selected}] for the filter sidebars; options limited to `qs` when given."""
+    out = []
+    for facet in Facet.objects.filter(show_in_browse=True).prefetch_related("options"):
+        values = params.getlist(facet.key) if hasattr(params, "getlist") else []
+        out.append(
+            {"facet": facet, "options": list(facet.options.all()), "selected": [v for v in values if v]}
+        )
+    return out
+
+
+def _tag_fields(facet_list, selected: dict[str, list[str]], allowed: dict[str, list] | None = None):
+    """[{facet, options, selected, name}] for tag inputs (select for single, checkboxes for multiple)."""
+    fields = []
+    for facet in facet_list:
+        options = (allowed or {}).get(facet.key) or list(facet.options.all())
+        fields.append(
+            {
+                "facet": facet,
+                "options": options,
+                "selected": selected.get(facet.key, []),
+                "name": f"facet_{facet.key}",
+            }
+        )
+    return fields
+
+
+def _posted_tags(post, facet_list) -> dict[str, list[str]]:
+    return {f.key: [v for v in post.getlist(f"facet_{f.key}") if v] for f in facet_list}
+
 
 # ---------------------------------------------------------------------------
 # Browse / discover
 # ---------------------------------------------------------------------------
+
+
+UPLOADED = "_upload"  # the browse "template" filter value for uploaded notebooks
 
 
 def _filtered_runs(request):
@@ -34,28 +126,39 @@ def _filtered_runs(request):
     f = {
         "q": g.get("q", "").strip(),
         "country": g.get("country", ""),
-        "hazard": g.get("hazard", ""),
-        "use_case": g.get("use_case", ""),
         "template": g.get("template", ""),
         "status": g.get("status", "published"),
         "period": g.get("period", ""),
         "sort": g.get("sort", "-created_at"),
+        "disaster": g.get("disaster", "").strip(),
     }
+    disaster = None
+    if not f["disaster"] and event_refs.parse(f["q"]):
+        # a disaster ID typed in the search box shows that disaster's analyses
+        f["disaster"], f["q"] = f["q"], ""
+    if f["disaster"]:
+        disaster, qs = _disaster_runs(f["disaster"], qs)
+    f["disaster_obj"] = disaster
     if f["q"]:
         qs = qs.filter(
             Q(notebook__title__icontains=f["q"])
+            | Q(display_title__icontains=f["q"])
+            | Q(summary__icontains=f["q"])
+            | Q(description__icontains=f["q"])
             | Q(area__name__icontains=f["q"])
             | Q(area__country__name__icontains=f["q"])
-            | Q(event__title__icontains=f["q"])
-            | Q(event__monty_corr_id__icontains=f["q"])
+            | Q(stac_item__title__icontains=f["q"])
+            | Q(stac_item__item_id__icontains=f["q"])
+            | Q(stac_item__correlation_id__icontains=f["q"])
         )
     if f["country"]:
-        qs = qs.filter(Q(area__country_id=f["country"]) | Q(event__country_codes__contains=[f["country"]]))
-    if f["hazard"]:
-        qs = qs.filter(hazard__key=f["hazard"])
-    if f["use_case"]:
-        qs = qs.filter(notebook__use_case=f["use_case"])
-    if f["template"]:
+        qs = qs.filter(
+            Q(area__country_id=f["country"]) | Q(stac_item__country_codes__contains=[f["country"]])
+        )
+    qs = facets.filter_queryset(qs, g)
+    if f["template"] == UPLOADED:
+        qs = qs.filter(notebook__isnull=True)
+    elif f["template"]:
         qs = qs.filter(notebook__slug=f["template"])
     if f["status"] == "published":
         qs = qs.filter(status=RunStatus.PUBLISHED)
@@ -65,9 +168,27 @@ def _filtered_runs(request):
         qs = qs.filter(status=RunStatus.FAILED)
     if f["period"] in {"30", "90", "365"}:
         qs = qs.filter(created_at__gte=timezone.now() - timezone.timedelta(days=int(f["period"])))
-    if f["sort"] in {"-created_at", "created_at", "notebook__title", "area__name"}:
+    if f["sort"] == "notebook__title":
+        qs = qs.order_by(Coalesce(NullIf("display_title", Value("")), "notebook__title"))
+    elif f["sort"] in {"-created_at", "created_at", "area__name"}:
         qs = qs.order_by(f["sort"])
     return qs, f
+
+
+def _resolve_disaster(text):
+    """(disaster or None, error message) for an ID; catalog failures fall back to stored items."""
+    try:
+        return D.resolve(text), ""
+    except D.DisasterError as exc:
+        return None, str(exc)
+
+
+def _disaster_runs(text, qs):
+    disaster, _ = _resolve_disaster(text)
+    if disaster is not None:
+        return disaster, D.runs_for(disaster, qs)
+    refs = event_refs.parse(text) or [text]
+    return None, qs.filter(Q(event_refs__overlap=refs) | Q(stac_item__event_refs__overlap=refs)).distinct()
 
 
 def browse(request):
@@ -78,9 +199,9 @@ def browse(request):
         "page": page,
         "filters": f,
         "countries": Country.objects.filter(Q(areas__runs__isnull=False)).distinct().order_by("name"),
-        "hazards": Hazard.objects.all(),
-        "use_cases": UseCase.choices,
+        "facet_filters": _browse_facets(request.GET),
         "templates": AnalysisNotebook.objects.filter(is_active=True),
+        "uploaded": UPLOADED,
         "total": paginator.count,
     }
     if request.htmx:
@@ -94,16 +215,24 @@ def browse(request):
 
 
 def template_list(request):
+    can_edit = _can_edit_templates(request.user)
     templates = (
-        AnalysisNotebook.objects.filter(is_active=True)
-        .prefetch_related("hazards")
-        .annotate(run_count=Count("runs"))
+        AnalysisNotebook.objects.all() if can_edit else AnalysisNotebook.objects.filter(is_active=True)
     )
-    return render(request, "web/templates_list.html", {"templates": templates})
+    templates = templates.prefetch_related("facet_options__facet").annotate(run_count=Count("runs"))
+    return render(request, "web/templates_list.html", {"templates": templates, "can_edit": can_edit})
+
+
+def _visible_template(request, slug, **lookup):
+    """Inactive templates are only visible to template editors (who may test-run them)."""
+    qs = AnalysisNotebook.objects.select_related("current_version")
+    if not _can_edit_templates(request.user):
+        qs = qs.filter(is_active=True)
+    return get_object_or_404(qs, slug=slug, **lookup)
 
 
 def template_detail(request, slug):
-    nb = get_object_or_404(AnalysisNotebook.objects.prefetch_related("hazards"), slug=slug)
+    nb = _visible_template(request, slug)
     runs = nb.runs.with_related()[:10]
     return render(
         request,
@@ -114,26 +243,47 @@ def template_detail(request, slug):
             "runs": runs,
             "run_count": nb.runs.count(),
             "rules": nb.trigger_rules.all(),
+            "can_edit": _can_edit_templates(request.user),
         },
     )
 
 
 @login_required
 def run_new(request, slug):
-    nb = get_object_or_404(AnalysisNotebook, slug=slug, is_active=True)
+    nb = _visible_template(request, slug)
     initial = {}
-    event = None
-    if request.GET.get("event"):
-        event = Event.objects.filter(pk=request.GET["event"]).first()
-        if event:
-            initial["event"] = event
-            iso3 = (event.country_codes or [None])[0]
+    picker_params = request.POST if request.method == "POST" else {}
+    stac_item = None
+    if request.GET.get("stac_item"):
+        stac_item = StacItem.objects.select_related("catalog").filter(pk=request.GET["stac_item"]).first()
+        if stac_item:
+            initial["stac_item"] = stac_item
+            picker_params = {
+                "stac_catalog": str(stac_item.catalog_id),
+                "stac_collection": stac_item.collection,
+                "stac_item_id": stac_item.item_id,
+                "stac_show_all": "1",
+            }
+            iso3 = (stac_item.country_codes or [None])[0]
             if iso3:
                 initial["country"] = Country.objects.filter(pk=iso3).first()
+    if request.GET.get("disaster"):
+        initial["event_refs"] = event_refs.parse(request.GET["disaster"])
     if request.GET.get("area"):
         area = AdminArea.objects.light().filter(pk=request.GET["area"]).first()
         if area:
             initial.update({"country": area.country, "level": area.level, "area_ids": str(area.pk)})
+    # Tags: facets pinned by the template (exactly one option) are shown, not asked; facets
+    # fed by a parameter come from that parameter. The rest can be set by hand (empty = derived).
+    template_groups = {f.key: opts for f, opts in nb.facet_groups}
+    fed_by_params = facets.parameter_facet_keys(nb)
+    tag_facets = [
+        f
+        for f in Facet.objects.prefetch_related("options")
+        if f.key not in fed_by_params and len(template_groups.get(f.key, [])) != 1
+    ]
+    pinned = [(f, opts) for f, opts in nb.facet_groups if len(opts) == 1 and f.key not in fed_by_params]
+    tags = _posted_tags(request.POST, tag_facets) if request.method == "POST" else {}
     if request.method == "POST":
         form = RunRequestForm(nb, request.POST)
         params = P.coerce_form_data(nb.parameter_schema, request.POST)
@@ -153,8 +303,11 @@ def run_new(request, slug):
                         user=request.user,
                         trigger=TriggerKind.MANUAL,
                         notify_emails=d["notify_emails"],
-                        event=d.get("event"),
+                        stac_item=d.get("stac_item"),
+                        filters=tags,
+                        event_refs=d["event_refs"],
                         description=f"{d['areas'][0].country.name} · {len(d['areas'])} areas",
+                        allow_inactive=True,
                     )
                     messages.success(request, f"Queued {len(d['areas'])} runs.")
                     return redirect(batch)
@@ -162,10 +315,13 @@ def run_new(request, slug):
                     nb,
                     params,
                     area=d["areas"][0] if d["areas"] else None,
-                    event=d.get("event"),
+                    stac_item=d.get("stac_item"),
+                    filters=tags,
+                    event_refs=d["event_refs"],
                     user=request.user,
                     trigger=TriggerKind.MANUAL,
                     notify_emails=d["notify_emails"],
+                    allow_inactive=True,
                 )
                 messages.success(request, "Run queued.")
                 return redirect(run)
@@ -183,11 +339,359 @@ def run_new(request, slug):
         "param_errors": param_errors,
         "countries": Country.objects.filter(areas__isnull=False).distinct().order_by("name"),
         "levels": sorted(set(AdminArea.objects.values_list("level", flat=True).distinct())),
-        "event": event,
-        "recent_events": Event.objects.select_related("hazard")[:50] if nb.requires_event else [],
+        "stac_item": stac_item,
+        "picker": stac_picker.build(nb, picker_params) if nb.requires_stac_item else None,
         "selected_area_ids": request.POST.get("area_ids", initial.get("area_ids", "")),
+        "tag_fields": _tag_fields(tag_facets, tags, allowed=template_groups),
+        "pinned_tags": pinned,
     }
     return render(request, "web/run_new.html", ctx)
+
+
+# ---------------------------------------------------------------------------
+# Template management (notebooks.change_analysisnotebook)
+# ---------------------------------------------------------------------------
+
+
+def _facet_choices():
+    return [(f.key, f.label) for f in Facet.objects.all()]
+
+
+def _row_formset(data=None, rows=None):
+    kwargs = {"form_kwargs": {"facet_choices": _facet_choices()}, "prefix": "p"}
+    if data is not None:
+        return ParameterRowFormSet(data, **kwargs)
+    return ParameterRowFormSet(initial=rows or [], **kwargs)
+
+
+def _posted_schema(post):
+    """(schema or None, errors, mode, bound formset or None) from the schema editor's fields."""
+    mode = post.get("schema_mode", "rows")
+    if mode == "yaml":
+        try:
+            schema = yaml.safe_load(post.get("schema_yaml", "")) or {}
+            if not isinstance(schema, dict):
+                raise ValueError("the schema must be a mapping")
+        except (yaml.YAMLError, ValueError) as exc:
+            return None, {"_schema": f"Not a valid schema: {exc}"}, mode, None
+        return schema, {}, mode, None
+    formset = _row_formset(post)
+    if not formset.is_valid():
+        return None, {"_rows": "Fix the highlighted parameters."}, mode, formset
+    rows = []
+    for i, form in enumerate(formset.forms):
+        row = dict(form.cleaned_data)
+        if row:
+            row["order"] = row["order"] if row.get("order") is not None else 1000 + i
+            rows.append(row)
+    try:
+        return SB.schema_from_rows(rows), {}, mode, formset
+    except SB.RowError as exc:
+        return None, exc.errors, mode, formset
+
+
+def _editor_ctx(nb, schema, *, mode="rows", formset=None, errors=None, warnings=None, yaml_text=""):
+    """Context for partials/template_schema.html: rows or YAML, problems, and a preview of the run form."""
+    errors = dict(errors or {})
+    warnings = list(warnings or [])
+    preview = []
+    if schema is not None:
+        found, found_warnings = SB.check_schema(schema)
+        errors.update(found)
+        warnings.extend(found_warnings)
+        warnings.extend(T.trigger_rule_problems(nb, schema))
+        yaml_text = yaml.safe_dump(schema, sort_keys=False, allow_unicode=True, width=110) if schema else ""
+        if formset is None:
+            formset = _row_formset(rows=SB.rows_from_schema(schema))
+        if not errors:
+            preview = P.schema_fields(schema)
+    elif formset is None:
+        formset = _row_formset(rows=[])
+    return {
+        "nb": nb,
+        "mode": mode,
+        "formset": formset,
+        "schema_yaml": yaml_text,
+        "schema_errors": {k: v for k, v in errors.items() if not k.startswith("_")},
+        "general_errors": [v for k, v in errors.items() if k.startswith("_")],
+        "schema_warnings": warnings,
+        "fields": preview,
+        "values": P.defaults(schema) if preview else {},
+        "param_errors": {},
+        "reserved": RESERVED_PARAMETERS,
+    }
+
+
+def _flash_warnings(request, warnings):
+    for warning in warnings:
+        messages.warning(request, warning)
+
+
+@template_editor_required
+def template_new(request):
+    if not request.user.has_perm("notebooks.add_analysisnotebook"):
+        return HttpResponse("You may not add templates.", status=403)
+    form = TemplateUploadForm(request.POST or None, request.FILES or None)
+    manifest = None
+    if request.method == "POST" and form.is_valid():
+        d = form.cleaned_data
+        try:
+            manifest = inspect_template(d["file"], d["file"].name, d["notebook_path"])
+        except ArchiveError as exc:
+            form.add_error("file", str(exc))
+        else:
+            if manifest.notebook is None:
+                form.add_error("notebook_path", "The archive holds several notebooks; pick the one to run.")
+            else:
+                try:
+                    nb, warnings = T.create_from_manifest(
+                        manifest, slug=d["slug"], title=d["title"], user=request.user, note=d["note"]
+                    )
+                except T.TemplateError as exc:
+                    form.add_error("slug", str(exc))
+                else:
+                    messages.success(
+                        request,
+                        f"Uploaded {nb.title}. Review its parameters and settings, then make it active.",
+                    )
+                    _flash_warnings(request, warnings)
+                    return redirect("web:template-edit", nb.slug)
+    return render(request, "web/template_new.html", {"form": form, "manifest": manifest})
+
+
+@template_editor_required
+@require_POST
+def template_inspect(request):
+    """Describe a picked template file: its notebooks, detected parameters and warnings (HTMX)."""
+    upload = request.FILES.get("file")
+    ctx = {"manifest": None, "error": "", "selected": request.POST.get("notebook_path", ""), "detected": []}
+    if upload is not None:
+        try:
+            ctx["manifest"] = manifest = inspect_template(upload, upload.name, ctx["selected"])
+        except ArchiveError as exc:
+            ctx["error"] = str(exc)
+        else:
+            if manifest.nb is not None:
+                ctx["detected"], ctx["detect_warnings"] = SB.detect_parameters(manifest.nb)
+    return render(request, "web/partials/template_inspect.html", ctx)
+
+
+@template_editor_required
+def template_edit(request, slug):
+    nb = get_object_or_404(AnalysisNotebook.objects.select_related("current_version"), slug=slug)
+    form = TemplateForm(request.POST or None, instance=nb)
+    if request.method == "POST":
+        schema, errors, mode, formset = _posted_schema(request.POST)
+        if schema is not None:
+            errors.update(SB.check_schema(schema)[0])
+        if form.is_valid() and not errors:
+            fresh = AnalysisNotebook.objects.select_related("current_version").get(pk=nb.pk)
+            try:
+                outcome = T.save_settings(
+                    fresh,
+                    form.display(),
+                    form.snapshot(schema),
+                    options=form.cleaned_data["facet_options"],
+                    user=request.user,
+                    note=form.cleaned_data["note"],
+                )
+            except T.TemplateError as exc:
+                form.add_error(None, str(exc))
+            else:
+                fresh.refresh_from_db()
+                version = fresh.current_version
+                messages.success(
+                    request,
+                    {
+                        "unchanged": f"Saved {fresh.title}.",
+                        "amended": f"Saved {fresh.title} (v{version.number} updated; no run has used it yet).",
+                        "new version": f"Saved {fresh.title} as v{version.number}.",
+                    }[outcome],
+                )
+                _flash_warnings(request, SB.filter_warnings(schema) + T.trigger_rule_problems(fresh, schema))
+                return redirect(fresh)
+        if not errors and form.errors:
+            errors = {}
+        editor = _editor_ctx(
+            nb,
+            schema,
+            mode=mode,
+            formset=formset,
+            errors=errors,
+            yaml_text=request.POST.get("schema_yaml", ""),
+        )
+    else:
+        editor = _editor_ctx(nb, nb.parameter_schema)
+    selected = {int(x) for x in (form["facet_options"].value() or []) if str(x).isdigit()}
+    ctx = {
+        **editor,
+        "form": form,
+        "version": nb.current_version,
+        "option_groups": facets.group_options(FacetOption.objects.select_related("facet")),
+        "selected_options": selected,
+        "run_count": nb.runs.count(),
+        "secret_states": secret_status(nb, nb.secret_names),
+    }
+    return render(request, "web/template_form.html", ctx)
+
+
+@template_editor_required
+@require_POST
+def template_schema(request, slug):
+    """Schema editor actions (HTMX): preview, switch rows/YAML, add a row, re-detect from the notebook."""
+    nb = get_object_or_404(AnalysisNotebook.objects.select_related("current_version"), slug=slug)
+    action = request.POST.get("action", "preview")
+    schema, errors, mode, formset = _posted_schema(request.POST)
+    warnings = []
+    if schema is not None:
+        if action == "to_yaml":
+            mode, formset = "yaml", None
+        elif action == "to_rows":
+            mode, formset = "rows", None
+        elif action == "add_row":
+            rows = SB.rows_from_schema(schema)
+            rows.append({"include": True, "type": "string", "order": len(rows)})
+            formset = _row_formset(rows=rows)
+        elif action == "detect":
+            try:
+                detected, warnings = SB.detect_parameters(T.current_notebook(nb))
+                rows, merge_warnings = SB.merge_detected(SB.rows_from_schema(schema), detected)
+                schema = SB.schema_from_rows(rows)
+                warnings += merge_warnings
+                mode, formset = "rows", None
+            except (T.TemplateError, ArchiveError, SB.RowError) as exc:
+                warnings.append(f"Could not read the notebook: {exc}")
+    ctx = _editor_ctx(
+        nb,
+        schema,
+        mode=mode,
+        formset=formset,
+        errors=errors,
+        warnings=warnings,
+        yaml_text=request.POST.get("schema_yaml", ""),
+    )
+    return render(request, "web/partials/template_schema.html", ctx)
+
+
+@template_editor_required
+def template_versions(request, slug):
+    nb = get_object_or_404(AnalysisNotebook.objects.select_related("current_version"), slug=slug)
+    versions = nb.versions.select_related("created_by").annotate(run_count=Count("runs"))
+    return render(request, "web/template_versions.html", {"nb": nb, "versions": versions})
+
+
+@template_editor_required
+def template_version_new(request, slug):
+    nb = get_object_or_404(AnalysisNotebook.objects.select_related("current_version"), slug=slug)
+    form = TemplateVersionForm(request.POST or None, request.FILES or None)
+    manifest = None
+    if request.method == "POST" and form.is_valid():
+        d = form.cleaned_data
+        try:
+            manifest = inspect_template(d["file"], d["file"].name, d["notebook_path"])
+            if manifest.notebook is None:
+                raise ArchiveError("The archive holds several notebooks; pick the one to run.")
+            version, warnings = T.add_version_from_manifest(
+                nb, manifest, user=request.user, note=d["note"], make_current=d["make_current"]
+            )
+        except (ArchiveError, T.TemplateError) as exc:
+            form.add_error("file", str(exc))
+        else:
+            state = "now current" if d["make_current"] else "not current yet"
+            messages.success(request, f"Uploaded v{version.number} of {nb.title} ({state}).")
+            _flash_warnings(request, warnings)
+            return redirect("web:template-edit" if d["make_current"] else "web:template-versions", nb.slug)
+    return render(request, "web/template_version_new.html", {"nb": nb, "form": form, "manifest": manifest})
+
+
+@template_editor_required
+@require_POST
+def template_version_current(request, slug, number):
+    nb = get_object_or_404(AnalysisNotebook.objects.select_related("current_version"), slug=slug)
+    version = get_object_or_404(nb.versions, number=number)
+    T.set_current(nb, version)
+    messages.success(request, f"v{version.number} is now the current version of {nb.title}.")
+    _flash_warnings(request, T.trigger_rule_problems(nb, version.parameter_schema))
+    return redirect("web:template-versions", nb.slug)
+
+
+@template_editor_required
+def template_download(request, slug, number=None):
+    nb = get_object_or_404(AnalysisNotebook.objects.select_related("current_version"), slug=slug)
+    version = get_object_or_404(nb.versions, number=number) if number else nb.current_version
+    try:
+        data = T.export_bundle(nb, version)
+    except (T.TemplateError, OSError) as exc:
+        messages.error(request, str(exc))
+        return redirect("web:template-versions", nb.slug)
+    name = f"{nb.slug}-v{version.number}.zip" if version else f"{nb.slug}.zip"
+    response = HttpResponse(data, content_type="application/zip")
+    response["Content-Disposition"] = f'attachment; filename="{name}"'
+    return response
+
+
+@template_editor_required
+@require_POST
+def template_delete(request, slug):
+    nb = get_object_or_404(AnalysisNotebook, slug=slug)
+    try:
+        T.delete_template(nb)
+    except T.TemplateError as exc:
+        messages.error(request, str(exc))
+        return redirect("web:template-edit", nb.slug)
+    messages.info(request, f"Deleted template {nb.title}.")
+    return redirect("web:template-list")
+
+
+# ---------------------------------------------------------------------------
+# Template secrets (notebooks.change_templatesecret)
+# ---------------------------------------------------------------------------
+
+SECRET_PERM = "notebooks.change_templatesecret"
+
+
+def secret_manager_required(view):
+    return login_required(permission_required(SECRET_PERM, raise_exception=True)(view))
+
+
+@secret_manager_required
+def secret_list(request):
+    secrets = list(TemplateSecret.objects.prefetch_related("templates"))
+    needed = {}
+    for nb in AnalysisNotebook.objects.exclude(secret_names=[]).only("slug", "title", "secret_names"):
+        for name in nb.secret_names:
+            needed.setdefault(name, []).append(nb)
+    for secret in secrets:
+        granted = {t.pk for t in secret.templates.all()}
+        secret.waiting = [nb for nb in needed.pop(secret.name, []) if nb.pk not in granted]
+    return render(request, "web/secrets_list.html", {"secrets": secrets, "unknown": sorted(needed.items())})
+
+
+@secret_manager_required
+def secret_edit(request, name=None):
+    secret = get_object_or_404(TemplateSecret, name=name) if name else None
+    if secret is None and not request.user.has_perm("notebooks.add_templatesecret"):
+        return HttpResponse("You may not add secrets.", status=403)
+    initial = None if secret else {"name": request.GET.get("name", "")}
+    form = TemplateSecretForm(request.POST or None, instance=secret, initial=initial)
+    if request.method == "POST" and form.is_valid():
+        secret = form.save()
+        messages.success(request, f"Saved secret {secret}.")
+        return redirect("web:secret-list")
+    return render(request, "web/secret_form.html", {"form": form, "secret": secret})
+
+
+@secret_manager_required
+@require_POST
+def secret_delete(request, name):
+    secret = get_object_or_404(TemplateSecret, name=name)
+    if not request.user.has_perm("notebooks.delete_templatesecret"):
+        return HttpResponse("You may not delete secrets.", status=403)
+    secret.delete()
+    messages.info(
+        request, f"Deleted secret {secret}. Templates that declare it can't run until it is added again."
+    )
+    return redirect("web:secret-list")
 
 
 # ---------------------------------------------------------------------------
@@ -200,7 +704,95 @@ def run_detail(request, pk):
     ctx = {"run": run, "log": run.log_entries.all()[:400], "notifications": run.notifications.all()}
     if request.htmx:
         return render(request, "web/partials/run_status.html", ctx)
+    ctx["tags"] = _run_tags_ctx(request, run)
+    ctx["can_edit"] = _can_edit_tags(request.user, run)
+    ctx["disasters"] = _run_disasters_ctx(request, run)
     return render(request, "web/run_detail.html", ctx)
+
+
+def _run_disasters_ctx(request, run, editing=False, form=None):
+    return {
+        "run": run,
+        "can_edit": _can_edit_tags(request.user, run),
+        "editing": editing,
+        "form": form or RunDisastersForm(initial={"event_refs": run.event_refs}),
+        "own": [_ref_chip(r) for r in run.event_refs],
+        "inherited": [
+            _ref_chip(r)
+            for r in (run.stac_item.event_refs if run.stac_item_id else [])
+            if r not in run.event_refs and not r.startswith(("stac:", "corrstem:"))
+        ],
+    }
+
+
+def _ref_chip(r):
+    return {"ref": r, "label": event_refs.label(r)}
+
+
+@login_required
+def run_disasters(request, pk):
+    """Show / edit the disaster IDs a run is linked to besides its STAC item's (HTMX partial)."""
+    run = get_object_or_404(NotebookRun.objects.with_related(), pk=pk)
+    if not _can_edit_tags(request.user, run):
+        return HttpResponse("Only the requester or staff can edit disaster links.", status=403)
+    if request.method == "POST":
+        form = RunDisastersForm(request.POST)
+        if form.is_valid():
+            run.event_refs = form.cleaned_data["event_refs"]
+            run.save(update_fields=["event_refs", "updated_at"])
+            run.log(f"disaster links edited by {request.user.get_username()}")
+            return render(request, "web/partials/run_disasters.html", _run_disasters_ctx(request, run))
+        return render(
+            request, "web/partials/run_disasters.html", _run_disasters_ctx(request, run, True, form)
+        )
+    return render(request, "web/partials/run_disasters.html", _run_disasters_ctx(request, run, editing=True))
+
+
+def _can_edit_tags(user, run) -> bool:
+    return user.is_authenticated and (user.is_staff or run.triggered_by_id == user.pk)
+
+
+def _run_tags_ctx(request, run, editing=False):
+    all_facets = list(Facet.objects.prefetch_related("options"))
+    return {
+        "run": run,
+        "can_edit": _can_edit_tags(request.user, run),
+        "editing": editing,
+        "tag_fields": _tag_fields(all_facets, facets.manual_tags(run)),
+    }
+
+
+@login_required
+def run_tags(request, pk):
+    """Show / edit a run's manual tags (HTMX partial). Clearing a filter falls back to derived tags."""
+    run = get_object_or_404(NotebookRun.objects.with_related(), pk=pk)
+    if not _can_edit_tags(request.user, run):
+        return HttpResponse("Only the requester or staff can edit tags.", status=403)
+    if request.method == "POST":
+        all_facets = list(Facet.objects.all())
+        facets.update_run_manual(run, _posted_tags(request.POST, all_facets))
+        run = NotebookRun.objects.with_related().get(pk=pk)
+        run.log(f"tags edited by {request.user.get_username()}")
+        return render(request, "web/partials/run_tags.html", _run_tags_ctx(request, run))
+    return render(request, "web/partials/run_tags.html", _run_tags_ctx(request, run, editing=True))
+
+
+@login_required
+def run_details(request, pk):
+    """Show / edit a run's title, summary and description (HTMX partial)."""
+    run = get_object_or_404(NotebookRun.objects.with_related(), pk=pk)
+    if not _can_edit_tags(request.user, run):
+        return HttpResponse("Only the requester or staff can edit details.", status=403)
+    form = RunDetailsForm(request.POST or None, instance=run)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        run.log(f"details edited by {request.user.get_username()}")
+        return render(request, "web/partials/run_details.html", {"run": run, "can_edit": True})
+    return render(
+        request,
+        "web/partials/run_details.html",
+        {"run": run, "can_edit": True, "editing": True, "form": form},
+    )
 
 
 def run_status_json(request, pk):
@@ -236,7 +828,16 @@ def run_cancel(request, pk):
 @require_POST
 def run_retry(request, pk):
     run = get_object_or_404(NotebookRun.objects.with_related(), pk=pk)
-    new = retry_run(run, user=request.user)
+    try:
+        new = retry_run(run, user=request.user, allow_inactive=_can_edit_templates(request.user))
+    except ParameterError as exc:
+        messages.error(
+            request, f"The template's parameters changed since this run; start a new run instead ({exc})."
+        )
+        return redirect(run)
+    except RunRequestError as exc:
+        messages.error(request, str(exc))
+        return redirect(run)
     messages.success(request, "New run queued.")
     return redirect(new)
 
@@ -251,38 +852,357 @@ def batch_detail(request, pk):
 
 
 # ---------------------------------------------------------------------------
-# Events
+# Uploads (already executed notebooks)
 # ---------------------------------------------------------------------------
 
 
-def event_list(request):
-    qs = Event.objects.select_related("hazard").annotate(run_count=Count("runs"))
+@staff_required
+def upload_new(request):
+    all_facets = list(Facet.objects.prefetch_related("options"))
+    tags = _posted_tags(request.POST, all_facets) if request.method == "POST" else {}
+    form = UploadForm(request.POST or None, request.FILES or None)
+    if request.method == "POST" and form.is_valid():
+        d = form.cleaned_data
+        try:
+            run = create_upload(
+                d["archive"],
+                notebook_path=form.manifest.notebook,
+                title=d["title"],
+                summary=d["summary"],
+                description=d["description"],
+                area=d["area"],
+                stac_item=d["stac_item"],
+                filters=tags,
+                event_refs=d["event_refs"],
+                user=request.user,
+            )
+        except UploadError as exc:
+            form.add_error("file", str(exc))
+        else:
+            messages.success(request, "Notebook uploaded; it is being rendered.")
+            return redirect(run)
+    ctx = {
+        "form": form,
+        "detail_fields": [form["title"], form["summary"], form["description"], form["event_refs"]],
+        "manifest": form.manifest,
+        "countries": Country.objects.filter(areas__isnull=False).distinct().order_by("name"),
+        "levels": sorted(set(AdminArea.objects.values_list("level", flat=True).distinct())),
+        "selected_area_ids": request.POST.get("area_ids", ""),
+        "tag_fields": _tag_fields(all_facets, tags),
+        "stac_open": bool(request.POST.get("stac_item_id")),
+        "picker": stac_picker.build(None, request.POST) if request.POST.get("stac_item_id") else None,
+    }
+    return render(request, "web/upload_new.html", ctx)
+
+
+@staff_required
+@require_POST
+def upload_inspect(request):
+    """Describe the chosen file as soon as it is picked: its notebooks, title and warnings (HTMX)."""
+    upload = request.FILES.get("file")
+    ctx = {"manifest": None, "error": "", "selected": request.POST.get("notebook_path", "")}
+    if upload is not None:
+        try:
+            ctx["manifest"] = inspect_archive(as_archive(upload, upload.name), ctx["selected"])
+        except UploadError as exc:
+            ctx["error"] = str(exc)
+    return render(request, "web/partials/upload_inspect.html", ctx)
+
+
+@staff_required
+def upload_stac_picker(request):
+    return render(request, "web/partials/stac_picker.html", {"picker": stac_picker.build(None, request.GET)})
+
+
+# ---------------------------------------------------------------------------
+# STAC picker (run form)
+# ---------------------------------------------------------------------------
+
+
+@login_required
+def stac_picker_partial(request, slug):
+    """Re-render the catalog → collection → item picker from its own inputs (HTMX)."""
+    nb = get_object_or_404(AnalysisNotebook, slug=slug, is_active=True)
+    return render(request, "web/partials/stac_picker.html", {"picker": stac_picker.build(nb, request.GET)})
+
+
+# ---------------------------------------------------------------------------
+# Disasters
+# ---------------------------------------------------------------------------
+
+
+def disaster_search(request):
+    """Find a disaster by any of its IDs; free text searches stored items and lists recent disasters."""
+    q = request.GET.get("q", "").strip()
+    ctx = {"q": q, "error": "", "items": [], "recent": _recent_disasters()}
+    if q and event_refs.parse(q):
+        disaster, error = _resolve_disaster(q)
+        if disaster is not None:
+            return redirect("web:disaster-detail", ref=disaster.key)
+        ctx["error"] = error or f"No disaster found for {q}."
+    elif q:
+        ctx["items"] = (
+            StacItem.objects.select_related("catalog")
+            .filter(
+                Q(title__icontains=q) | Q(description__icontains=q) | Q(country_codes__contains=[q.upper()])
+            )
+            .annotate(run_count=Count("runs", distinct=True))
+            .order_by("-occurred_at")[:30]
+        )
+    return render(request, "web/disaster_search.html", ctx)
+
+
+def _recent_disasters(limit=20):
+    """Stored items that have analyses, newest first: entry points to disaster pages."""
+    items = (
+        StacItem.objects.filter(runs__isnull=False)
+        .annotate(run_count=Count("runs", distinct=True))
+        .order_by("-occurred_at", "-first_seen_at")
+        .distinct()[:limit]
+    )
+    out = []
+    for item in items:
+        ref = next((r for r in item.event_refs if not r.startswith(("stac:", "corr:", "corrstem:"))), None)
+        out.append({"item": item, "ref": ref or f"stac:{item.collection}/{item.item_id}"})
+    return out
+
+
+def disaster_detail(request, ref):
+    disaster, error = _resolve_disaster(ref)
+    if disaster is None:
+        messages.error(request, error or f"No disaster found for {ref}.")
+        return redirect(f"{reverse('web:disaster-search')}?{urlencode({'q': ref})}")
+    if disaster.key != ref:
+        return redirect("web:disaster-detail", ref=disaster.key)
+    runs = D.runs_for(disaster, NotebookRun.objects.with_related()).order_by("-created_at")
+    can_link = request.user.is_authenticated
+    ctx = {
+        "d": disaster,
+        "runs": runs,
+        "possible_runs": D.possibly_related_runs(disaster) if can_link else [],
+        "id_chips": [
+            {"ref": r, "label": event_refs.label(r), "url": event_refs.external_url(r)}
+            for r in disaster.headline_refs
+        ],
+        "templates": AnalysisNotebook.objects.filter(is_active=True) if request.user.is_authenticated else [],
+        "is_staff": request.user.is_staff,
+    }
+    return render(request, "web/disaster_detail.html", ctx)
+
+
+@staff_required
+@require_POST
+def disaster_override(request):
+    """Confirm or remove an item from a disaster (or undo that)."""
+    key, item_ref, verdict = (request.POST.get(k, "") for k in ("key", "item_ref", "verdict"))
+    catalog = get_object_or_404(StacCatalog, pk=request.POST.get("catalog"))
+    lookup = {"catalog": catalog, "disaster_ref": key, "item_ref": item_ref}
+    if verdict in LinkVerdict.values:
+        EventLinkOverride.objects.update_or_create(
+            **lookup, defaults={"verdict": verdict, "created_by": request.user}
+        )
+    else:
+        EventLinkOverride.objects.filter(**lookup).delete()
+    D.invalidate()
+    messages.success(request, "Saved the correction.")
+    return redirect("web:disaster-detail", ref=key)
+
+
+@login_required
+@require_POST
+def disaster_link_run(request):
+    key = request.POST.get("key", "")
+    run = get_object_or_404(NotebookRun, pk=request.POST.get("run"))
+    if not _can_edit_tags(request.user, run):
+        return HttpResponse("Only the requester or staff can link this analysis.", status=403)
+    disaster, error = _resolve_disaster(key)
+    if disaster is None:
+        messages.error(request, error or "That disaster could not be found.")
+        return redirect("web:disaster-search")
+    run.event_refs = list(dict.fromkeys([*run.event_refs, *D.link_refs(disaster)]))
+    run.save(update_fields=["event_refs", "updated_at"])
+    run.log(f"linked to disaster {disaster.key} by {request.user.get_username()}")
+    messages.success(request, f"Linked {run.title} to this disaster.")
+    return redirect("web:disaster-detail", ref=disaster.key)
+
+
+@login_required
+def disaster_new_run(request):
+    """Start a run for a disaster: stores its anchor item and opens the run form with it selected."""
+    key = request.GET.get("key", "")
+    nb = _visible_template(request, request.GET.get("template", ""))
+    disaster, error = _resolve_disaster(key)
+    if disaster is None:
+        messages.error(request, error or "That disaster could not be found.")
+        return redirect("web:disaster-search")
+    params = {"disaster": disaster.key}
+    catalog = StacCatalog.objects.filter(pk=disaster.catalog_id).first()
+    if catalog is not None and disaster.anchor.item.get("id"):
+        item, _, _ = upsert_item(catalog, disaster.anchor.item, collection=disaster.anchor.collection)
+        params["stac_item"] = item.pk
+    return redirect(f"{reverse('web:run-new', args=[nb.slug])}?{urlencode(params)}")
+
+
+# ---------------------------------------------------------------------------
+# STAC items
+# ---------------------------------------------------------------------------
+
+
+def stac_item_list(request):
+    qs = (
+        StacItem.objects.select_related("catalog")
+        .prefetch_related("facet_options__facet")
+        .annotate(run_count=Count("runs", distinct=True))
+    )
     q = request.GET.get("q", "").strip()
     if q:
         qs = qs.filter(
-            Q(title__icontains=q) | Q(monty_corr_id__icontains=q) | Q(country_codes__contains=[q.upper()])
+            Q(title__icontains=q)
+            | Q(item_id__icontains=q)
+            | Q(correlation_id__icontains=q)
+            | Q(country_codes__contains=[q.upper()])
         )
-    if request.GET.get("hazard"):
-        qs = qs.filter(hazard__key=request.GET["hazard"])
+    if request.GET.get("catalog"):
+        qs = qs.filter(catalog__slug=request.GET["catalog"])
+    qs = facets.filter_queryset(qs, request.GET)
     page = Paginator(qs, 40).get_page(request.GET.get("page"))
     return render(
         request,
-        "web/events_list.html",
+        "web/stac_items_list.html",
         {
             "page": page,
             "q": q,
-            "hazards": Hazard.objects.all(),
-            "rules": EventTriggerRule.objects.select_related("notebook"),
-            "poller": PollerState.objects.all(),
+            "catalogs": StacCatalog.objects.all(),
+            "facet_filters": [f for f in _browse_facets(request.GET) if f["facet"].stac_property],
+            "rules": TriggerRule.objects.select_related("notebook", "catalog"),
+            "poller": PollerState.objects.select_related("catalog"),
         },
     )
 
 
-def event_detail(request, pk):
-    event = get_object_or_404(Event.objects.select_related("hazard"), pk=pk)
-    runs = event.runs.with_related()
-    templates = AnalysisNotebook.objects.filter(is_active=True, requires_event=True)
-    return render(request, "web/event_detail.html", {"event": event, "runs": runs, "templates": templates})
+def stac_item_detail(request, pk):
+    item = get_object_or_404(
+        StacItem.objects.select_related("catalog").prefetch_related("facet_options__facet"), pk=pk
+    )
+    runs = item.runs.with_related()
+    templates = AnalysisNotebook.objects.filter(is_active=True, requires_stac_item=True)
+    return render(request, "web/stac_item_detail.html", {"item": item, "runs": runs, "templates": templates})
+
+
+# ---------------------------------------------------------------------------
+# STAC catalogs (staff)
+# ---------------------------------------------------------------------------
+
+
+@staff_required
+def catalog_list(request):
+    catalogs = StacCatalog.objects.annotate(item_count=Count("items", distinct=True))
+    return render(request, "web/catalogs_list.html", {"catalogs": catalogs})
+
+
+@staff_required
+def catalog_edit(request, slug=None):
+    catalog = get_object_or_404(StacCatalog, slug=slug) if slug else None
+    form = StacCatalogForm(request.POST or None, instance=catalog)
+    if request.method == "POST" and form.is_valid():
+        catalog = form.save()
+        messages.success(request, f"Saved catalog {catalog}.")
+        return redirect("web:catalog-list")
+    return render(request, "web/catalog_form.html", {"form": form, "catalog": catalog})
+
+
+@staff_required
+@require_POST
+def catalog_delete(request, slug):
+    catalog = get_object_or_404(StacCatalog, slug=slug)
+    try:
+        catalog.delete()
+        messages.info(request, f"Deleted catalog {catalog}.")
+    except ProtectedError:
+        messages.error(request, f"{catalog} has stored STAC items; deactivate it instead of deleting it.")
+    return redirect("web:catalog-list")
+
+
+@staff_required
+@require_POST
+def catalog_test(request):
+    """Try the URL / key currently in the form (falls back to the stored key when the field is blank)."""
+    url = request.POST.get("url", "").strip()
+    api_key = request.POST.get("api_key", "").strip()
+    slug = request.POST.get("existing_slug", "")
+    if not api_key and slug and not request.POST.get("clear_api_key"):
+        stored = StacCatalog.objects.filter(slug=slug).first()
+        api_key = stored.api_key if stored else ""
+    ctx = {"ok": False, "message": "", "collections": []}
+    if not url:
+        ctx["message"] = "Enter the STAC API URL first."
+    else:
+        try:
+            with StacClient(url, api_key) as client:
+                root = client.root()
+                collections = client.collections()
+            ctx.update(
+                ok=True,
+                message=f"{root.get('title') or root.get('id') or url} · {len(collections)} collections",
+                collections=[c.get("id") for c in collections[:12]],
+            )
+        except StacClientError as exc:
+            ctx["message"] = str(exc)
+    return render(request, "web/partials/catalog_test.html", ctx)
+
+
+# ---------------------------------------------------------------------------
+# Filters (staff)
+# ---------------------------------------------------------------------------
+
+
+def _facet_usage(facet) -> int:
+    from factory.notebooks.models import RunFacet
+
+    options = facet.options.all()
+    return (
+        RunFacet.objects.filter(option__in=options).count()
+        + AnalysisNotebook.objects.filter(facet_options__in=options).count()
+        + StacItem.objects.filter(facet_options__in=options).count()
+        + TriggerRule.objects.filter(facet_options__in=options).count()
+    )
+
+
+@staff_required
+def facet_list(request):
+    facet_rows = Facet.objects.prefetch_related("options").annotate(
+        run_count=Count("options__run_facets__run", distinct=True)
+    )
+    return render(request, "web/facets_list.html", {"facets": facet_rows})
+
+
+@staff_required
+def facet_edit(request, key=None):
+    facet = get_object_or_404(Facet, key=key) if key else None
+    form = FacetForm(request.POST or None, instance=facet)
+    formset = FacetOptionFormSet(request.POST or None, instance=facet or Facet(), prefix="options")
+    if request.method == "POST" and form.is_valid() and formset.is_valid():
+        facet = form.save()
+        formset.instance = facet
+        formset.save()
+        messages.success(request, f"Saved filter {facet}.")
+        return redirect("web:facet-list")
+    return render(request, "web/facet_form.html", {"form": form, "formset": formset, "facet": facet})
+
+
+@staff_required
+@require_POST
+def facet_delete(request, key):
+    facet = get_object_or_404(Facet, key=key)
+    used = _facet_usage(facet)
+    if used:
+        messages.error(
+            request, f"{facet} is used {used} time(s) by runs, templates, items or rules; not deleted."
+        )
+    else:
+        facet.delete()
+        messages.info(request, f"Deleted filter {facet}.")
+    return redirect("web:facet-list")
 
 
 # ---------------------------------------------------------------------------
@@ -306,6 +1226,22 @@ def notification_open(request, pk):
         n.read_at = timezone.now()
         n.save(update_fields=["read_at"])
     return redirect(n.run)
+
+
+HELP_GUIDE = Path(__file__).parent / "help" / "guide.md"
+
+
+def help_page(request):
+    """The user guide: help/guide.md rendered with a table of contents."""
+    text = HELP_GUIDE.read_text(encoding="utf-8")
+    text = text.replace("{{BASE_URL}}", request.build_absolute_uri("/")).replace(
+        "{{SITE_NAME}}", settings.SITE_NAME
+    )
+    converter = markdown.Markdown(
+        extensions=["tables", "fenced_code", "toc"], extension_configs={"toc": {"toc_depth": "2-3"}}
+    )
+    body = converter.convert(text)
+    return render(request, "web/help.html", {"body": mark_safe(body), "toc": mark_safe(converter.toc)})
 
 
 def healthz(request):

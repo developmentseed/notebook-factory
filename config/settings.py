@@ -237,9 +237,11 @@ CELERY_TASK_TIME_LIMIT = env.int("CELERY_TASK_TIME_LIMIT", default=60 * 60 * 3)
 CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": CELERY_TASK_TIME_LIMIT + 60 * 60}
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULE = {
-    "poll-montandon": {
-        "task": "factory.events.tasks.poll_montandon",
-        "schedule": env.int("MONTANDON_POLL_INTERVAL_SECONDS", default=600),
+    "poll-stac-catalogs": {
+        "task": "factory.events.tasks.poll_catalogs",
+        "schedule": env.int(
+            "STAC_POLL_INTERVAL_SECONDS", default=env.int("MONTANDON_POLL_INTERVAL_SECONDS", default=600)
+        ),
     },
     "cleanup-workdirs": {
         "task": "factory.notebooks.tasks.cleanup_workdirs",
@@ -268,6 +270,10 @@ NOTEBOOK_FACTORY = {
     "UPLOAD_WORKERS": env.int("NOTEBOOK_UPLOAD_WORKERS", default=8),
     # papermill
     "KERNEL_NAME": env("NOTEBOOK_KERNEL_NAME", default="python3"),
+    # Kernels only inherit allowlisted worker variables (see factory/notebooks/environment.py), plus these
+    # names or PREFIX_* patterns. INHERIT=true passes the whole worker environment (app credentials included).
+    "KERNEL_ENV_PASSTHROUGH": env.list("NOTEBOOK_KERNEL_ENV_PASSTHROUGH", default=[]),
+    "KERNEL_ENV_INHERIT": env.bool("NOTEBOOK_KERNEL_ENV_INHERIT", default=False),
     "EXECUTION_TIMEOUT": env.int("NOTEBOOK_EXECUTION_TIMEOUT", default=60 * 60),
     "CELL_TIMEOUT": env.int("NOTEBOOK_CELL_TIMEOUT", default=60 * 20),
     # MyST rendering
@@ -283,19 +289,44 @@ NOTEBOOK_FACTORY = {
     "MYST_STRIP_THEBE": env.bool("MYST_STRIP_THEBE", default=False),
     # Where published runs live inside the storage (prefix).
     "PUBLISH_PREFIX": env("NOTEBOOK_PUBLISH_PREFIX", default="runs"),
+    # Limits for uploaded notebook archives (zip or bare .ipynb).
+    "UPLOAD_MAX_BYTES": env.int("NOTEBOOK_UPLOAD_MAX_BYTES", default=200 * 1024 * 1024),
+    "UPLOAD_MAX_UNCOMPRESSED_BYTES": env.int(
+        "NOTEBOOK_UPLOAD_MAX_UNCOMPRESSED_BYTES", default=1024 * 1024 * 1024
+    ),
+    "UPLOAD_MAX_FILES": env.int("NOTEBOOK_UPLOAD_MAX_FILES", default=2000),
+    # Uploaded template bundles (zip or bare .ipynb), and where workers unpack them (keyed by content hash).
+    "TEMPLATE_MAX_BYTES": env.int("NOTEBOOK_TEMPLATE_MAX_BYTES", default=50 * 1024 * 1024),
+    "TEMPLATE_CACHE_DIR": Path(
+        env("NOTEBOOK_TEMPLATE_CACHE_DIR", default=str(BASE_DIR / "data" / "template-cache"))
+    ),
+    "TEMPLATE_CACHE_MAX_AGE_HOURS": env.int("NOTEBOOK_TEMPLATE_CACHE_MAX_AGE_HOURS", default=24 * 7),
     # Simplification tolerance (degrees) for GeoJSON served to the map picker.
     "AREA_SIMPLIFY_TOLERANCE": env.float("AREA_SIMPLIFY_TOLERANCE", default=0.005),
 }
 
-# Montandon (STAC API) integration
-MONTANDON = {
-    "STAC_URL": env("MONTANDON_STAC_URL", default="https://montandon-eoapi-stage.ifrc.org/stac"),
-    "API_TOKEN": env("MONTANDON_API_TOKEN", default=""),
-    "POLL_OVERLAP_MINUTES": env.int("MONTANDON_POLL_OVERLAP_MINUTES", default=30),
-    "POLL_LOOKBACK_DAYS": env.int("MONTANDON_POLL_LOOKBACK_DAYS", default=7),
-    "POLL_PAGE_SIZE": env.int("MONTANDON_POLL_PAGE_SIZE", default=100),
+# STAC catalogs: the catalogs themselves (URL, API key, profile) live in the database.
+# The MONTANDON_* names are still read as fallbacks for older .env files.
+STAC = {
+    "TIMEOUT": env.int("STAC_TIMEOUT", default=env.int("MONTANDON_TIMEOUT", default=60)),
+    "POLL_OVERLAP_MINUTES": env.int(
+        "STAC_POLL_OVERLAP_MINUTES", default=env.int("MONTANDON_POLL_OVERLAP_MINUTES", default=30)
+    ),
+    "POLL_LOOKBACK_DAYS": env.int(
+        "STAC_POLL_LOOKBACK_DAYS", default=env.int("MONTANDON_POLL_LOOKBACK_DAYS", default=7)
+    ),
+    "POLL_PAGE_SIZE": env.int(
+        "STAC_POLL_PAGE_SIZE", default=env.int("MONTANDON_POLL_PAGE_SIZE", default=100)
+    ),
+    # Seconds to cache a catalog's collection list for the run-form picker.
+    "COLLECTIONS_CACHE_SECONDS": env.int("STAC_COLLECTIONS_CACHE_SECONDS", default=600),
+}
+
+# Used only by `seed_demo` (and the 0004 data migration) to create the Montandon catalog.
+MONTANDON_SEED = {
+    "URL": env("MONTANDON_STAC_URL", default="https://montandon-eoapi-stage.ifrc.org/stac"),
+    "API_KEY": env("MONTANDON_API_TOKEN", default=""),
     "WRITEBACK_ENABLED": env.bool("MONTANDON_WRITEBACK_ENABLED", default=False),
-    "TIMEOUT": env.int("MONTANDON_TIMEOUT", default=60),
 }
 
 # ---------------------------------------------------------------------------
@@ -318,7 +349,11 @@ REST_FRAMEWORK = {
 }
 SPECTACULAR_SETTINGS = {
     "TITLE": "Montandon Notebooks API",
-    "DESCRIPTION": "Index of analysis notebook templates and their published runs; orchestration of new runs.",
+    "DESCRIPTION": (
+        "Index of analysis notebook templates and their published runs; orchestration of new runs. "
+        "Runs can take an item from any registered STAC catalog and are tagged with configurable "
+        "filters (e.g. hazard, use case); the template, run and STAC item lists accept ?<filter key>=<option>."
+    ),
     "VERSION": "0.1.0",
     "SERVE_INCLUDE_SCHEMA": False,
 }

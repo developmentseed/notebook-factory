@@ -1,0 +1,20 @@
+{% extends "web/base.html" %}
+{% block title %}Filters · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Filters</h1><p class="lead">Filters (like Hazard or Use case) and their options tag templates, runs and STAC items so analyses can be found later.</p></div>
+  <div><a class="btn primary" href="{% url 'web:facet-new' %}">Add filter</a></div></div>
+<table class="table">
+  <thead><tr><th>Filter</th><th>Options</th><th>Values per run</th><th>From STAC</th><th>Runs</th><th></th></tr></thead>
+  <tbody>
+  {% for f in facets %}
+    <tr><td><a href="{% url 'web:facet-edit' f.key %}">{{ f.label }}</a><br><code class="small">?{{ f.key }}=…</code>{% if not f.show_in_browse %} <span class="pill muted">hidden in browse</span>{% endif %}</td>
+        <td>{% for o in f.options.all %}<span class="pill tag" style="--pill: {{ o.color|default:'#6B7280' }}">{% if o.icon %}{{ o.icon }} {% endif %}{{ o.label }}</span> {% empty %}<span class="muted">none yet</span>{% endfor %}</td>
+        <td>{{ f.multiple|yesno:"several,one" }}</td>
+        <td>{% if f.stac_property %}<code class="small">{{ f.stac_property }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td>{{ f.run_count }}</td>
+        <td><form method="post" action="{% url 'web:facet-delete' f.key %}" class="inline" onsubmit="return confirm('Delete the {{ f.label|escapejs }} filter?')">{% csrf_token %}<button class="link">Delete</button></form></td></tr>
+  {% empty %}<tr><td colspan="6" class="muted">No filters yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

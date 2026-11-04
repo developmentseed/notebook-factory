@@ -13,6 +13,8 @@ host: notebooks.example.org
 
 ingress:
   className: ""
+  # Uploaded notebook archives need a larger request body than ingress-nginx's 1 MB default, e.g.
+  #   nginx.ingress.kubernetes.io/proxy-body-size: 200m   (keep in line with NOTEBOOK_UPLOAD_MAX_BYTES)
   annotations: {}
   tlsSecretName: notebook-factory-tls
 

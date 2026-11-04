@@ -1,0 +1,21 @@
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+{% if manifest %}
+  {% if manifest.notebooks|length > 1 %}
+  <div class="field">
+    <label for="id_notebook_path">Notebook to publish <span class="req">*</span></label>
+    <select name="notebook_path" id="id_notebook_path"
+            hx-post="{% url 'web:upload-inspect' %}" hx-trigger="change" hx-encoding="multipart/form-data"
+            hx-include="#id_file, #id_notebook_path, [name=csrfmiddlewaretoken]" hx-target="#upload-inspect" hx-swap="innerHTML">
+      <option value="">— choose —</option>
+      {% for n in manifest.notebooks %}<option value="{{ n }}" {% if n == manifest.notebook %}selected{% endif %}>{{ n }}</option>{% endfor %}
+    </select>
+    <small class="muted">The archive holds several notebooks. Files next to the chosen one are published with it.</small>
+  </div>
+  {% elif manifest.notebook %}<input type="hidden" name="notebook_path" value="{{ manifest.notebook }}">
+  {% endif %}
+  {% if manifest.notebook %}
+  <p class="small">✓ <code>{{ manifest.notebook }}</code>{% if manifest.title %} · “{{ manifest.title }}” <span class="muted">(used when Title is empty)</span>{% endif %}</p>
+  {% for w in manifest.warnings %}<p class="msg warning small">{{ w }} It will be published as it is.</p>{% endfor %}
+  {% endif %}
+{% elif selected %}<input type="hidden" name="notebook_path" value="{{ selected }}">
+{% endif %}

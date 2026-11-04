@@ -1,0 +1,30 @@
+{% load web_extras %}
+<div class="param-grid">
+{% for f in fields %}
+  {% with value=values|get:f.name error=param_errors|get:f.name %}
+  <div class="field {% if error %}has-error{% endif %}" data-param="{{ f.name }}" data-title="{{ f.title }}">
+    <label for="p_{{ f.name }}">{{ f.title }}{% if f.required %} <span class="req">*</span>{% endif %}</label>
+    {% if f.widget == 'select' %}
+      <select name="{{ f.name }}" id="p_{{ f.name }}">
+        {% if not f.required %}<option value="">—</option>{% endif %}
+        {% for v, label in f.choices %}<option value="{{ v }}" {% if value|stringformat:"s" == v|stringformat:"s" %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    {% elif f.widget == 'radio' %}
+      <div class="choices">{% for v, label in f.choices %}<label class="check"><input type="radio" name="{{ f.name }}" value="{{ v }}" {% if value|stringformat:"s" == v|stringformat:"s" %}checked{% endif %}> {{ label }}</label>{% endfor %}</div>
+    {% elif f.widget == 'checkboxes' %}
+      <div class="choices">{% for v, label in f.choices %}<label class="check"><input type="checkbox" name="{{ f.name }}" value="{{ v }}" {% if v in value %}checked{% endif %}> {{ label }}</label>{% endfor %}</div>
+    {% elif f.widget == 'checkbox' %}
+      <label class="check"><input type="checkbox" name="{{ f.name }}" id="p_{{ f.name }}" value="true" {% if value %}checked{% endif %}> {{ f.description|default:"Enabled" }}</label>
+    {% elif f.widget == 'slider' %}
+      <input type="range" name="{{ f.name }}" id="p_{{ f.name }}" value="{{ value|default:f.minimum }}" min="{{ f.minimum }}" max="{{ f.maximum }}" step="{{ f.step|default:1 }}" oninput="this.nextElementSibling.textContent=this.value"><output>{{ value|default:f.minimum }}</output>
+    {% elif f.widget == 'textarea' %}
+      <textarea name="{{ f.name }}" id="p_{{ f.name }}" rows="3">{{ value|default:"" }}</textarea>
+    {% else %}
+      <input type="{{ f.input_type }}" name="{{ f.name }}" id="p_{{ f.name }}" value="{{ value|default_if_none:'' }}" {% if f.minimum is not None %}min="{{ f.minimum }}"{% endif %} {% if f.maximum is not None %}max="{{ f.maximum }}"{% endif %} {% if f.step %}step="{{ f.step }}"{% elif f.type == 'number' %}step="any"{% endif %} {% if f.required %}required{% endif %}>
+    {% endif %}
+    {% if f.description and f.widget != 'checkbox' %}<small class="muted">{{ f.description }}</small>{% endif %}
+    {% if error %}<small class="error">{{ error }}</small>{% endif %}
+  </div>
+  {% endwith %}
+{% endfor %}
+</div>

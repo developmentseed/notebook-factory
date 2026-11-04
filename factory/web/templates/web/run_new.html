@@ -40,56 +40,34 @@
   </section>
   {% endif %}
 
-  {% if nb.requires_event %}
+  {% if nb.requires_stac_item %}
   <section class="step">
-    <h2><span class="num">{% if nb.requires_area %}2{% else %}1{% endif %}</span> Event</h2>
-    <label>Montandon event
-      <select name="event" id="event" required>
-        <option value="">— choose —</option>
-        {% for e in recent_events %}<option value="{{ e.pk }}" {% if form.event.value|stringformat:"s" == e.pk|stringformat:"s" or event and event.pk == e.pk %}selected{% endif %}>{{ e.title|truncatechars:70 }} · {{ e.countries_display }} · {{ e.occurred_at|date:"Y-m-d" }}</option>{% endfor %}
-      </select>
-    </label>
-    {% if form.event.errors %}<p class="error">{{ form.event.errors|join:" " }}</p>{% endif %}
-    <p class="muted small">Events arrive through the Montandon poller. See <a href="{% url 'web:event-list' %}">Events</a>.</p>
+    <h2><span class="num">{% if nb.requires_area %}2{% else %}1{% endif %}</span> STAC item</h2>
+    <p class="muted">Pick a catalog, a collection and the item this analysis is about.</p>
+    {% if stac_item %}<input type="hidden" name="stac_item" value="{{ stac_item.pk }}">{% endif %}
+    {% include "web/partials/stac_picker.html" %}
+    {% if form.stac_item.errors %}<p class="error">{{ form.stac_item.errors|join:" " }}</p>{% endif %}
   </section>
   {% endif %}
 
   <section class="step">
-    <h2><span class="num">{% if nb.requires_area and nb.requires_event %}3{% elif nb.requires_area or nb.requires_event %}2{% else %}1{% endif %}</span> Parameters</h2>
+    <h2><span class="num">{% if nb.requires_area and nb.requires_stac_item %}3{% elif nb.requires_area or nb.requires_stac_item %}2{% else %}1{% endif %}</span> Parameters</h2>
     {% if not fields %}<p class="muted">This template has no user parameters.</p>{% endif %}
-    <div class="param-grid">
-    {% for f in fields %}
-      {% with value=values|get:f.name error=param_errors|get:f.name %}
-      <div class="field {% if error %}has-error{% endif %}" data-param="{{ f.name }}" data-title="{{ f.title }}">
-        <label for="p_{{ f.name }}">{{ f.title }}{% if f.required %} <span class="req">*</span>{% endif %}</label>
-        {% if f.widget == 'select' %}
-          <select name="{{ f.name }}" id="p_{{ f.name }}">
-            {% if not f.required %}<option value="">—</option>{% endif %}
-            {% for v, label in f.choices %}<option value="{{ v }}" {% if value|stringformat:"s" == v|stringformat:"s" %}selected{% endif %}>{{ label }}</option>{% endfor %}
-          </select>
-        {% elif f.widget == 'radio' %}
-          <div class="choices">{% for v, label in f.choices %}<label class="check"><input type="radio" name="{{ f.name }}" value="{{ v }}" {% if value|stringformat:"s" == v|stringformat:"s" %}checked{% endif %}> {{ label }}</label>{% endfor %}</div>
-        {% elif f.widget == 'checkboxes' %}
-          <div class="choices">{% for v, label in f.choices %}<label class="check"><input type="checkbox" name="{{ f.name }}" value="{{ v }}" {% if v in value %}checked{% endif %}> {{ label }}</label>{% endfor %}</div>
-        {% elif f.widget == 'checkbox' %}
-          <label class="check"><input type="checkbox" name="{{ f.name }}" id="p_{{ f.name }}" value="true" {% if value %}checked{% endif %}> {{ f.description|default:"Enabled" }}</label>
-        {% elif f.widget == 'slider' %}
-          <input type="range" name="{{ f.name }}" id="p_{{ f.name }}" value="{{ value|default:f.minimum }}" min="{{ f.minimum }}" max="{{ f.maximum }}" step="{{ f.step|default:1 }}" oninput="this.nextElementSibling.textContent=this.value"><output>{{ value|default:f.minimum }}</output>
-        {% elif f.widget == 'textarea' %}
-          <textarea name="{{ f.name }}" id="p_{{ f.name }}" rows="3">{{ value|default:"" }}</textarea>
-        {% else %}
-          <input type="{{ f.input_type }}" name="{{ f.name }}" id="p_{{ f.name }}" value="{{ value|default_if_none:'' }}" {% if f.minimum is not None %}min="{{ f.minimum }}"{% endif %} {% if f.maximum is not None %}max="{{ f.maximum }}"{% endif %} {% if f.step %}step="{{ f.step }}"{% elif f.type == 'number' %}step="any"{% endif %} {% if f.required %}required{% endif %}>
-        {% endif %}
-        {% if f.description and f.widget != 'checkbox' %}<small class="muted">{{ f.description }}</small>{% endif %}
-        {% if error %}<small class="error">{{ error }}</small>{% endif %}
-      </div>
-      {% endwith %}
-    {% endfor %}
-    </div>
+    {% include "web/partials/param_fields.html" %}
   </section>
 
   <section class="step">
-    <h2><span class="num">{% if nb.requires_area and nb.requires_event %}4{% elif nb.requires_area or nb.requires_event %}3{% else %}2{% endif %}</span> Run</h2>
+    <h2><span class="num">{% if nb.requires_area and nb.requires_stac_item %}4{% elif nb.requires_area or nb.requires_stac_item %}3{% else %}2{% endif %}</span> Run</h2>
+    {% if tag_fields or pinned_tags %}
+    <div class="tags">
+      <h3>Tags <span class="muted small">used to find this analysis later</span></h3>
+      {% if pinned_tags %}<p class="small">From the template: {% include "web/partials/facet_pills.html" with groups=pinned_tags %}</p>{% endif %}
+      {% if tag_fields %}<p class="muted small">Optional. Empty values are filled from the parameters or the STAC item where possible.</p>
+      <div class="param-grid">{% include "web/partials/tag_inputs.html" %}</div>{% endif %}
+    </div>
+    {% endif %}
+    {% if stac_item and not nb.requires_stac_item %}<input type="hidden" name="stac_item" value="{{ stac_item.pk }}"><p class="small">About STAC item <a href="{{ stac_item.get_absolute_url }}">{{ stac_item|truncatechars:60 }}</a>.</p>{% endif %}
+    {% include "web/partials/form_field.html" with field=form.event_refs %}
     <label>Also notify (emails, comma separated) <input type="text" name="notify_emails" value="{{ form.notify_emails.value|default:'' }}" placeholder="colleague@example.org"></label>
     {% if form.notify_emails.errors %}<p class="error">{{ form.notify_emails.errors|join:" " }}</p>{% endif %}
     <div class="review panel">

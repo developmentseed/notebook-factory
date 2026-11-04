@@ -1,0 +1,25 @@
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+{% if manifest %}
+  {% if manifest.notebooks|length > 1 %}
+  <div class="field">
+    <label for="id_notebook_path">Notebook to run <span class="req">*</span></label>
+    <select name="notebook_path" id="id_notebook_path"
+            hx-post="{% url 'web:template-inspect' %}" hx-trigger="change" hx-encoding="multipart/form-data"
+            hx-include="#id_file, #id_notebook_path, [name=csrfmiddlewaretoken]" hx-target="#template-inspect" hx-swap="innerHTML">
+      <option value="">— choose —</option>
+      {% for n in manifest.notebooks %}<option value="{{ n }}" {% if n == manifest.notebook %}selected{% endif %}>{{ n }}</option>{% endfor %}
+    </select>
+    <small class="muted">The archive holds several notebooks. The files in the chosen one's folder go with it.</small>
+  </div>
+  {% elif manifest.notebook %}<input type="hidden" name="notebook_path" value="{{ manifest.notebook }}">
+  {% endif %}
+  {% if manifest.notebook %}
+  <p class="small">✓ <code>{{ manifest.notebook }}</code>{% if manifest.title %} · “{{ manifest.title }}”{% endif %} · {{ manifest.bundle.files|length }} file{{ manifest.bundle.files|length|pluralize }}{% if manifest.meta %} · template.yml found{% endif %}</p>
+  {% if manifest.meta.parameters %}<p class="small">Parameters come from template.yml ({{ manifest.meta.parameters.properties|length }}).</p>
+  {% elif detected %}<p class="small">Detected parameters: {% for d in detected %}<code>{{ d.name }}</code> <span class="muted">{{ d.type }}</span>{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+  {% else %}<p class="small muted">No user parameters detected.</p>{% endif %}
+  {% for w in manifest.warnings %}<p class="msg warning small">{{ w }}</p>{% endfor %}
+  {% for w in detect_warnings %}<p class="msg warning small">{{ w }}</p>{% endfor %}
+  {% endif %}
+{% elif selected %}<input type="hidden" name="notebook_path" value="{{ selected }}">
+{% endif %}

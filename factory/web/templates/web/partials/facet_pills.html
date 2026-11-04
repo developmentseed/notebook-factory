@@ -1,0 +1,1 @@
+{% for facet, options in groups %}{% for o in options %}<span class="pill tag" style="--pill: {{ o.color|default:'#6B7280' }}" title="{{ facet.label }}">{% if o.icon %}{{ o.icon }} {% endif %}{{ o.label }}</span> {% endfor %}{% endfor %}

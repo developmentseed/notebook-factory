@@ -1,0 +1,18 @@
+<section id="run-tags" class="panel run-tags">
+  <div class="muted small">FILTERS</div>
+  {% if run.facet_groups %}
+    <dl class="facts">{% for facet, options in run.facet_groups %}<dt>{{ facet.label }}</dt><dd>{% for o in options %}<span class="pill tag" style="--pill: {{ o.color|default:'#6B7280' }}">{% if o.icon %}{{ o.icon }} {% endif %}{{ o.label }}</span> {% endfor %}</dd>{% endfor %}</dl>
+  {% else %}<p class="muted small">No filter tags.</p>{% endif %}
+  {% if can_edit %}
+    {% if editing %}
+    <form hx-post="{% url 'web:run-tags' run.id %}" hx-target="#run-tags" hx-swap="outerHTML">
+      <p class="muted small">Set a value to override what was derived from the parameters, STAC item or template. Leave it empty to go back to the derived value.</p>
+      <div class="param-grid">{% include "web/partials/tag_inputs.html" with empty_label="— derived —" %}</div>
+      <p><button class="btn primary small" type="submit">Save tags</button>
+         <button class="btn small" type="button" hx-get="{{ run.get_absolute_url }}" hx-select="#run-tags" hx-target="#run-tags" hx-swap="outerHTML">Cancel</button></p>
+    </form>
+    {% else %}
+    <button class="link small" hx-get="{% url 'web:run-tags' run.id %}" hx-target="#run-tags" hx-swap="outerHTML">Edit tags</button>
+    {% endif %}
+  {% endif %}
+</section>

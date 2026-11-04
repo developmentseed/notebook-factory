@@ -1,0 +1,29 @@
+{% extends "web/base.html" %}
+{% block title %}{% if catalog %}{{ catalog.name }}{% else %}New catalog{% endif %} · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="{% url 'web:catalog-list' %}">STAC catalogs</a> › {% if catalog %}{{ catalog.name }}{% else %}New{% endif %}</p>
+<h1>{% if catalog %}Edit {{ catalog.name }}{% else %}Add a STAC catalog{% endif %}</h1>
+<form method="post" class="panel" id="catalog-form" style="max-width:640px">
+  {% csrf_token %}
+  {% if catalog %}<input type="hidden" name="existing_slug" value="{{ catalog.slug }}">{% endif %}
+  {% if form.non_field_errors %}<div class="msg error">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+  {% for field in form %}
+    <div class="field {% if field.errors %}has-error{% endif %}" style="margin-bottom:.8rem">
+      {% if field.field.widget.input_type == "checkbox" %}
+        <label class="check">{{ field }} {{ field.label }}</label>
+      {% else %}
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+      {% endif %}
+      {% if field.name == "api_key" and catalog.api_key %}<small class="muted">A key is stored.</small>{% endif %}
+      {% if field.help_text %}<small class="muted">{{ field.help_text }}</small>{% endif %}
+      {% if field.errors %}<small class="error">{{ field.errors|join:" " }}</small>{% endif %}
+    </div>
+  {% endfor %}
+  <p>
+    <button class="btn" type="button" hx-post="{% url 'web:catalog-test' %}" hx-include="#catalog-form" hx-target="#test-result">Test connection</button>
+    <button class="btn primary" type="submit">Save</button>
+  </p>
+  <div id="test-result" class="test-result"></div>
+</form>
+{% endblock %}

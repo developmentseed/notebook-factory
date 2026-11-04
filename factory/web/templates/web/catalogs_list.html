@@ -1,0 +1,22 @@
+{% extends "web/base.html" %}
+{% load humanize %}
+{% block title %}STAC catalogs · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>STAC catalogs</h1><p class="lead">STAC APIs that runs can take items from, that trigger rules poll, and that results can be written back to.</p></div>
+  <div><a class="btn primary" href="{% url 'web:catalog-new' %}">Add catalog</a></div></div>
+<table class="table">
+  <thead><tr><th>Catalog</th><th>Profile</th><th>API key</th><th>Write-back</th><th>Items</th><th>Last checked</th><th></th></tr></thead>
+  <tbody>
+  {% for c in catalogs %}
+    <tr><td><a href="{% url 'web:catalog-edit' c.slug %}">{{ c.name }}</a>{% if not c.is_active %} <span class="pill muted">inactive</span>{% endif %}<br><span class="muted small"><code>{{ c.url }}</code></span>{% if c.last_error %}<br><span class="error small">{{ c.last_error|truncatechars:120 }}</span>{% endif %}</td>
+        <td>{{ c.get_profile_display }}</td>
+        <td>{% if c.api_key %}set{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td>{{ c.writeback_enabled|yesno:"on,off" }}</td>
+        <td><a href="{% url 'web:stac-item-list' %}?catalog={{ c.slug }}">{{ c.item_count }}</a></td>
+        <td class="small">{{ c.last_checked_at|naturaltime|default:"—" }}</td>
+        <td><form method="post" action="{% url 'web:catalog-delete' c.slug %}" class="inline" onsubmit="return confirm('Delete {{ c.name|escapejs }}?')">{% csrf_token %}<button class="link">Delete</button></form></td></tr>
+  {% empty %}<tr><td colspan="7" class="muted">No catalogs yet. Add one to let templates take STAC items.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

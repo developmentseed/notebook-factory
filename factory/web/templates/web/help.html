@@ -1,0 +1,22 @@
+{% extends "web/base.html" %}
+{% block title %}User guide · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>User guide</h1>
+    <p class="lead">How to browse, run and publish analyses, administer {{ SITE_NAME }}, and use its API.</p>
+  </div>
+</div>
+<div class="two-col">
+  <article class="prose help">{{ body }}</article>
+  <aside class="side">
+    <div class="panel help-toc">
+      <h3>Contents</h3>
+      {{ toc }}
+      <p class="small muted">
+        <a href="{% url 'api:docs' %}">API reference</a>{% if user.is_staff %} · <a href="{% url 'admin:index' %}">Admin</a>{% endif %}
+      </p>
+    </div>
+  </aside>
+</div>
+{% endblock %}

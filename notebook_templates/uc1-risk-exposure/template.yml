@@ -10,13 +10,15 @@ description: '**Use Case 1 · Risk · before the event.** Compares a hazard rast
   country and cached there; health facilities come from OpenStreetMap (Layercake). Hazards without data
   yet (wildfire, heatwave) and other infrastructure layers fail with a clear error instead of showing
   fake data.'
-use_case: uc1
-hazards:
-- flood
-- cyclone
-- earthquake
-- wildfire
-- heatwave
+filters:
+  use_case:
+  - uc1
+  hazard:
+  - flood
+  - cyclone
+  - earthquake
+  - wildfire
+  - heatwave
 version: '0.3'
 requires_area: true
 estimated_runtime_minutes: 3

@@ -23,7 +23,7 @@ class Command(BaseCommand):
         runs = list(stale_runs(opts["older_than"]))
         for run in runs:
             self.stdout.write(
-                f"  {run.id}  {run.status:10s} {run.notebook.slug}  updated {run.updated_at:%Y-%m-%d %H:%M}"
+                f"  {run.id}  {run.status:10s} {run.notebook.slug if run.notebook else 'upload'}  updated {run.updated_at:%Y-%m-%d %H:%M}"
             )
         if not runs:
             self.stdout.write("no stale runs")

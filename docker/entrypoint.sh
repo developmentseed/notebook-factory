@@ -22,13 +22,14 @@ case "${1:-web}" in
     wait_for_db
     python manage.py migrate --noinput
     python manage.py collectstatic --noinput
-    python manage.py sync_templates
+    # Templates are managed in the app (versioned); importing here would overwrite edits.
+    # Fresh installs: run `manage.py seed_demo` or `manage.py sync_templates` once.
     exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers "${GUNICORN_WORKERS:-3}" --timeout 120
     ;;
   dev)
     wait_for_db
     python manage.py migrate --noinput
-    python manage.py sync_templates
+    python manage.py sync_templates --only-missing
     exec python manage.py runserver 0.0.0.0:8000
     ;;
   worker)

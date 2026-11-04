@@ -10,9 +10,12 @@ from pathlib import Path
 import nbformat
 import papermill as pm
 from django.conf import settings
+from jupyter_client.manager import AsyncKernelManager
 
+from .. import environment
 from ..models import NotebookRun
 from .context import RunContext
+from .redact import redact_text
 
 log = logging.getLogger(__name__)
 
@@ -32,10 +35,11 @@ class _ProgressHandler(logging.Handler):
     so `execute()` lifts Django's async guard for the duration of the run.
     """
 
-    def __init__(self, run: NotebookRun, total_cells: int):
+    def __init__(self, run: NotebookRun, total_cells: int, secrets: dict[str, str] | None = None):
         super().__init__(level=logging.INFO)
         self.run = run
         self.total = total_cells
+        self.secrets = secrets or {}
         self._last_cell = 0
 
     def emit(self, record: logging.LogRecord) -> None:
@@ -57,11 +61,42 @@ class _ProgressHandler(logging.Handler):
             elif m:
                 return
             elif msg:
+                msg = redact_text(msg, self.secrets)[0]  # before truncating, so no partial value is kept
                 for line in msg.splitlines()[:20]:  # cell output lines (log_output=True); keep them short
                     if line.strip():
                         self.run.log(line[:500], level="output")
         except Exception:  # pragma: no cover - never let logging break execution
             log.exception("progress handler failed")
+
+
+def kernel_env(run: NotebookRun) -> dict[str, str]:
+    """Per-run variables for the kernel process: run id, the item's catalog URL / API key, granted secrets.
+
+    Raises environment.SecretError when a declared secret is not granted or empty.
+    """
+    catalog = run.stac_item.catalog if run.stac_item_id else None
+    return {
+        "NOTEBOOK_RUN_ID": str(run.id),
+        "STAC_API_URL": catalog.base_url if catalog else "",
+        "STAC_API_KEY": catalog.api_key if catalog else "",
+        **environment.run_secrets(run),
+    }
+
+
+def _kernel_manager_class(extra_env: dict[str, str]) -> type[AsyncKernelManager]:
+    """A kernel manager that launches the kernel with the allowlisted worker env plus `extra_env`.
+
+    The worker's own credentials are withheld (see factory.notebooks.environment). Eager mode
+    runs notebooks on several threads in one process, so per-run secrets must not go through
+    os.environ, where runs would see each other's.
+    """
+
+    class _RunKernelManager(AsyncKernelManager):
+        async def _async_pre_start_kernel(self, **kw):
+            kw["env"] = {**environment.base_env(), **extra_env}
+            return await super()._async_pre_start_kernel(**kw)
+
+    return _RunKernelManager
 
 
 def execute(run: NotebookRun, ctx: RunContext, parameters: dict) -> Path:
@@ -73,18 +108,19 @@ def execute(run: NotebookRun, ctx: RunContext, parameters: dict) -> Path:
     kernel = nb.metadata.get("kernelspec", {}).get("name") or cfg["KERNEL_NAME"]
     ctx.executed_path = ctx.workdir / "notebook.ipynb"
 
+    # Process-wide and identical for every run; per-run values go through kernel_env().
     env_extra = {
-        "MONTANDON_API_TOKEN": settings.MONTANDON["API_TOKEN"],
-        "MONTANDON_STAC_URL": settings.MONTANDON["STAC_URL"],
-        "NOTEBOOK_RUN_ID": str(run.id),
         "PYTHONUNBUFFERED": "1",
         "DJANGO_ALLOW_ASYNC_UNSAFE": "1",  # see _ProgressHandler
     }
     old_env = {k: os.environ.get(k) for k in env_extra}
     os.environ.update({k: v for k, v in env_extra.items() if v is not None})
 
+    extra_env = kernel_env(run)
+    ctx.secrets = {k: v for k, v in extra_env.items() if k not in ("NOTEBOOK_RUN_ID", "STAC_API_URL") and v}
+
     pm_logger = logging.getLogger("papermill")
-    handler = _ProgressHandler(run, total)
+    handler = _ProgressHandler(run, total, ctx.secrets)
     pm_logger.addHandler(handler)
     try:
         pm.execute_notebook(
@@ -98,6 +134,7 @@ def execute(run: NotebookRun, ctx: RunContext, parameters: dict) -> Path:
             request_save_on_cell_execute=True,
             execution_timeout=cfg["CELL_TIMEOUT"],
             start_timeout=120,
+            kernel_manager_class=_kernel_manager_class(extra_env),
         )
     except pm.PapermillExecutionError as exc:
         raise ExecutionError(

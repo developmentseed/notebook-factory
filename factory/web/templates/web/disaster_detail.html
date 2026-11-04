@@ -1,0 +1,114 @@
+{% extends "web/base.html" %}
+{% load humanize %}
+{% block title %}{{ d.title }} · {{ SITE_NAME }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" crossorigin="">
+<script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js" crossorigin=""></script>
+<script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.1.4/leaflet-maplibre-gl.js" crossorigin=""></script>
+{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="{% url 'web:disaster-search' %}">Disasters</a> › {{ d.title|truncatechars:60 }}</p>
+{% if d.error %}<div class="msg warning">{{ d.error }}</div>{% endif %}
+<div class="two-col">
+  <div>
+    <h1>{{ d.title }}</h1>
+    <p class="lead">{{ d.countries|join:", "|default:"—" }} · {{ d.start|date:"j M Y"|default:"date unknown" }}{% if d.end and d.end.date != d.start.date %} → {{ d.end|date:"j M Y" }}{% endif %}{% if d.anchor.magnitude %} · M{{ d.anchor.magnitude }}{% endif %}</p>
+    <div class="id-chips">
+      {% for c in id_chips %}{% if c.url %}<a class="id-chip" href="{{ c.url }}" rel="noopener">{{ c.label }} ↗</a>{% else %}<span class="id-chip">{{ c.label }}</span>{% endif %}{% endfor %}
+    </div>
+
+    <h2>Analyses <span class="muted small">{{ runs|length }}</span></h2>
+    {% include "web/partials/run_table.html" with runs=runs %}
+    {% if templates %}
+    <h3>New analysis for this disaster</h3>
+    <p class="muted small">Starts the run form with {{ d.anchor.source_label }} <code>{{ d.anchor.item_id }}</code> as the STAC item and this disaster's ID filled in.</p>
+    <p>{% for t in templates %}<a class="btn" href="{% url 'web:disaster-new-run' %}?key={{ d.key|urlencode }}&amp;template={{ t.slug }}">{{ t.title }}</a> {% endfor %}</p>
+    {% endif %}
+
+    {% if possible_runs %}
+    <h2>Possibly related analyses</h2>
+    <p class="muted small">Not linked to any disaster, but made for the same countries and hazard around this time.</p>
+    <table class="table">
+      <tbody>
+      {% for r in possible_runs %}
+      <tr>
+        <td><a href="{{ r.get_absolute_url }}">{{ r.title }}</a><br><span class="muted small">{{ r.subtitle }} · {{ r.created_at|date:"Y-m-d" }}</span></td>
+        <td style="text-align:right">
+          {% if is_staff or r.triggered_by_id == user.pk %}
+          <form method="post" action="{% url 'web:disaster-link-run' %}" class="inline">{% csrf_token %}
+            <input type="hidden" name="key" value="{{ d.key }}"><input type="hidden" name="run" value="{{ r.pk }}">
+            <button class="btn small">Link to this disaster</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+    <h2>Sources <span class="muted small">{{ d.members|length }} item{{ d.members|length|pluralize }}</span></h2>
+    <p class="muted small">Items from other sources grouped as this disaster: same monty:corr_id, an explicit link, or close in time and place for the same hazard.{% if is_staff %} Remove an item if it isn't the same disaster.{% endif %}</p>
+    <table class="table sources">
+      <thead><tr><th>Source</th><th>Item</th><th>When</th><th>Match</th>{% if is_staff %}<th></th>{% endif %}</tr></thead>
+      <tbody>
+      {% for g in d.groups %}
+        {% include "web/partials/disaster_member_row.html" with m=g.primary label=g.label %}
+        {% if g.others %}
+        <tr><td></td><td colspan="{% if is_staff %}4{% else %}3{% endif %}"><details><summary>{{ g.others|length }} more from {{ g.label }}</summary>
+          <table class="table"><tbody>{% for m in g.others %}{% include "web/partials/disaster_member_row.html" with m=m label="" %}{% endfor %}</tbody></table>
+        </details></td></tr>
+        {% endif %}
+      {% endfor %}
+      </tbody>
+    </table>
+
+    {% if d.possible %}
+    <h3>Possibly the same disaster</h3>
+    <table class="table sources"><tbody>
+      {% for m in d.possible %}{% include "web/partials/disaster_member_row.html" with m=m label=m.source_label possible=True %}{% endfor %}
+    </tbody></table>
+    {% endif %}
+    {% if is_staff and d.removed %}
+    <h3>Removed by staff</h3>
+    <table class="table sources"><tbody>
+      {% for m in d.removed %}{% include "web/partials/disaster_member_row.html" with m=m label=m.source_label removed=True %}{% endfor %}
+    </tbody></table>
+    {% endif %}
+  </div>
+  <aside class="side"><div class="panel">
+    <div id="disaster-map" class="disaster-map"></div>
+    <dl class="facts">
+      <dt>Hazard</dt><dd>{{ d.hazard_codes|join:", "|default:"—" }}</dd>
+      <dt>Anchor</dt><dd><a href="{{ d.anchor.link }}" rel="noopener">{{ d.anchor.title|truncatechars:60 }}</a><br><span class="muted small">{{ d.anchor.source_label }}</span></dd>
+      <dt>Link</dt><dd><code class="small">{{ d.key }}</code></dd>
+    </dl>
+    <p class="muted small">Any of this disaster's IDs opens this page, and typing one in the Analyses search shows its analyses.</p>
+  </div></aside>
+</div>
+{{ d.geojson|json_script:"disaster-geojson" }}
+{% endblock %}
+{% block scripts %}
+<script>
+  (() => {
+    const data = JSON.parse(document.getElementById("disaster-geojson").textContent);
+    if (!data.features.length || typeof L === "undefined") { document.getElementById("disaster-map").remove(); return; }
+    const map = L.map("disaster-map", { worldCopyJump: true, attributionControl: true });
+    try {
+      L.maplibreGL({ style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json", attribution: "© OpenStreetMap © CARTO" }).addTo(map);
+    } catch (e) { /* no WebGL: markers without a basemap */ }
+    const layer = L.geoJSON(data, {
+      pointToLayer: (f, latlng) => L.circleMarker(latlng, { radius: f.properties.coarse ? 5 : 6, color: f.properties.coarse ? "#6B7280" : "#E4572E", weight: 1.5, fillOpacity: .5 }),
+      style: () => ({ color: "#E4572E", weight: 1.5, fillOpacity: .1 }),
+      onEachFeature: (f, l) => {
+        const tip = document.createElement("span");  // titles come from the catalog: text, not HTML
+        tip.textContent = `${f.properties.source}: ${f.properties.title}`;
+        l.bindTooltip(tip);
+      },
+    }).addTo(map);
+    map.fitBounds(layer.getBounds(), { maxZoom: 8, padding: [20, 20] });
+  })();
+</script>
+{% endblock %}

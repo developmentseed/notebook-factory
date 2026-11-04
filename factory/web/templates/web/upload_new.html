@@ -1,0 +1,98 @@
+{% extends "web/base.html" %}
+{% load static %}
+{% block title %}Upload a notebook · {{ SITE_NAME }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" crossorigin="">
+<script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js" crossorigin=""></script>
+<script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.1.4/leaflet-maplibre-gl.js" crossorigin=""></script>
+{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="{% url 'web:browse' %}">Analyses</a> › Upload a notebook</p>
+<h1>Upload a notebook</h1>
+<p class="lead">Publish a notebook that was already executed elsewhere. It is rendered like a run, not executed, and shows up in the analyses with the details and filters you set here.</p>
+{% if form.non_field_errors %}<div class="msg error">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+<form method="post" enctype="multipart/form-data" id="run-form" class="wizard" data-requires-area="1" data-single-area="1">
+  {% csrf_token %}
+  <input type="hidden" name="area_ids" id="area_ids" value="{{ selected_area_ids }}">
+
+  <section class="step">
+    <h2><span class="num">1</span> Notebook</h2>
+    <div class="field {% if form.file.errors %}has-error{% endif %}">
+      <label for="id_file">{{ form.file.label }} <span class="req">*</span></label>
+      <input type="file" name="file" id="id_file" accept=".zip,.ipynb" required
+             hx-post="{% url 'web:upload-inspect' %}" hx-trigger="change" hx-encoding="multipart/form-data"
+             hx-include="#id_file, [name=csrfmiddlewaretoken]" hx-target="#upload-inspect" hx-swap="innerHTML">
+      <small class="muted">{{ form.file.help_text }}. Relative links (images, data files) must sit next to the notebook in the zip.</small>
+      {% if form.file.errors %}<small class="error">{{ form.file.errors|join:" " }}</small>{% endif %}
+    </div>
+    <div id="upload-inspect">{% include "web/partials/upload_inspect.html" with selected=form.notebook_path.value %}</div>
+    {% if form.notebook_path.errors %}<p class="error">{{ form.notebook_path.errors|join:" " }}</p>{% endif %}
+  </section>
+
+  <section class="step">
+    <h2><span class="num">2</span> Details</h2>
+    {% for f in detail_fields %}
+    <div class="field {% if f.errors %}has-error{% endif %}">
+      <label for="{{ f.id_for_label }}">{{ f.label }}</label>
+      {{ f }}
+      {% if f.help_text %}<small class="muted">{{ f.help_text }}</small>{% endif %}
+      {% if f.errors %}<small class="error">{{ f.errors|join:" " }}</small>{% endif %}
+    </div>
+    {% endfor %}
+  </section>
+
+  <section class="step">
+    <h2><span class="num">3</span> Area <span class="muted small">optional</span></h2>
+    <p class="muted">The admin area this notebook is about, so it can be found by country and area.</p>
+    <div class="area-controls">
+      <label>Country
+        <select name="country" id="country">
+          <option value="">— none —</option>
+          {% for c in countries %}<option value="{{ c.iso3 }}" {% if form.country.value == c.iso3 %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Admin level
+        <select name="level" id="level">
+          {% for l in levels %}<option value="{{ l }}" {% if form.level.value|stringformat:"s" == l|stringformat:"s" %}selected{% endif %}>{% if l == 0 %}Country{% else %}Admin {{ l }}{% endif %}</option>{% endfor %}
+        </select>
+      </label>
+    </div>
+    <div id="map" class="map"></div>
+    <div id="selection" class="selection muted">No area selected.</div>
+  </section>
+
+  <section class="step">
+    <h2><span class="num">4</span> STAC item <span class="muted small">optional</span></h2>
+    <details {% if stac_open %}open{% endif %}>
+      <summary>Link the STAC item this notebook is about</summary>
+      {% if picker %}{% include "web/partials/stac_picker.html" %}
+      {% else %}<div hx-get="{% url 'web:upload-stac-picker' %}" hx-trigger="intersect once" hx-swap="outerHTML"><p class="muted small">Loading catalogs…</p></div>{% endif %}
+    </details>
+  </section>
+
+  <section class="step">
+    <h2><span class="num">5</span> Filters</h2>
+    {% if tag_fields %}
+    <p class="muted small">Empty values are filled from the STAC item where possible.</p>
+    <div class="param-grid">{% include "web/partials/tag_inputs.html" %}</div>
+    {% else %}<p class="muted">No filters are defined. <a href="{% url 'web:facet-list' %}">Add some</a>.</p>{% endif %}
+    <div class="review panel">
+      <div class="muted small">YOU'RE ABOUT TO PUBLISH</div>
+      <div id="summary" class="summary">Uploaded notebook</div>
+    </div>
+    <button class="btn primary large" type="submit">Upload and publish →</button>
+  </section>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+  window.RUN_FORM = {
+    geojsonUrl: "{% url 'api:area-geojson' %}",
+    areasUrl: "{% url 'api:area-list' %}",
+    template: "Uploaded notebook",
+  };
+</script>
+<script src="{% static 'web/run_form.js' %}"></script>
+{% endblock %}
