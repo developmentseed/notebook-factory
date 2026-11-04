@@ -6,9 +6,10 @@ description: '**Use Case 1 · Risk · before the event.** Compares a hazard rast
   return period and as an annual average) and facility counts per subdivision.
 
 
-  > Needs the hazard, population and facility datasets under `DATASETS_DIR`. Hazards without data yet
-  (wildfire, heatwave) and other infrastructure layers fail with a clear error instead of showing fake
-  data.'
+  > Needs the hazard rasters under `DATASETS_DIR`. Population (WorldPop 1 km) is downloaded once per
+  country and cached there; health facilities come from OpenStreetMap (Layercake). Hazards without data
+  yet (wildfire, heatwave) and other infrastructure layers fail with a clear error instead of showing
+  fake data.'
 use_case: uc1
 hazards:
 - flood
