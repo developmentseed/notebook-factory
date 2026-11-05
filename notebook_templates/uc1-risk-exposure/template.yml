@@ -2,14 +2,14 @@ title: Population & infrastructure risk exposure
 summary: How many people and which facilities are exposed to a hazard, before any event — a baseline for
   preparedness.
 description: '**Use Case 1 · Risk · before the event.** Compares a hazard raster against a threshold to
-  build a hazard mask, overlays population and health facilities, and aggregates exposed population (per
+  build a hazard mask, overlays population, health facilities and schools, and aggregates exposed population (per
   return period and as an annual average) and facility counts per subdivision.
 
 
   > Needs the hazard rasters (flood, cyclone, earthquake) at `datasets_url`, a folder or URL. Population
-  (WorldPop 1 km) is downloaded once per country into a scratch cache; health facilities come from
-  OpenStreetMap (Layercake). Hazards without data yet (wildfire, heatwave) and other infrastructure
-  layers fail with a clear error instead of showing fake data.'
+  (WorldPop 1 km) is downloaded once per country into a scratch cache; health facilities and
+  schools come from OpenStreetMap (Layercake). Hazards without data yet (wildfire, heatwave) and
+  airports and roads fail with a clear error instead of showing fake data.'
 filters:
   use_case:
   - uc1
@@ -95,7 +95,7 @@ parameters:
         - roads
         x-enum-labels:
           health: Health facilities
-          schools: Schools (no data yet)
+          schools: Schools (incl. kindergartens, colleges, universities)
           airports: Airports (no data yet)
           roads: Primary roads (no data yet)
     datasets_url:
