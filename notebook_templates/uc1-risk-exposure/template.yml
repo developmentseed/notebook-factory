@@ -101,7 +101,7 @@ parameters:
     datasets_url:
       type: string
       title: Hazard datasets location
-      description: Folder or URL (https://, s3://, az://) that holds the hazard rasters under wrl/216_hazard/.
+      description: Folder or URL (https://, s3://, az://) that holds the hazard rasters (wrl_risk_ras_*.tif) directly.
   required:
   - hazard
   - datasets_url
