@@ -102,6 +102,7 @@ parameters:
       type: string
       title: Hazard datasets location
       description: Folder or URL (https://, s3://, az://) that holds the hazard rasters (wrl_risk_ras_*.tif) directly.
+      default: https://goplaygroundstorage.blob.core.windows.net/notebook-factory-playground-static-datasets-container/mapaction/216-hazard
   required:
   - hazard
   - datasets_url
