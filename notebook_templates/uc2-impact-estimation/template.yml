@@ -1,78 +1,77 @@
 title: Post-disaster impact estimation
-summary: Who and what fall inside the observed extent of an actual disaster, from Copernicus EMS products,
-  hours to days after it strikes.
-description: '**Use Case 2 · Impact · during / just after.** Takes the observed impact zone for an event,
-  intersects it with
+summary: Who and what fall inside the observed extent of an actual disaster, from Copernicus EMS products
+  read through Montandon, hours to days after it strikes.
+description: '**Use Case 2 · Impact · during / just after.** Takes the Copernicus EMS products of an
+  activation (read through the Montandon catalog), keeps the features graded Destroyed, Damaged or Possibly
+  damaged, and aggregates per subdivision: the number of damaged features, their footprint area, the
+  population of the 1 km cells they touch, and the hospitals that intersect them. It also measures the
+  footprint of every published product to show how the impact evolves.
 
-  population and infrastructure, and aggregates per zone with a time dimension as new products arrive.
 
-
-  > In this version the observed extent is a **buffer around the event location** and population is synthetic.
-
-  > Replace the extent with the CEMS / Charter vector product linked to the event in Montandon.'
-filters:
-  use_case:
-  - uc2
-  hazard:
-  - flood
-  - cyclone
-  - earthquake
-  - wildfire
-version: '0.2'
+  > Pick a Copernicus EMS event (collection `cems-events`) and an area that covers it. Population is a
+  settlement-scale estimate: every 1 km WorldPop cell touched by a damaged feature is counted in full.
+  Hospitals come from OpenStreetMap (Layercake). Other infrastructure (schools, roads, airports) is not
+  included yet.'
+use_case: uc2
+hazards:
+- flood
+- cyclone
+- earthquake
+- wildfire
+version: '0.3'
 requires_area: true
 requires_stac_item: true
 stac_hints:
   profile: montandon
   collections:
-  - reference-events
-  roles:
-  - event
+  - cems-events
 estimated_runtime_minutes: 3
 parameters:
   type: object
   properties:
-    extent_radius_km:
-      type: number
-      title: Stand-in extent radius (km)
-      default: 80
-      minimum: 1
-      maximum: 500
-      description: Used only until a CEMS extent is available for the event.
-    population_source:
-      type: string
-      title: Population data
-      enum:
-      - worldpop_100m
-      - ghsl_100m
-      default: worldpop_100m
-      x-enum-labels:
-        worldpop_100m: WorldPop · 100 m
-        ghsl_100m: GHSL · 100 m
-    age_group:
-      type: string
-      title: Age disaggregation
-      enum:
-      - all
-      - under_5
-      - under_18
-      - over_65
-      default: all
-    infrastructure_layers:
+    damage_grades:
       type: array
-      title: Infrastructure layers
+      title: Damage grades counted as impact
+      default:
+      - Destroyed
+      - Damaged
+      - Possibly damaged
       items:
         type: string
         enum:
-        - schools
-        - hospitals
-        - roads
-      default:
-      - schools
-      - hospitals
-    timesteps:
+        - Destroyed
+        - Damaged
+        - Possibly damaged
+      x-widget: checkboxes
+      description: Copernicus grading layers only. Layers without a damage grade (flood or burnt-area extents)
+        are kept whole.
+    aggregation_level:
       type: integer
-      title: Product time steps
-      default: 3
-      minimum: 1
-      maximum: 10
-      description: Number of successive extent products to compare (illustrative).
+      title: Aggregation subdivisions
+      enum:
+      - 1
+      - 2
+      default: 2
+      x-enum-labels:
+        '1': Admin level 1
+        '2': Admin level 2
+      description: Admin level used for the statistics.
+    infrastructure_layers:
+      type: array
+      title: Infrastructure layers
+      default:
+      - health
+      items:
+        type: string
+        enum:
+        - health
+        x-enum-labels:
+          health: Hospitals
+    bbox_buffer_deg:
+      type: number
+      title: Extent buffer (degrees)
+      default: 0.05
+      minimum: 0
+      maximum: 1
+      multipleOf: 0.01
+      description: Padding around the damage extent for the population and hospital queries.
