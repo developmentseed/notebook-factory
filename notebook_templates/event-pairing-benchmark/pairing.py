@@ -83,6 +83,7 @@ class Record:
     point: tuple[float, float] | None  # (lon, lat)
     coarse: bool
     magnitude: float | None
+    corr_id: str = ""
 
     @property
     def family(self) -> str:
@@ -175,6 +176,7 @@ def record_from_item(item: dict) -> Record:
         point=point,
         coarse=source in COARSE_SOURCES or point is None,
         magnitude=_magnitude(source, props),
+        corr_id=props.get("monty:corr_id") or "",
     )
 
 
@@ -264,6 +266,42 @@ def block(a: Record, b: Record, block_days: float) -> str:
     if gap_days(a, b, by_day=True) > block_days:
         return "time"
     return "ok"
+
+
+# -- the other matching rules used across Montandon ---------------------------------------------------------
+_CORR_KEY = re.compile(r"^(\d{8})-([A-Z]{3})-")
+
+
+def corr_id_equal(a: Record, b: Record) -> bool:
+    """monty:corr_id equality: how the skills' get_event_detail follows an event across sources."""
+    return bool(a.corr_id) and a.corr_id == b.corr_id
+
+
+def event_key_equal(a: Record, b: Record) -> bool:
+    """Same date and country in the corr_id: the MCP toolset's `event_key` blocking key."""
+    ka, kb = _CORR_KEY.match(a.corr_id), _CORR_KEY.match(b.corr_id)
+    return bool(ka and kb and ka.groups() == kb.groups())
+
+
+def cql2_match(a: Record, b: Record, days: int) -> bool:
+    """The extension docs' Algorithm 1: a shared hazard code, a shared country, intersecting dates."""
+    if not (a.start and b.start):
+        return False
+    slack = timedelta(days=days)
+    return bool(
+        set(a.hazard_codes) & set(b.hazard_codes)
+        and set(a.countries) & set(b.countries)
+        and a.start - slack <= (b.end or b.start)
+        and b.start <= (a.end or a.start) + slack
+    )
+
+
+RULES = {
+    "Rule: corr_id equal": corr_id_equal,
+    "Rule: date + country": event_key_equal,
+    "Rule: CQL2 hazard + country + 1 day": lambda a, b: cql2_match(a, b, 1),
+    "Rule: CQL2 hazard + country + 7 days": lambda a, b: cql2_match(a, b, 7),
+}
 
 
 # -- features for the learned scorer -----------------------------------------------------------------------

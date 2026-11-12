@@ -19,6 +19,17 @@
 #     days apart); cascade = members carry different hazard types (a cyclone and its floods).
 #   - Items that are genuinely ambiguous are under `ambiguous` and excluded, with the reason.
 
+# Review log
+#   2026-11-12  After the first run with a decision model (Jev 1.14), the 13 pairs on which both the shipped
+#   heuristic and the model disagreed with a label, and the 7 pairs only the model got wrong, were read against
+#   the source records. Three records moved to `ambiguous` (see below): the register text shows each spans
+#   several of the listed disasters. No label was changed to agree with a scorer and nothing was relabelled as a
+#   positive. Labels that held up under that review: Cyclone Freddy versus the Maputo and Niassa floods (EM-DAT
+#   keeps the 7 Feb flood 0078 and the 24 Feb storm 0095 as separate records) and the three Herat earthquakes
+#   (EM-DAT 0636 and 0660 are separate records, GLIDE has three).
+#   Labels revised after seeing results favour the scorers that were shown them: judge new scorers on windows
+#   labelled before they were run.
+
 version: 1
 
 disasters:
@@ -30,7 +41,6 @@ disasters:
     members:
       - emdat-event-2023-0054-TUR
       - glide-event-EQ-2023-000015-TUR
-      - ifrcevent-event-6345
       - idmc-gidd-event-22194
       - usgs-event-us6000jlqa
       - gdacs-event-1357372-1487094
@@ -211,13 +221,6 @@ disasters:
       - cems-event-EMSR715
       - idmc-idu-event-21793
       - idmc-gidd-event-29860
-  - id: chl-2024-02-02-sanpablo
-    name: San Pablo wildfire (Los Lagos), Chile, 900 km south
-    window: chl-2024-02
-    kind: confusable
-    members:
-      - idmc-idu-event-21794
-      - idmc-gidd-event-21794
 
   # ---- Mozambique, February-March 2023: Cyclone Freddy and unrelated floods ----------------------
   - id: moz-2023-freddy
@@ -249,6 +252,12 @@ disasters:
 
 # Real records left out of scoring because the label is a matter of definition, not of evidence.
 ambiguous:
+  - id: ifrcevent-event-6345
+    why: IFRC's operation page for the whole February 2023 earthquake zone (Hatay, Kahramanmaras, Adiyaman...); it spans the 6, 20 and 27 February entries.
+  - id: idmc-idu-event-21794
+    why: IDMC split of one San Pablo (Los Lagos) fire; EM-DAT's Chile record lists seven regions Valparaiso to Aysen, so this is likely part of the same outbreak.
+  - id: idmc-gidd-event-21794
+    why: Same IDMC San Pablo record, GIDD copy.
   - id: idmc-idu-event-18582
     why: IDMC files the whole Herat sequence (7-15 Oct 2023) as one record; it belongs to all three Afghan entries.
   - id: idmc-gidd-event-18582

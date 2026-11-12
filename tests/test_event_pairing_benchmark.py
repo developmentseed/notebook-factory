@@ -34,6 +34,7 @@ def _rec(
         id=id_, source=source, title=kw.get("title", id_), text=kw.get("text", ""), start=when, end=when,
         countries=(country,), hazard_codes=tuple(codes), point=point,
         coarse=source in P.COARSE_SOURCES or point is None, magnitude=kw.get("magnitude"),
+        corr_id=kw.get("corr_id", ""),
     )  # fmt: skip
 
 
@@ -125,6 +126,40 @@ def test_pair_anchor_is_symmetric_and_prefers_the_precise_record():
     assert P.pair_anchor(precise, coarse)[0] is precise and P.pair_anchor(coarse, precise)[0] is precise
     early, late = _rec("a", "emdat", start="2025-03-01"), _rec("b", "glide", start="2025-03-05")
     assert P.pair_anchor(early, late)[0] is early and P.pair_anchor(late, early)[0] is early
+
+
+# -- the other matching rules ----------------------------------------------------------------------------
+def test_rule_baselines():
+    a = _rec(
+        "a",
+        "emdat",
+        start="2024-10-27",
+        country="ESP",
+        codes=("MH0600", "FL"),
+        corr_id="20241027-ESP-1-MH0600-1-GCDB",
+    )
+    b = _rec(
+        "b",
+        "gdacs",
+        start="2024-10-28",
+        country="ESP",
+        codes=("MH0600", "FL"),
+        corr_id="20241028-ESP-2-MH0600-1-GCDB",
+    )
+    c = _rec(
+        "c", "glide", start="2024-10-27", country="ESP", codes=("EQ",), corr_id="20241027-ESP-9-GH0101-1-GCDB"
+    )
+    d = _rec("d", "usgs", start="2024-11-02", country="ESP", codes=("FL",))
+    assert (
+        P.corr_id_equal(a, a) and not P.corr_id_equal(a, b) and not P.corr_id_equal(d, d)
+    )  # no id, no match
+    assert P.event_key_equal(a, c) and not P.event_key_equal(
+        a, b
+    )  # same date and country, whatever the hazard
+    assert P.cql2_match(a, b, 1) and not P.cql2_match(a, c, 1)  # a hazard code must be shared
+    assert not P.cql2_match(a, d, 1) and P.cql2_match(a, d, 7)  # the day window decides
+    assert not P.cql2_match(a, _rec("e", country="THA", codes=("MH0600",)), 7)
+    assert set(P.RULES) >= {"Rule: corr_id equal", "Rule: date + country"}
 
 
 # -- metrics and the learned scorer ------------------------------------------------------------------------

@@ -3,7 +3,7 @@ summary: Which method best decides that records from different sources are the s
   shipped heuristic, a learned model and a System One decision model on a hand-labelled gold set.
 description: '**Analysis · event pairing.** `monty:corr_id` cannot join sources, so a matcher has to. This
   notebook scores the app''s time-and-distance heuristic, a logistic regression and a decision model (Jev
-  and others, through OpenRouter''s Decisions API) on about 100 real Montandon events grouped into 22
+  and others, through OpenRouter''s Decisions API) on about 95 real Montandon events grouped into 21
   disasters, including close neighbours (three Herat earthquakes in 8 days, four Spanish disasters in six weeks)
   and cascades (Storm Daniel and the Derna floods).
 
