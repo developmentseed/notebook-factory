@@ -1,0 +1,2803 @@
+# Silver set for the event-pairing benchmark, written by build_silver.py: do not edit by hand.
+# Labels come from GDACS's own references (`glide`, and `sourceid` = the USGS event for earthquakes),
+# for GDACS Orange and Red alerts 2015 to 2026-11-12. Same format as gold_disasters.yml.
+# Where GDACS gives an aftershock its own GLIDE number, it is its own disaster here, as the registers say.
+version: 1
+disasters:
+- id: gdacs-FL-4216
+  name: Flood in Malaysia
+  kind: silver
+  members:
+  - gdacs-event-4216-1
+  - glide-event-FL-2014-000168-MYS
+  - glide-event-FL-2014-000168-THA
+  window: FL-2014-12-20-MYS
+- id: gdacs-FL-4219
+  name: Flood in Malawi
+  kind: silver
+  members:
+  - gdacs-event-4219-2
+  - glide-event-FL-2015-000006-MWI
+  window: FL-2015-01-01-MWI
+- id: gdacs-EQ-1052901
+  name: Earthquake in Nepal
+  kind: silver
+  members:
+  - gdacs-event-1052901-1077580
+  - usgs-event-us20002926
+  window: EQ-2015-04-25-NPL
+- id: gdacs-EQ-1054582
+  name: Earthquake in Nepal
+  kind: silver
+  members:
+  - gdacs-event-1054582-1080095
+  - usgs-event-us20002ejl
+  window: EQ-2015-04-25-NPL
+- id: gdacs-FL-4249
+  name: Flood in China
+  kind: silver
+  members:
+  - gdacs-event-4249-2
+  - glide-event-FL-2015-000057-CHN
+  window: FL-2015-05-13-CHN
+- id: gdacs-FL-4260
+  name: Flood in Ghana
+  kind: silver
+  members:
+  - gdacs-event-4260-2
+  - glide-event-FL-2015-000065-GHA
+  window: FL-2015-06-02-GHA
+- id: gdacs-EQ-1070251
+  name: Earthquake in Afghanistan
+  kind: silver
+  members:
+  - gdacs-event-1070251-1103550
+  - usgs-event-us10003re5
+  window: EQ-2015-10-26-AFG
+- id: gdacs-EQ-1076983
+  name: Earthquake in Afghanistan
+  kind: silver
+  members:
+  - gdacs-event-1076983-1113110
+  - usgs-event-us100049i1
+  window: EQ-2015-12-25-AFG
+- id: gdacs-EQ-1077755
+  name: Earthquake in India
+  kind: silver
+  members:
+  - gdacs-event-1077755-1114151
+  - usgs-event-us10004b2n
+  window: EQ-2016-01-03-IND
+- id: gdacs-EQ-1080050
+  name: Earthquake in China
+  kind: silver
+  members:
+  - gdacs-event-1080050-1118609
+  - usgs-event-us20004y6h
+  window: EQ-2016-02-05-CHN
+- id: gdacs-FL-4339
+  name: Flood in Pakistan
+  kind: silver
+  members:
+  - gdacs-event-4339-4339
+  - glide-event-FL-2016-000021-PAK
+  window: FL-2016-03-12-PAK
+- id: gdacs-EQ-1084073
+  name: Earthquake in Afghanistan
+  kind: silver
+  members:
+  - gdacs-event-1084073-1124773
+  - usgs-event-us20005gsg
+  window: EQ-2016-04-10-AFG
+- id: gdacs-EQ-1084342
+  name: Earthquake in Japan
+  kind: silver
+  members:
+  - gdacs-event-1084342-1125182
+  - usgs-event-us20005hzn
+  window: EQ-2016-04-14-JPN
+- id: gdacs-EQ-1084450
+  name: Earthquake in Japan
+  kind: silver
+  members:
+  - gdacs-event-1084450-1125375
+  - usgs-event-us20005iis
+  window: EQ-2016-04-14-JPN
+- id: gdacs-EQ-1084565
+  name: Earthquake in Ecuador
+  kind: silver
+  members:
+  - gdacs-event-1084565-1125596
+  - usgs-event-us20005j32
+  window: EQ-2016-04-16-ECU
+- id: gdacs-EQ-1086512
+  name: Earthquake in Ecuador
+  kind: silver
+  members:
+  - gdacs-event-1086512-1128619
+  - usgs-event-us10005i9n
+  window: EQ-2016-05-18-ECU
+- id: gdacs-EQ-1087884
+  name: Earthquake in Nicaragua
+  kind: silver
+  members:
+  - gdacs-event-1087884-1130707
+  - usgs-event-us200063cy
+  window: EQ-2016-06-10-NIC
+- id: gdacs-FL-4384
+  name: Flood in India
+  kind: silver
+  members:
+  - gdacs-event-4384-4384
+  - glide-event-FL-2016-000094-IND
+  window: FL-2016-07-15-IND
+- id: gdacs-EQ-1092506
+  name: Earthquake in Myanmar
+  kind: silver
+  members:
+  - gdacs-event-1092506-1137657
+  - usgs-event-us10006gbf
+  window: EQ-2016-08-24-MMR
+- id: gdacs-FL-4397
+  name: Flood in North Korea
+  kind: silver
+  members:
+  - gdacs-event-4397-4397
+  - glide-event-FL-2016-000097-PRK
+  window: FL-2016-09-05-PRK
+- id: gdacs-EQ-1094551
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1094551-1140948
+  - usgs-event-us10006s4v
+  window: EQ-2016-09-23-PHL
+- id: gdacs-EQ-1098988
+  name: Earthquake in Japan
+  kind: silver
+  members:
+  - gdacs-event-1098988-1147717
+  - usgs-event-us10007b88
+  window: EQ-2016-11-21-JPN
+- id: gdacs-EQ-1100349
+  name: Earthquake in Solomon Islands
+  kind: silver
+  members:
+  - gdacs-event-1100349-1
+  - usgs-event-us20007z80
+  window: EQ-2016-12-08-UNK
+- id: gdacs-FL-1000038
+  name: Flood in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1000038-1000038
+  - glide-event-FL-2017-000010-PHL
+  window: FL-2017-01-16-PHL
+- id: gdacs-FL-1000072
+  name: Flood in Peru
+  kind: silver
+  members:
+  - gdacs-event-1000072-1000076
+  - glide-event-FL-2017-000018-PER
+  window: FL-2017-03-03-PER
+- id: gdacs-EQ-1107035
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1107035-1159515
+  - usgs-event-us1000870s
+  window: EQ-2017-03-05-PHL
+- id: gdacs-FL-1000070
+  name: Flood in Madagascar
+  kind: silver
+  members:
+  - gdacs-event-1000070-1
+  - glide-event-TC-2017-000023-MDG
+  window: FL-2017-03-07-MDG
+- id: gdacs-EQ-1109251
+  name: Earthquake in South Africa
+  kind: silver
+  members:
+  - gdacs-event-1109251-1162579
+  - usgs-event-us10008e0f
+  window: EQ-2017-04-03-ZAF
+- id: gdacs-EQ-1109737
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1109737-1163271
+  - usgs-event-us10008fsd
+  window: EQ-2017-04-08-PHL
+- id: gdacs-EQ-1110110
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1110110-1163804
+  - usgs-event-us10008h1u
+  window: EQ-2017-04-08-PHL
+- id: gdacs-EQ-1111531
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1111531-1165746
+  - glide-event-EQ-2017-000044-PHL
+  window: EQ-2017-04-08-PHL
+- id: gdacs-FL-1000086
+  name: Flood in Sri Lanka
+  kind: silver
+  members:
+  - gdacs-event-1000086-1
+  - glide-event-FL-2017-000057-LKA
+  window: FL-2017-05-25-LKA
+- id: gdacs-TC-1000357
+  name: Tropical Cyclone MORA-17
+  kind: silver
+  members:
+  - gdacs-event-1000357-1
+  - glide-event-TC-2017-000058-MMR
+  - glide-event-TC-2017-000058-BGD
+  window: TC-2017-05-27-BGD
+- id: gdacs-EQ-1114051
+  name: Earthquake in Indonesia
+  kind: silver
+  members:
+  - gdacs-event-1114051-1169337
+  - glide-event-EQ-2017-000059-IDN
+  window: EQ-2017-05-29-IDN
+- id: gdacs-FL-1000095
+  name: Flood in Bangladesh
+  kind: silver
+  members:
+  - gdacs-event-1000095-1000104
+  - glide-event-LS-2017-000068-BGD
+  window: FL-2017-06-12-BGD
+- id: gdacs-EQ-1114994
+  name: Earthquake in Guatemala
+  kind: silver
+  members:
+  - gdacs-event-1114994-1170758
+  - glide-event-EQ-2017-000071-GTM
+  window: EQ-2017-06-14-GTM
+- id: gdacs-EQ-1115474
+  name: Earthquake in Guatemala
+  kind: silver
+  members:
+  - gdacs-event-1115474-1171566
+  - usgs-event-us20009p1a
+  window: EQ-2017-06-14-GTM
+- id: gdacs-EQ-1116349
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1116349-1172876
+  - usgs-event-us1000976a
+  - glide-event-EQ-2017-000081-PHL
+  window: EQ-2017-07-06-PHL
+- id: gdacs-EQ-1116604
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1116604-1173270
+  - usgs-event-us100098gc
+  window: EQ-2017-07-06-PHL
+- id: gdacs-EQ-1117364
+  name: Earthquake in Türkiye
+  kind: silver
+  members:
+  - gdacs-event-1117364-1174490
+  - glide-event-TS-2017-000142-TUR
+  window: EQ-2017-07-20-TUR
+- id: gdacs-TC-1000378
+  name: Tropical Cyclone NESAT-17
+  kind: silver
+  members:
+  - gdacs-event-1000378-1
+  - glide-event-TC-2017-000098-CHN
+  - glide-event-TC-2017-000098-TWN
+  window: TC-2017-07-26-CHN
+- id: gdacs-EQ-1118464
+  name: Earthquake in India
+  kind: silver
+  members:
+  - gdacs-event-1118464-1176184
+  - usgs-event-us2000a3r9
+  window: EQ-2017-08-02-IND
+- id: gdacs-TC-1000383
+  name: Tropical Cyclone FRANKLIN-17
+  kind: silver
+  members:
+  - gdacs-event-1000383-1
+  - glide-event-TC-2017-000105-MEX
+  window: TC-2017-08-06-MEX
+- id: gdacs-EQ-1119024
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1119024-1177031
+  - usgs-event-us2000a77i
+  window: EQ-2017-08-11-PHL
+- id: gdacs-EQ-1119147
+  name: Earthquake in Indonesia
+  kind: silver
+  members:
+  - gdacs-event-1119147-1177217
+  - usgs-event-us2000a7q2
+  window: EQ-2017-08-13-IDN
+- id: gdacs-TC-1000387
+  name: Tropical Cyclone HARVEY-17
+  kind: silver
+  members:
+  - gdacs-event-1000387-1
+  - glide-event-TC-2017-000123-USA
+  window: TC-2017-08-17-USA
+- id: gdacs-TC-1000389
+  name: Tropical Cyclone HATO-17
+  kind: silver
+  members:
+  - gdacs-event-1000389-1
+  - glide-event-TC-2017-000120-CHN
+  window: TC-2017-07-26-CHN
+- id: gdacs-EQ-1120837
+  name: Earthquake in Mexico
+  kind: silver
+  members:
+  - gdacs-event-1120837-1179705
+  - glide-event-EQ-2017-000128-MEX
+  window: EQ-2017-09-08-MEX
+- id: gdacs-TC-1000400
+  name: Tropical Cyclone DOKSURI-17
+  kind: silver
+  members:
+  - gdacs-event-1000400-1
+  - glide-event-TC-2017-000131-VNM
+  window: TC-2017-09-11-LAO
+- id: gdacs-TC-1000404
+  name: Tropical Cyclone MARIA-17
+  kind: silver
+  members:
+  - gdacs-event-1000404-1
+  - glide-event-TC-2017-000136-MTQ
+  - glide-event-TC-2017-000136-GLP
+  - glide-event-TC-2017-000136-DMA
+  - glide-event-TC-2017-000136-USA
+  - glide-event-TC-2017-000136-ATG
+  window: TC-2017-09-16-UNK
+- id: gdacs-EQ-1121855
+  name: Earthquake in Mexico
+  kind: silver
+  members:
+  - gdacs-event-1121855-1181196
+  - usgs-event-us2000ar20
+  - glide-event-EQ-2017-000138-MEX
+  window: EQ-2017-09-08-MEX
+- id: gdacs-TC-1000412
+  name: Tropical Cyclone LAN-17
+  kind: silver
+  members:
+  - gdacs-event-1000412-1
+  - glide-event-TC-2017-000153-JPN
+  window: TC-2017-10-15-JPN
+- id: gdacs-TC-1000417
+  name: Tropical Cyclone DAMREY-17
+  kind: silver
+  members:
+  - gdacs-event-1000417-1
+  - glide-event-TC-2017-000159-VNM
+  window: TC-2017-11-01-KHM
+- id: gdacs-EQ-1126166
+  name: Earthquake in Iran, Islamic Republic of
+  kind: silver
+  members:
+  - gdacs-event-1126166-1187257
+  - glide-event-EQ-2017-000165-IRQ
+  - glide-event-EQ-2017-000165-IRN
+  window: EQ-2017-11-12-UNK
+- id: gdacs-TC-1000422
+  name: Tropical Cyclone OCKHI-17
+  kind: silver
+  members:
+  - gdacs-event-1000422-1
+  - glide-event-TC-2017-000172-LKA
+  - glide-event-TC-2017-000172-IND
+  window: TC-2017-11-29-IND
+- id: gdacs-TC-1000426
+  name: Tropical Cyclone TEMBIN-17
+  kind: silver
+  members:
+  - gdacs-event-1000426-1
+  - glide-event-TC-2017-000182-VNM
+  - glide-event-TC-2017-000182-PHL
+  window: TC-2017-12-20-KHM
+- id: gdacs-TC-1000429
+  name: Tropical Cyclone AVA-18
+  kind: silver
+  members:
+  - gdacs-event-1000429-1
+  - glide-event-TC-2018-000001-MDG
+  window: TC-2018-01-02-MDG
+- id: gdacs-EQ-1135798
+  name: Earthquake in Papua New Guinea
+  kind: silver
+  members:
+  - gdacs-event-1135798-1200555
+  - usgs-event-us2000d7q6
+  window: EQ-2018-02-25-PNG
+- id: gdacs-EQ-1136958
+  name: Earthquake in Mozambique
+  kind: silver
+  members:
+  - gdacs-event-1136958-1202239
+  - usgs-event-us1000d1cy
+  window: EQ-2018-03-08-MOZ
+- id: gdacs-TC-1000441
+  name: Tropical Cyclone ELIAKIM-18
+  kind: silver
+  members:
+  - gdacs-event-1000441-1
+  - glide-event-TC-2018-000023-MDG
+  window: TC-2018-03-15-MDG
+- id: gdacs-TC-1000453
+  name: Tropical Cyclone MEKUNU-18
+  kind: silver
+  members:
+  - gdacs-event-1000453-1
+  - glide-event-TC-2018-000062-YEM
+  - glide-event-TC-2018-000062-OMN
+  window: TC-2018-05-22-OMN
+- id: gdacs-TC-1000466
+  name: Tropical Cyclone MARIA-18
+  kind: silver
+  members:
+  - gdacs-event-1000466-1
+  - glide-event-TC-2018-000110-CHN
+  window: TC-2018-07-02-CHN
+- id: gdacs-FL-1000208
+  name: Flood in Japan
+  kind: silver
+  members:
+  - gdacs-event-1000208-1
+  - glide-event-FL-2018-000082-JPN
+  window: FL-2018-07-05-JPN
+- id: gdacs-EQ-1151933
+  name: Earthquake in Indonesia
+  kind: silver
+  members:
+  - gdacs-event-1151933-1221687
+  - glide-event-EQ-2018-000122-IDN
+  window: EQ-2018-07-28-IDN
+- id: gdacs-EQ-1152815
+  name: Earthquake in Indonesia
+  kind: silver
+  members:
+  - gdacs-event-1152815-1222764
+  - glide-event-EQ-2018-000127-IDN
+  window: EQ-2018-07-28-IDN
+- id: gdacs-TC-1000485
+  name: Tropical Cyclone BEBINCA-18
+  kind: silver
+  members:
+  - gdacs-event-1000485-1
+  - glide-event-TC-2018-000136-VNM
+  - glide-event-TC-2018-000136-THA
+  - glide-event-TC-2018-000136-LAO
+  window: TC-2018-08-12-CHN
+- id: gdacs-EQ-1154252
+  name: Earthquake in Indonesia
+  kind: silver
+  members:
+  - gdacs-event-1154252-1224775
+  - usgs-event-us1000gcvr
+  window: EQ-2018-07-28-IDN
+- id: gdacs-EQ-1154919
+  name: Earthquake in Iran
+  kind: silver
+  members:
+  - gdacs-event-1154919-1225797
+  - glide-event-EQ-2018-000139-IRN
+  window: EQ-2018-08-25-UNK
+- id: gdacs-TC-1000498
+  name: Tropical Cyclone MANGKHUT-18
+  kind: silver
+  members:
+  - gdacs-event-1000498-1
+  - glide-event-TC-2018-000152-CHN
+  window: TC-2018-08-12-CHN
+- id: gdacs-EQ-1156104
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1156104-1227473
+  - usgs-event-us2000haxi
+  - glide-event-EQ-2018-000147-PHL
+  window: EQ-2018-09-08-PHL
+- id: gdacs-EQ-1157757
+  name: Earthquake in Indonesia
+  kind: silver
+  members:
+  - gdacs-event-1157757-1229834
+  - usgs-event-us1000h3p4
+  window: EQ-2018-09-28-IDN
+- id: gdacs-EQ-1157762
+  name: Earthquake in Indonesia
+  kind: silver
+  members:
+  - gdacs-event-1157762-1229853
+  - usgs-event-us1000h3pn
+  window: EQ-2018-09-28-IDN
+- id: gdacs-TC-1000519
+  name: Tropical Cyclone TITLI-18
+  kind: silver
+  members:
+  - gdacs-event-1000519-1
+  - glide-event-TC-2018-000162-IND
+  window: TC-2018-10-09-IND
+- id: gdacs-EQ-1158776
+  name: Earthquake in Papua New Guinea
+  kind: silver
+  members:
+  - gdacs-event-1158776-1231240
+  - glide-event-EQ-2018-000164-PNG
+  window: EQ-2018-10-10-PNG
+- id: gdacs-TC-1000523
+  name: Tropical Cyclone WILLA-18
+  kind: silver
+  members:
+  - gdacs-event-1000523-18
+  - glide-event-TC-2018-000168-MEX
+  window: TC-2018-10-20-MEX
+- id: gdacs-TC-1000529
+  name: Tropical Cyclone GAJA-18
+  kind: silver
+  members:
+  - gdacs-event-1000529-1
+  - glide-event-TC-2018-000413-IND
+  window: TC-2018-11-10-IND
+- id: gdacs-EQ-1163300
+  name: Earthquake in Iran, Islamic Republic of
+  kind: silver
+  members:
+  - gdacs-event-1163300-1238333
+  - glide-event-EQ-2018-000415-IRN
+  window: EQ-2018-11-25-UNK
+- id: gdacs-EQ-1168491
+  name: Earthquake in Chile
+  kind: silver
+  members:
+  - gdacs-event-1168491-1245627
+  - usgs-event-us2000j6hy
+  - glide-event-EQ-2019-000008-CHL
+  window: EQ-2019-01-20-CHL
+- id: gdacs-EQ-1171579
+  name: Earthquake in Ecuador
+  kind: silver
+  members:
+  - gdacs-event-1171579-1249833
+  - usgs-event-us2000jlfv
+  - glide-event-EQ-2019-000016-ECU
+  window: EQ-2019-02-22-ECU
+- id: gdacs-TC-1000552
+  name: Tropical Cyclone IDAI-19
+  kind: silver
+  members:
+  - gdacs-event-1000552-1
+  - glide-event-TC-2019-000021-MOZ
+  window: TC-2019-03-09-MOZ
+- id: gdacs-EQ-1177338
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1177338-1257490
+  - glide-event-EQ-2019-000035-PHL
+  window: EQ-2019-04-22-PHL
+- id: gdacs-TC-1000559
+  name: Tropical Cyclone KENNETH-19
+  kind: silver
+  members:
+  - gdacs-event-1000559-1
+  - glide-event-TC-2019-000039-COM
+  window: TC-2019-04-23-COM
+- id: gdacs-EQ-1177436
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1177436-1257626
+  - glide-event-EQ-2019-000036-PHL
+  window: EQ-2019-04-22-PHL
+- id: gdacs-TC-1000561
+  name: Tropical Cyclone FANI-19
+  kind: silver
+  members:
+  - gdacs-event-1000561-1
+  - glide-event-TC-2019-000043-IND
+  window: TC-2019-04-27-BGD
+- id: gdacs-EQ-1178759
+  name: Earthquake in Eastern New Guinea Reg., P.N.G.
+  kind: silver
+  members:
+  - gdacs-event-1178759-1259332
+  - usgs-event-us70003hqb
+  - glide-event-EQ-2019-000044-PNG
+  window: EQ-2019-05-06-UNK
+- id: gdacs-EQ-1179441
+  name: Earthquake in New Britain Region, P.N.G.
+  kind: silver
+  members:
+  - gdacs-event-1179441-1260232
+  - usgs-event-us70003kyy
+  - glide-event-EQ-2019-000045-PNG
+  window: EQ-2019-05-14-UNK
+- id: gdacs-EQ-1180592
+  name: Earthquake in Peru
+  kind: silver
+  members:
+  - gdacs-event-1180592-1261717
+  - usgs-event-us60003sc0
+  - glide-event-EQ-2019-000049-PER
+  window: EQ-2019-05-26-PER
+- id: gdacs-TC-1000565
+  name: Tropical Cyclone VAYU-19
+  kind: silver
+  members:
+  - gdacs-event-1000565-1
+  - glide-event-TC-2019-000055-IND
+  window: TC-2019-06-10-IND
+- id: gdacs-EQ-1182839
+  name: Earthquake in China
+  kind: silver
+  members:
+  - gdacs-event-1182839-1264683
+  - glide-event-EQ-2019-000059-CHN
+  window: EQ-2019-06-17-CHN
+- id: gdacs-EQ-1182988
+  name: Earthquake in Panama
+  kind: silver
+  members:
+  - gdacs-event-1182988-1264879
+  - glide-event-EQ-2019-000070-PAN
+  window: EQ-2019-06-26-PAN
+- id: gdacs-EQ-1183131
+  name: Earthquake in United States
+  kind: silver
+  members:
+  - gdacs-event-1183131-1265091
+  - glide-event-EQ-2019-000077-USA
+  window: EQ-2019-07-06-USA
+- id: gdacs-TC-1000582
+  name: Tropical Cyclone LEKIMA-19
+  kind: silver
+  members:
+  - gdacs-event-1000582-1
+  - glide-event-TC-2019-000091-CHN
+  window: TC-2019-08-04-CHN
+- id: gdacs-TC-1000588
+  name: Tropical Cyclone DORIAN-19
+  kind: silver
+  members:
+  - gdacs-event-1000588-1
+  - glide-event-TC-2019-000099-BHS
+  window: TC-2019-08-24-BRB
+- id: gdacs-TC-1000593
+  name: Tropical Cyclone LINGLING-19
+  kind: silver
+  members:
+  - gdacs-event-1000593-1
+  - glide-event-TC-2019-000102-PRK
+  window: TC-2019-08-04-CHN
+- id: gdacs-EQ-1188263
+  name: Earthquake in Albania
+  kind: silver
+  members:
+  - gdacs-event-1188263-1271749
+  - glide-event-EQ-2019-000114-ALB
+  window: EQ-2019-09-21-ALB
+- id: gdacs-EQ-1188306
+  name: Earthquake in Pakistan
+  kind: silver
+  members:
+  - gdacs-event-1188306-1271827
+  - glide-event-EQ-2019-000117-PAK
+  window: EQ-2019-09-24-PAK
+- id: gdacs-EQ-1188327
+  name: Earthquake in Indonesia
+  kind: silver
+  members:
+  - gdacs-event-1188327-1271867
+  - glide-event-EQ-2019-000119-IDN
+  window: EQ-2019-09-25-IDN
+- id: gdacs-EQ-1190672
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1190672-1274866
+  - usgs-event-us70005ulm
+  - glide-event-EQ-2019-000129-PHL
+  window: EQ-2019-10-16-PHL
+- id: gdacs-EQ-1191625
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1191625-1276152
+  - usgs-event-us6000645n
+  window: EQ-2019-10-16-PHL
+- id: gdacs-EQ-1191622
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1191622-1276149
+  - usgs-event-us60006470
+  window: EQ-2019-10-16-PHL
+- id: gdacs-TC-1000624
+  name: Tropical Cyclone MATMO-19/BULBUL-19
+  kind: silver
+  members:
+  - gdacs-event-1000624-1000798
+  - glide-event-TC-2019-000147-BGD
+  window: TC-2019-10-29-BGD
+- id: gdacs-EQ-1191884
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1191884-1276487
+  - usgs-event-us700061e9
+  - glide-event-EQ-2019-000142-PHL
+  window: EQ-2019-10-16-PHL
+- id: gdacs-EQ-1192775
+  name: Earthquake in Iran
+  kind: silver
+  members:
+  - gdacs-event-1192775-1277664
+  - usgs-event-us600068w0
+  - glide-event-EQ-2019-000146-IRN
+  window: EQ-2019-11-07-UNK
+- id: gdacs-EQ-1194111
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1194111-1279431
+  - usgs-event-us700069f4
+  - glide-event-EQ-2019-000152-PHL
+  window: EQ-2019-10-16-PHL
+- id: gdacs-TC-1000636
+  name: Tropical Cyclone KAMMURI-19
+  kind: silver
+  members:
+  - gdacs-event-1000636-1000814
+  - glide-event-TC-2019-000159-PHL
+  window: TC-2019-11-25-GUM
+- id: gdacs-EQ-1195054
+  name: Earthquake in Albania
+  kind: silver
+  members:
+  - gdacs-event-1195054-1280631
+  - glide-event-EQ-2019-000157-ALB
+  window: EQ-2019-11-26-ALB
+- id: gdacs-EQ-1195097
+  name: Earthquake in Bosnia  and  Herzegovina
+  kind: silver
+  members:
+  - gdacs-event-1195097-1280733
+  - usgs-event-us70006d4h
+  - glide-event-EQ-2019-000158-BIH
+  window: EQ-2019-11-26-BIH
+- id: gdacs-EQ-1198219
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1198219-1285566
+  - usgs-event-us60006rp9
+  - glide-event-EQ-2019-000168-PHL
+  window: EQ-2019-10-16-PHL
+- id: gdacs-EQ-1198623
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1198623-1286097
+  - usgs-event-us60006st8
+  - glide-event-EQ-2019-000169-PHL
+  window: EQ-2019-10-16-PHL
+- id: gdacs-TC-1000641
+  name: Tropical Cyclone PHANFONE-19
+  kind: silver
+  members:
+  - gdacs-event-1000641-1000820
+  - glide-event-TC-2019-000176-PHL
+  window: TC-2019-11-25-GUM
+- id: gdacs-EQ-1200957
+  name: Earthquake in Puerto Rico
+  kind: silver
+  members:
+  - gdacs-event-1200957-1289176
+  - usgs-event-pr2020007010
+  window: EQ-2020-01-07-PRI
+- id: gdacs-EQ-1202436
+  name: Earthquake in China
+  kind: silver
+  members:
+  - gdacs-event-1202436-1291089
+  - usgs-event-us60007anp
+  - glide-event-EQ-2020-000010-KGZ
+  window: EQ-2020-01-19-CHN
+- id: gdacs-EQ-1203232
+  name: Earthquake in Türkiye
+  kind: silver
+  members:
+  - gdacs-event-1203232-1292062
+  - usgs-event-us60007ewc
+  window: EQ-2020-01-24-TUR
+- id: gdacs-EQ-1203961
+  name: Earthquake in Cuba
+  kind: silver
+  members:
+  - gdacs-event-1203961-1293009
+  - usgs-event-us60007idc
+  - glide-event-EQ-2020-000131-CUB
+  window: EQ-2020-01-28-CUB
+- id: gdacs-EQ-1207570
+  name: Earthquake in Iran
+  kind: silver
+  members:
+  - gdacs-event-1207570-1297535
+  - usgs-event-us70007v29
+  window: EQ-2020-02-23-UNK
+- id: gdacs-EQ-1211006
+  name: Earthquake in Croatia
+  kind: silver
+  members:
+  - gdacs-event-1211006-1301777
+  - usgs-event-us70008dx7
+  window: EQ-2020-03-22-HRV
+- id: gdacs-TC-1000663
+  name: Tropical Cyclone HAROLD-20
+  kind: silver
+  members:
+  - gdacs-event-1000663-1000853
+  - glide-event-TC-2020-000051-FJI
+  window: TC-2020-04-02-FJI
+- id: gdacs-EQ-1214326
+  name: Earthquake in Myanmar
+  kind: silver
+  members:
+  - gdacs-event-1214326-1305874
+  - usgs-event-us70008xhp
+  window: EQ-2020-04-16-MMR
+- id: gdacs-EQ-1216341
+  name: Earthquake in Puerto Rico
+  kind: silver
+  members:
+  - gdacs-event-1216341-1308342
+  - usgs-event-pr2020123010
+  window: EQ-2020-05-02-PRI
+- id: gdacs-TC-1000666
+  name: Tropical Cyclone VONGFONG-20
+  kind: silver
+  members:
+  - gdacs-event-1000666-1000856
+  - glide-event-TC-2020-000134-PHL
+  window: TC-2020-05-11-PHL
+- id: gdacs-TC-1000667
+  name: Tropical Cyclone AMPHAN-20
+  kind: silver
+  members:
+  - gdacs-event-1000667-1000857
+  - glide-event-TC-2020-000137-BGD
+  window: TC-2020-05-16-BGD
+- id: gdacs-TC-1000673
+  name: Tropical Cyclone NISARGA-20
+  kind: silver
+  members:
+  - gdacs-event-1000673-1000877
+  - glide-event-TC-2020-000135-IND
+  window: TC-2020-05-16-BGD
+- id: gdacs-EQ-1226659
+  name: Earthquake in Papua New Guinea
+  kind: silver
+  members:
+  - gdacs-event-1226659-1322085
+  - usgs-event-us7000aq3e
+  window: EQ-2020-07-17-PNG
+- id: gdacs-EQ-1230629
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1230629-1327158
+  - usgs-event-us6000bgbr
+  - glide-event-EQ-2020-000186-PHL
+  window: EQ-2020-08-18-PHL
+- id: gdacs-TC-1000700
+  name: Tropical Cyclone LAURA-20
+  kind: silver
+  members:
+  - gdacs-event-1000700-1000903
+  - glide-event-TC-2020-000189-USA
+  - glide-event-TC-2020-000189-HTI
+  window: TC-2020-08-20-AIA
+- id: gdacs-TC-1000736
+  name: Tropical Cyclone GONI-20
+  kind: silver
+  members:
+  - gdacs-event-1000736-1000951
+  - glide-event-TC-2020-000214-PHL
+  window: TC-2020-10-28-PHL
+- id: gdacs-EQ-1241508
+  name: Earthquake in Greece,Türkiye
+  kind: silver
+  members:
+  - gdacs-event-1241508-1340439
+  - usgs-event-us7000c7y0
+  window: EQ-2020-10-30-GRC
+- id: gdacs-TC-1000738
+  name: Tropical Cyclone ETA-20
+  kind: silver
+  members:
+  - gdacs-event-1000738-1000955
+  - glide-event-TC-2020-000218-NIC
+  window: TC-2020-10-31-HND
+- id: gdacs-TC-1000741
+  name: Tropical Cyclone VAMCO-20
+  kind: silver
+  members:
+  - gdacs-event-1000741-1000958
+  - glide-event-TC-2020-000225-PHL
+  window: TC-2020-10-28-PHL
+- id: gdacs-TC-1000743
+  name: Tropical Cyclone IOTA-20
+  kind: silver
+  members:
+  - gdacs-event-1000743-1000963
+  - glide-event-TC-2020-000220-USA
+  - glide-event-TC-2020-000220-HND
+  window: TC-2020-10-31-HND
+- id: gdacs-TC-1000746
+  name: Tropical Cyclone GATI-20
+  kind: silver
+  members:
+  - gdacs-event-1000746-1000965
+  - glide-event-TC-2020-000232-SOM
+  window: TC-2020-11-21-SOM
+- id: gdacs-TC-1000752
+  name: Tropical Cyclone YASA-20
+  kind: silver
+  members:
+  - gdacs-event-1000752-1000974
+  - glide-event-TC-2020-000238-FJI
+  window: TC-2020-12-12-FJI
+- id: gdacs-EQ-1249497
+  name: Earthquake in Croatia
+  kind: silver
+  members:
+  - gdacs-event-1249497-1350276
+  - usgs-event-us6000d3zh
+  window: EQ-2020-12-29-HRV
+- id: gdacs-EQ-1251573
+  name: Earthquake in Indonesia
+  kind: silver
+  members:
+  - gdacs-event-1251573-1352901
+  - usgs-event-us7000d030
+  window: EQ-2021-01-14-IDN
+- id: gdacs-EQ-1252169
+  name: Earthquake in Argentina
+  kind: silver
+  members:
+  - gdacs-event-1252169-1353646
+  - usgs-event-us7000d18q
+  window: EQ-2021-01-19-ARG
+- id: gdacs-EQ-1254794
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1254794-1356970
+  - usgs-event-us6000df9r
+  window: EQ-2021-02-07-PHL
+- id: gdacs-EQ-1258647
+  name: Earthquake in Kermadec Islands, New Zealand
+  kind: silver
+  members:
+  - gdacs-event-1258647-1362118
+  - usgs-event-us7000dflf
+  window: EQ-2021-03-04-NZL
+- id: gdacs-EQ-1261215
+  name: Earthquake in Algeria
+  kind: silver
+  members:
+  - gdacs-event-1261215-1365608
+  - usgs-event-us7000dker
+  window: EQ-2021-03-18-DZA
+- id: gdacs-FL-1100810
+  name: Flood in Indonesia
+  kind: silver
+  members:
+  - gdacs-event-1100810-1
+  - glide-event-FL-2021-000030-IDN
+  window: FL-2021-04-03-IDN
+- id: gdacs-EQ-1265240
+  name: Earthquake in Islamic Republic of Iran
+  kind: silver
+  members:
+  - gdacs-event-1265240-1370727
+  - usgs-event-us6000e2k3
+  - glide-event-EQ-2021-000018-IRN
+  window: EQ-2021-04-18-IRN
+- id: gdacs-EQ-1266651
+  name: Earthquake in India
+  kind: silver
+  members:
+  - gdacs-event-1266651-1372483
+  - usgs-event-us7000dy3b
+  window: EQ-2021-04-28-IND
+- id: gdacs-EQ-1269679
+  name: Earthquake in China
+  kind: silver
+  members:
+  - gdacs-event-1269679-1376313
+  - usgs-event-us7000e532
+  window: EQ-2021-05-21-CHN
+- id: gdacs-EQ-1269701
+  name: Earthquake in China
+  kind: silver
+  members:
+  - gdacs-event-1269701-1376349
+  - usgs-event-us7000e54r
+  window: EQ-2021-05-21-CHN
+- id: gdacs-EQ-1273121
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1273121-1380577
+  - usgs-event-us7000ecyk
+  window: EQ-2021-06-14-PHL
+- id: gdacs-TC-1000795
+  name: Tropical Cyclone ELSA-21
+  kind: silver
+  members:
+  - gdacs-event-1000795-1001046
+  - glide-event-TC-2021-000072-USA
+  - glide-event-TC-2021-000072-HTI
+  window: TC-2021-06-30-BRB
+- id: gdacs-FL-1100977
+  name: Flood in India
+  kind: silver
+  members:
+  - gdacs-event-1100977-1
+  - glide-event-FL-2021-000093-IND
+  window: FL-2021-07-24-IND
+- id: gdacs-FL-1101010
+  name: Flood in Afghanistan
+  kind: silver
+  members:
+  - gdacs-event-1101010-1
+  - glide-event-FL-2021-000050-AFG
+  window: FL-2021-07-28-AFG
+- id: gdacs-EQ-1279046
+  name: Earthquake in United States
+  kind: silver
+  members:
+  - gdacs-event-1279046-1387963
+  - glide-event-EQ-2021-000099-USA
+  window: EQ-2021-07-29-USA
+- id: gdacs-EQ-1279075
+  name: Earthquake in Myanmar
+  kind: silver
+  members:
+  - gdacs-event-1279075-1388044
+  - usgs-event-us6000f051
+  - glide-event-EQ-2021-000100-MMR
+  window: EQ-2021-07-29-MMR
+- id: gdacs-EQ-1279340
+  name: Earthquake in Peru-Ecuador Border Region
+  kind: silver
+  members:
+  - gdacs-event-1279340-1388424
+  - usgs-event-us6000f0qr
+  - glide-event-EQ-2021-000101-PER
+  window: EQ-2021-07-30-UNK
+- id: gdacs-EQ-1281677
+  name: Earthquake in Haiti
+  kind: silver
+  members:
+  - gdacs-event-1281677-1391565
+  - usgs-event-us6000f65h
+  - glide-event-EQ-2021-000116-HTI
+  window: EQ-2021-08-14-HTI
+- id: gdacs-TC-1000818
+  name: Tropical Cyclone IDA-21
+  kind: silver
+  members:
+  - gdacs-event-1000818-1001097
+  - glide-event-TC-2021-000131-USA
+  - glide-event-TC-2021-000131-CUB
+  window: TC-2021-08-26-CUB
+- id: gdacs-EQ-1284957
+  name: Earthquake in Mexico
+  kind: silver
+  members:
+  - gdacs-event-1284957-1395824
+  - usgs-event-us7000f93v
+  - glide-event-EQ-2021-000137-MEX
+  window: EQ-2021-09-08-MEX
+- id: gdacs-EQ-1285804
+  name: Earthquake in China
+  kind: silver
+  members:
+  - gdacs-event-1285804-1396900
+  - usgs-event-us7000fbky
+  - glide-event-EQ-2021-000141-CHN
+  window: EQ-2021-09-15-CHN
+- id: gdacs-FL-1101205
+  name: Flood in Brazil
+  kind: silver
+  members:
+  - gdacs-event-1101205-1
+  - glide-event-FL-2021-000204-BRA
+  window: FL-2021-11-08-BRA
+- id: gdacs-EQ-1295690
+  name: Earthquake in Iran
+  kind: silver
+  members:
+  - gdacs-event-1295690-1408730
+  - usgs-event-us7000fu12
+  - glide-event-EQ-2021-000176-IRN
+  window: EQ-2021-11-14-UNK
+- id: gdacs-EQ-1298872
+  name: Earthquake in Peru
+  kind: silver
+  members:
+  - gdacs-event-1298872-1412414
+  - usgs-event-us7000fxq2
+  - glide-event-EQ-2021-000192-PER
+  window: EQ-2021-11-28-PER
+- id: gdacs-EQ-1304967
+  name: Earthquake in China
+  kind: silver
+  members:
+  - gdacs-event-1304967-1420359
+  - glide-event-EQ-2022-000001-CHN
+  window: EQ-2022-01-07-CHN
+- id: gdacs-EQ-1307299
+  name: Earthquake in Haiti
+  kind: silver
+  members:
+  - gdacs-event-1307299-1422907
+  - glide-event-EQ-2022-000150-HTI
+  window: EQ-2022-01-24-HTI
+- id: gdacs-TC-1000859
+  name: Tropical Cyclone BATSIRAI-22
+  kind: silver
+  members:
+  - gdacs-event-1000859-1
+  - glide-event-TC-2022-000160-MDG
+  window: TC-2022-01-27-MDG
+- id: gdacs-FL-1101281
+  name: Flood in France, Madagascar, Mauritius
+  kind: silver
+  members:
+  - gdacs-event-1101281-1
+  - glide-event-FL-2022-000165-FRA
+  window: FL-2022-02-01-FRA
+- id: gdacs-TC-1000866
+  name: Tropical Cyclone EMNATI-22
+  kind: silver
+  members:
+  - gdacs-event-1000866-1
+  - glide-event-TC-2022-000175-MDG
+  window: TC-2022-01-27-MDG
+- id: gdacs-TC-1000873
+  name: Tropical Cyclone GOMBE-22
+  kind: silver
+  members:
+  - gdacs-event-1000873-1
+  - glide-event-TC-2022-000182-MDG
+  window: TC-2022-01-27-MDG
+- id: gdacs-FL-1101349
+  name: Flood in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1101349-1
+  - glide-event-FL-2022-000198-PHL
+  window: FL-2022-04-03-PHL
+- id: gdacs-FL-1101354
+  name: Flood in South Africa
+  kind: silver
+  members:
+  - gdacs-event-1101354-1
+  - glide-event-FL-2022-000201-ZAF
+  window: FL-2022-04-09-ZAF
+- id: gdacs-TC-1000883
+  name: Tropical Cyclone ASANI-22
+  kind: silver
+  members:
+  - gdacs-event-1000883-1
+  - glide-event-TC-2022-000229-IND
+  window: TC-2022-05-07-IND
+- id: gdacs-FL-1101433
+  name: Flood in Brazil
+  kind: silver
+  members:
+  - gdacs-event-1101433-1
+  - glide-event-FL-2022-000221-BRA
+  window: FL-2022-05-23-BRA
+- id: gdacs-TC-1000886
+  name: Tropical Cyclone AGATHA-22
+  kind: silver
+  members:
+  - gdacs-event-1000886-1
+  - glide-event-TC-2022-000223-MEX
+  window: TC-2022-05-28-MEX
+- id: gdacs-FL-1101522
+  name: Flood in Pakistan
+  kind: silver
+  members:
+  - gdacs-event-1101522-1
+  - glide-event-FL-2022-000270-PAK
+  window: FL-2022-06-14-PAK
+- id: gdacs-EQ-1327560
+  name: Earthquake in Afghanistan
+  kind: silver
+  members:
+  - gdacs-event-1327560-1449783
+  - usgs-event-us7000hj3u
+  - glide-event-EQ-2022-000232-AFG
+  window: EQ-2022-06-21-AFG
+- id: gdacs-EQ-1328006
+  name: Earthquake in Islamic Republic of Iran
+  kind: silver
+  members:
+  - gdacs-event-1328006-1450328
+  - usgs-event-us7000hk3w
+  - glide-event-EQ-2022-000237-IRN
+  window: EQ-2022-06-25-IRN
+- id: gdacs-EQ-1328800
+  name: Earthquake in Islamic Republic of Iran
+  kind: silver
+  members:
+  - gdacs-event-1328800-1451247
+  - usgs-event-us6000hz8x
+  window: EQ-2022-06-25-IRN
+- id: gdacs-EQ-1328816
+  name: Earthquake in Islamic Republic of Iran
+  kind: silver
+  members:
+  - gdacs-event-1328816-1451269
+  - usgs-event-us6000hz9v
+  window: EQ-2022-06-25-IRN
+- id: gdacs-EQ-1332182
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1332182-1455188
+  - usgs-event-us6000i5rd
+  - glide-event-EQ-2022-000273-PHL
+  window: EQ-2022-07-27-PHL
+- id: gdacs-FL-1101733
+  name: Flood in Ethiopia
+  kind: silver
+  members:
+  - gdacs-event-1101733-1
+  - glide-event-FL-2022-000359-ETH
+  window: FL-2022-08-01-ETH
+- id: gdacs-TC-1000905
+  name: Tropical Cyclone MA-ON-22
+  kind: silver
+  members:
+  - gdacs-event-1000905-1
+  - glide-event-TC-2022-000294-PHL
+  window: TC-2022-08-21-CHN
+- id: gdacs-EQ-1336287
+  name: Earthquake in China
+  kind: silver
+  members:
+  - gdacs-event-1336287-1460213
+  - usgs-event-us7000i59t
+  - glide-event-EQ-2022-000303-CHN
+  window: EQ-2022-09-05-CHN
+- id: gdacs-FL-1101659
+  name: Flood in Nigeria
+  kind: silver
+  members:
+  - gdacs-event-1101659-1
+  - glide-event-FL-2022-000350-NGA
+  window: FL-2022-09-10-NGA
+- id: gdacs-EQ-1337179
+  name: Earthquake in Papua New Guinea
+  kind: silver
+  members:
+  - gdacs-event-1337179-1461336
+  - usgs-event-us6000iitd
+  - glide-event-EQ-2022-000308-PNG
+  window: EQ-2022-09-10-PNG
+- id: gdacs-FL-1101664
+  name: Flood in China, Taiwan
+  kind: silver
+  members:
+  - gdacs-event-1101664-1
+  - glide-event-FL-2022-000311-CHN
+  window: FL-2022-09-14-CHN
+- id: gdacs-TC-1000916
+  name: Tropical Cyclone FIONA-22
+  kind: silver
+  members:
+  - gdacs-event-1000916-1
+  - glide-event-TC-2022-000314-CAN
+  - glide-event-TC-2022-000314-DOM
+  - glide-event-TC-2022-000314-USA
+  window: TC-2022-09-14-CAN
+- id: gdacs-EQ-1338219
+  name: Earthquake in China
+  kind: silver
+  members:
+  - gdacs-event-1338219-1462665
+  - usgs-event-us7000i90q
+  - glide-event-EQ-2022-000313-CHN
+  window: EQ-2022-09-05-CHN
+- id: gdacs-TC-1000922
+  name: Tropical Cyclone NORU-22
+  kind: silver
+  members:
+  - gdacs-event-1000922-1
+  - glide-event-TC-2022-000318-VNM
+  - glide-event-TC-2022-000318-PHL
+  window: TC-2022-09-22-LAO
+- id: gdacs-TC-1000923
+  name: Tropical Cyclone IAN-22
+  kind: silver
+  members:
+  - gdacs-event-1000923-1
+  - glide-event-TC-2022-000320-USA
+  - glide-event-TC-2022-000320-CUB
+  window: TC-2022-09-23-CUB
+- id: gdacs-EQ-1340649
+  name: Earthquake in Islamic Republic of Iran
+  kind: silver
+  members:
+  - gdacs-event-1340649-1465990
+  - usgs-event-us6000iqx6
+  - glide-event-EQ-2022-000326-IRN
+  window: EQ-2022-10-05-IRN
+- id: gdacs-TC-1000937
+  name: Tropical Cyclone NESAT-22
+  kind: silver
+  members:
+  - gdacs-event-1000937-1
+  - glide-event-TC-2022-000339-VNM
+  window: TC-2022-09-22-LAO
+- id: gdacs-FL-1101710
+  name: Flood in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1101710-1
+  - glide-event-FL-2022-000353-PHL
+  window: FL-2022-10-17-PHL
+- id: gdacs-FL-1101720
+  name: Flood in Bangladesh
+  kind: silver
+  members:
+  - gdacs-event-1101720-1
+  - glide-event-FL-2022-000354-BGD
+  window: FL-2022-10-24-BGD
+- id: gdacs-EQ-1343617
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1343617-1469697
+  - usgs-event-us6000iwds
+  - glide-event-EQ-2022-000346-PHL
+  window: EQ-2022-10-25-PHL
+- id: gdacs-EQ-1345475
+  name: Earthquake in Nepal
+  kind: silver
+  members:
+  - gdacs-event-1345475-1472122
+  - usgs-event-us7000incn
+  - glide-event-EQ-2022-000358-NPL
+  window: EQ-2022-11-08-NPL
+- id: gdacs-EQ-1347183
+  name: Earthquake in Indonesia
+  kind: silver
+  members:
+  - gdacs-event-1347183-1474337
+  - usgs-event-us7000ir9t
+  - glide-event-EQ-2022-000363-IDN
+  window: EQ-2022-11-21-IDN
+- id: gdacs-EQ-1347295
+  name: Earthquake in Solomon Is.
+  kind: silver
+  members:
+  - gdacs-event-1347295-1474489
+  - usgs-event-us7000irfb
+  - glide-event-EQ-2022-000364-SLB
+  window: EQ-2022-11-22-SLB
+- id: gdacs-EQ-1347428
+  name: Earthquake in Türkiye
+  kind: silver
+  members:
+  - gdacs-event-1347428-1474695
+  - usgs-event-us7000irp8
+  - glide-event-EQ-2022-000366-TUR
+  window: EQ-2022-11-23-TUR
+- id: gdacs-FL-1101778
+  name: Flood in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1101778-1
+  - glide-event-FL-2022-000387-PHL
+  window: FL-2022-12-10-PHL
+- id: gdacs-EQ-1353543
+  name: Earthquake in Vanuatu
+  kind: silver
+  members:
+  - gdacs-event-1353543-1482704
+  - usgs-event-us7000j2yw
+  - glide-event-EQ-2023-000003-VUT
+  window: EQ-2023-01-08-VUT
+- id: gdacs-EQ-1353717
+  name: Earthquake in Indonesia
+  kind: silver
+  members:
+  - gdacs-event-1353717-1482918
+  - usgs-event-us7000j36j
+  window: EQ-2023-01-09-IDN
+- id: gdacs-EQ-1354791
+  name: Earthquake in Islamic Republic of Iran
+  kind: silver
+  members:
+  - gdacs-event-1354791-1484175
+  - usgs-event-us7000j56z
+  - glide-event-EQ-2023-000007-IRN
+  window: EQ-2023-01-18-IRN
+- id: gdacs-EQ-1356352
+  name: Earthquake in Islamic Republic of Iran
+  kind: silver
+  members:
+  - gdacs-event-1356352-1485947
+  - usgs-event-us6000jk0t
+  - glide-event-EQ-2023-000009-IRN
+  window: EQ-2023-01-18-IRN
+- id: gdacs-EQ-1356811
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1356811-1486466
+  - usgs-event-us6000jkpr
+  - glide-event-EQ-2023-000011-PHL
+  window: EQ-2023-02-01-PHL
+- id: gdacs-EQ-1357374
+  name: Earthquake in Türkiye
+  kind: silver
+  members:
+  - gdacs-event-1357374-1487098
+  - usgs-event-us6000jlm1
+  window: EQ-2023-02-06-TUR
+- id: gdacs-TC-1000961
+  name: Tropical Cyclone FREDDY-23
+  kind: silver
+  members:
+  - gdacs-event-1000961-1
+  - glide-event-TC-2023-000023-MDG
+  window: TC-2023-02-06-MDG
+- id: gdacs-EQ-1357560
+  name: Earthquake in Türkiye
+  kind: silver
+  members:
+  - gdacs-event-1357560-1487318
+  - usgs-event-us6000jlqa
+  window: EQ-2023-02-06-TUR
+- id: gdacs-EQ-1357591
+  name: Earthquake in Türkiye
+  kind: silver
+  members:
+  - gdacs-event-1357591-1487359
+  - usgs-event-us6000jlrc
+  window: EQ-2023-02-06-TUR
+- id: gdacs-EQ-1359959
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1359959-1489964
+  - usgs-event-us6000jp76
+  window: EQ-2023-02-01-PHL
+- id: gdacs-EQ-1360964
+  name: Earthquake in Türkiye
+  kind: silver
+  members:
+  - gdacs-event-1360964-1491088
+  - usgs-event-us6000jqcn
+  - glide-event-EQ-2023-000024-TUR
+  window: EQ-2023-02-06-TUR
+- id: gdacs-FL-1101890
+  name: Flood in Malawi
+  kind: silver
+  members:
+  - gdacs-event-1101890-1
+  - glide-event-FL-2023-000037-MWI
+  window: FL-2023-03-13-MWI
+- id: gdacs-EQ-1365556
+  name: Earthquake in Ecuador
+  kind: silver
+  members:
+  - gdacs-event-1365556-1496194
+  - usgs-event-us7000jl3s
+  - glide-event-EQ-2023-000038-ECU
+  window: EQ-2023-03-18-ECU
+- id: gdacs-FL-1101908
+  name: Flood in Somalia
+  kind: silver
+  members:
+  - gdacs-event-1101908-1
+  - glide-event-FL-2023-000057-SOM
+  window: FL-2023-03-20-SOM
+- id: gdacs-FL-1101919
+  name: Flood in Democratic Republic of Congo
+  kind: silver
+  members:
+  - gdacs-event-1101919-1
+  - glide-event-FL-2023-000060-COD
+  window: FL-2023-04-01-COD
+- id: gdacs-EQ-1367745
+  name: Earthquake in Papua New Guinea
+  kind: silver
+  members:
+  - gdacs-event-1367745-1498616
+  - usgs-event-us6000k1id
+  - glide-event-EQ-2023-000049-PNG
+  window: EQ-2023-04-02-PNG
+- id: gdacs-EQ-1370936
+  name: Earthquake in Indonesia
+  kind: silver
+  members:
+  - gdacs-event-1370936-1502199
+  - usgs-event-us7000jvl3
+  window: EQ-2023-04-24-IDN
+- id: gdacs-FL-1101977
+  name: Flood in Rwanda
+  kind: silver
+  members:
+  - gdacs-event-1101977-1
+  - glide-event-FL-2023-000064-RWA
+  window: FL-2023-05-01-RWA
+- id: gdacs-FL-1101981
+  name: Flood in Democratic Republic of Congo
+  kind: silver
+  members:
+  - gdacs-event-1101981-1
+  - glide-event-FL-2023-000067-COD
+  window: FL-2023-04-01-COD
+- id: gdacs-TC-1000970
+  name: Tropical Cyclone MOCHA-23
+  kind: silver
+  members:
+  - gdacs-event-1000970-1001412
+  - glide-event-TC-2023-000071-BGD
+  window: TC-2023-05-11-MMR
+- id: gdacs-FL-1102000
+  name: Flood in Bangladesh, India, Myanmar
+  kind: silver
+  members:
+  - gdacs-event-1102000-1
+  - glide-event-FL-2023-000073-BGD
+  window: FL-2023-05-13-BGD
+- id: gdacs-EQ-1376865
+  name: Earthquake in Peru
+  kind: silver
+  members:
+  - gdacs-event-1376865-1508940
+  - usgs-event-us7000k5zj
+  - glide-event-EQ-2023-000083-PER
+  window: EQ-2023-06-03-PER
+- id: gdacs-FL-1102077
+  name: Flood in India, Pakistan
+  kind: silver
+  members:
+  - gdacs-event-1102077-1
+  - glide-event-FL-2023-000104-IND
+  window: FL-2023-06-14-IND
+- id: gdacs-EQ-1379142
+  name: Earthquake in Papua New Guinea
+  kind: silver
+  members:
+  - gdacs-event-1379142-1511566
+  - usgs-event-us7000k9jv
+  - glide-event-EQ-2023-000101-PNG
+  window: EQ-2023-06-19-PNG
+- id: gdacs-FL-1102095
+  name: Flood in China
+  kind: silver
+  members:
+  - gdacs-event-1102095-1
+  - glide-event-FL-2023-000115-CHN
+  window: FL-2023-06-27-CHN
+- id: gdacs-TC-1000985
+  name: Tropical Cyclone DOKSURI-23
+  kind: silver
+  members:
+  - gdacs-event-1000985-1
+  - glide-event-TC-2023-000121-PHL
+  - glide-event-TC-2023-000121-CHN
+  window: TC-2023-07-21-CHN
+- id: gdacs-EQ-1385761
+  name: Earthquake in China
+  kind: silver
+  members:
+  - gdacs-event-1385761-1518900
+  - usgs-event-us6000ky5l
+  - glide-event-EQ-2023-000134-CHN
+  window: EQ-2023-08-05-CHN
+- id: gdacs-EQ-1387441
+  name: Earthquake in Colombia
+  kind: silver
+  members:
+  - gdacs-event-1387441-1520774
+  - usgs-event-us7000kp2j
+  - glide-event-EQ-2023-000145-COL
+  window: EQ-2023-08-17-COL
+- id: gdacs-FL-1102204
+  name: Flood in Libya
+  kind: silver
+  members:
+  - gdacs-event-1102204-1
+  - glide-event-FL-2023-000170-LBY
+  window: FL-2023-09-08-LBY
+- id: gdacs-EQ-1390643
+  name: Earthquake in Morocco
+  kind: silver
+  members:
+  - gdacs-event-1390643-1524325
+  - usgs-event-us7000kufc
+  - glide-event-EQ-2023-000166-MAR
+  window: EQ-2023-09-08-MAR
+- id: gdacs-TC-1001018
+  name: Tropical Cyclone KOINU-23
+  kind: silver
+  members:
+  - gdacs-event-1001018-1
+  - glide-event-TC-2023-000183-CHN
+  window: TC-2023-09-29-CHN
+- id: gdacs-EQ-1394274
+  name: Earthquake in Nepal
+  kind: silver
+  members:
+  - gdacs-event-1394274-1528515
+  - usgs-event-us6000lcgj
+  - glide-event-EQ-2023-000182-NPL
+  window: EQ-2023-10-03-NPL
+- id: gdacs-EQ-1394952
+  name: Earthquake in Afghanistan
+  kind: silver
+  members:
+  - gdacs-event-1394952-1529349
+  - usgs-event-us6000ldpg
+  window: EQ-2023-10-07-AFG
+- id: gdacs-EQ-1394954
+  name: Earthquake in Afghanistan
+  kind: silver
+  members:
+  - gdacs-event-1394954-1529351
+  - usgs-event-us6000ldph
+  window: EQ-2023-10-07-AFG
+- id: gdacs-EQ-1394958
+  name: Earthquake in Afghanistan
+  kind: silver
+  members:
+  - gdacs-event-1394958-1529359
+  - usgs-event-us6000ldpm
+  window: EQ-2023-10-07-AFG
+- id: gdacs-EQ-1394961
+  name: Earthquake in Afghanistan
+  kind: silver
+  members:
+  - gdacs-event-1394961-1529363
+  - usgs-event-us6000ldpv
+  window: EQ-2023-10-07-AFG
+- id: gdacs-EQ-1394967
+  name: Earthquake in Papua New Guinea
+  kind: silver
+  members:
+  - gdacs-event-1394967-1529372
+  - usgs-event-us6000ldqd
+  window: EQ-2023-10-07-PNG
+- id: gdacs-EQ-1394968
+  name: Earthquake in Papua New Guinea
+  kind: silver
+  members:
+  - gdacs-event-1394968-1529376
+  - usgs-event-us6000ldqf
+  window: EQ-2023-10-07-PNG
+- id: gdacs-EQ-1395488
+  name: Earthquake in Afghanistan
+  kind: silver
+  members:
+  - gdacs-event-1395488-1529996
+  - usgs-event-us6000len8
+  - glide-event-EQ-2023-000188-AFG
+  window: EQ-2023-10-07-AFG
+- id: gdacs-EQ-1396085
+  name: Earthquake in Afghanistan
+  kind: silver
+  members:
+  - gdacs-event-1396085-1530682
+  - usgs-event-us6000lfn5
+  window: EQ-2023-10-07-AFG
+- id: gdacs-EQ-1396086
+  name: Earthquake in Afghanistan
+  kind: silver
+  members:
+  - gdacs-event-1396086-1530684
+  - usgs-event-us6000lfng
+  window: EQ-2023-10-07-AFG
+- id: gdacs-TC-1001024
+  name: Tropical Cyclone NORMA-23
+  kind: silver
+  members:
+  - gdacs-event-1001024-1001504
+  - glide-event-TC-2023-000206-MEX
+  window: TC-2023-10-17-MEX
+- id: gdacs-EQ-1396768
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1396768-1531557
+  - usgs-event-us6000lgpg
+  - glide-event-EQ-2023-000203-PHL
+  window: EQ-2023-10-19-PHL
+- id: gdacs-TC-1001027
+  name: Tropical Cyclone LOLA-23
+  kind: silver
+  members:
+  - gdacs-event-1001027-1
+  - glide-event-TC-2023-000207-VUT
+  window: TC-2023-10-21-VUT
+- id: gdacs-FL-1102288
+  name: Flood in Kenya
+  kind: silver
+  members:
+  - gdacs-event-1102288-1
+  - glide-event-FL-2023-000225-KEN
+  window: FL-2023-10-23-KEN
+- id: gdacs-TC-1001029
+  name: Tropical Cyclone HAMOON-23
+  kind: silver
+  members:
+  - gdacs-event-1001029-1
+  - glide-event-TC-2023-000208-BGD
+  window: TC-2023-10-23-BGD
+- id: gdacs-FL-1102291
+  name: Flood in Bangladesh
+  kind: silver
+  members:
+  - gdacs-event-1102291-1152609
+  - glide-event-FL-2023-000211-BGD
+  window: FL-2023-10-24-BGD
+- id: gdacs-FL-1102308
+  name: Flood in Ethiopia
+  kind: silver
+  members:
+  - gdacs-event-1102308-1
+  - glide-event-FL-2023-000229-ETH
+  window: FL-2023-11-01-ETH
+- id: gdacs-EQ-1398938
+  name: Earthquake in Nepal
+  kind: silver
+  members:
+  - gdacs-event-1398938-1534053
+  - usgs-event-us7000l8p5
+  - glide-event-EQ-2023-000214-NPL
+  window: EQ-2023-11-03-NPL
+- id: gdacs-TC-1001034
+  name: Tropical Cyclone MIDHILI-23
+  kind: silver
+  members:
+  - gdacs-event-1001034-1
+  - glide-event-TC-2023-000230-BGD
+  window: TC-2023-10-23-BGD
+- id: gdacs-EQ-1401173
+  name: Earthquake in Myanmar
+  kind: silver
+  members:
+  - gdacs-event-1401173-1536621
+  - usgs-event-us6000lp06
+  - glide-event-EQ-2023-000227-MMR
+  window: EQ-2023-11-17-MMR
+- id: gdacs-EQ-1401224
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1401224-1536681
+  - usgs-event-us6000lp12
+  - glide-event-EQ-2023-000228-PHL
+  window: EQ-2023-10-19-PHL
+- id: gdacs-EQ-1403417
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1403417-1539231
+  - usgs-event-us7000lff4
+  - glide-event-EQ-2023-000245-PHL
+  window: EQ-2023-10-19-PHL
+- id: gdacs-FL-1102407
+  name: Flood in Germany
+  kind: silver
+  members:
+  - gdacs-event-1102407-1
+  - glide-event-FL-2023-000257-DEU
+  window: FL-2023-12-18-DEU
+- id: gdacs-EQ-1406601
+  name: Earthquake in China
+  kind: silver
+  members:
+  - gdacs-event-1406601-1543047
+  - usgs-event-us7000ljvg
+  window: EQ-2023-12-18-CHN
+- id: gdacs-FL-1102408
+  name: Flood in France
+  kind: silver
+  members:
+  - gdacs-event-1102408-1
+  - glide-event-FL-2023-000258-FRA
+  window: FL-2023-12-30-FRA
+- id: gdacs-EQ-1408627
+  name: Earthquake in Japan
+  kind: silver
+  members:
+  - gdacs-event-1408627-1545352
+  - usgs-event-us6000m0xl
+  window: EQ-2024-01-01-JPN
+- id: gdacs-EQ-1411622
+  name: Earthquake in China
+  kind: silver
+  members:
+  - gdacs-event-1411622-1548714
+  - usgs-event-us7000lsze
+  window: EQ-2024-01-22-CHN
+- id: gdacs-FL-1102458
+  name: Flood in Indonesia
+  kind: silver
+  members:
+  - gdacs-event-1102458-1
+  - glide-event-FL-2024-000026-IDN
+  window: FL-2024-02-03-IDN
+- id: gdacs-EQ-1414701
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1414701-1552680
+  - usgs-event-us7000ly6w
+  window: EQ-2024-02-10-PHL
+- id: gdacs-EQ-1414718
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1414718-1552720
+  - usgs-event-us7000ly7s
+  window: EQ-2024-02-10-PHL
+- id: gdacs-TC-1001053
+  name: Tropical Cyclone FILIPO-24
+  kind: silver
+  members:
+  - gdacs-event-1001053-1
+  - glide-event-TC-2024-000032-MOZ
+  window: TC-2024-03-03-MOZ
+- id: gdacs-FL-1102544
+  name: Flood in Burundi
+  kind: silver
+  members:
+  - gdacs-event-1102544-1
+  - glide-event-FL-2024-000047-BDI
+  window: FL-2024-03-17-BDI
+- id: gdacs-EQ-1420595
+  name: Earthquake in Indonesia
+  kind: silver
+  members:
+  - gdacs-event-1420595-1560395
+  - usgs-event-us6000mkfz
+  - glide-event-EQ-2024-000033-IDN
+  window: EQ-2024-03-22-IDN
+- id: gdacs-EQ-1420849
+  name: Earthquake in Papua New Guinea
+  kind: silver
+  members:
+  - gdacs-event-1420849-1560710
+  - usgs-event-us6000mksx
+  - glide-event-EQ-2024-000034-PNG
+  window: EQ-2024-03-23-PNG
+- id: gdacs-FL-1102548
+  name: Flood in Kazakhstan
+  kind: silver
+  members:
+  - gdacs-event-1102548-1
+  - glide-event-FL-2024-000039-RUS
+  - glide-event-FL-2024-000039-KAZ
+  window: FL-2024-03-28-KAZ
+- id: gdacs-FL-1102555
+  name: Flood in Tanzania
+  kind: silver
+  members:
+  - gdacs-event-1102555-1
+  - glide-event-FL-2024-000058-TZA
+  window: FL-2024-03-28-TZA
+- id: gdacs-EQ-1422322
+  name: Earthquake in Taiwan
+  kind: silver
+  members:
+  - gdacs-event-1422322-1562635
+  - usgs-event-us7000m9g4
+  window: EQ-2024-04-02-TWN
+- id: gdacs-FL-1102604
+  name: Flood in Kenya
+  kind: silver
+  members:
+  - gdacs-event-1102604-1
+  - glide-event-FL-2024-000065-KEN
+  window: FL-2024-04-12-KEN
+- id: gdacs-FL-1102592
+  name: Flood in Brazil
+  kind: silver
+  members:
+  - gdacs-event-1102592-1
+  - glide-event-FL-2024-000063-BRA
+  window: FL-2024-04-23-BRA
+- id: gdacs-FL-1102616
+  name: Flood in Afghanistan
+  kind: silver
+  members:
+  - gdacs-event-1102616-1
+  - glide-event-FL-2024-000068-AFG
+  window: FL-2024-05-09-AFG
+- id: gdacs-FL-1102678
+  name: Flood in India
+  kind: silver
+  members:
+  - gdacs-event-1102678-1
+  - glide-event-FL-2024-000108-NPL
+  window: FL-2024-06-10-IND
+- id: gdacs-EQ-1435013
+  name: Earthquake in Peru
+  kind: silver
+  members:
+  - gdacs-event-1435013-1579144
+  - usgs-event-us6000n8tq
+  window: EQ-2024-06-28-PER
+- id: gdacs-EQ-1437973
+  name: Earthquake in Chile
+  kind: silver
+  members:
+  - gdacs-event-1437973-1582992
+  - usgs-event-us7000n05d
+  - glide-event-EQ-2024-000121-CHL
+  window: EQ-2024-07-19-CHL
+- id: gdacs-EQ-1440170
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1440170-1585868
+  - usgs-event-us6000nhqc
+  - glide-event-EQ-2024-000131-PHL
+  window: EQ-2024-08-02-PHL
+- id: gdacs-EQ-1442254
+  name: Earthquake in Russia
+  kind: silver
+  members:
+  - gdacs-event-1442254-1588682
+  - usgs-event-us7000n7n8
+  - glide-event-EQ-2024-000150-RUS
+  window: EQ-2024-08-17-RUS
+- id: gdacs-FL-1102960
+  name: Flood in Chad
+  kind: silver
+  members:
+  - gdacs-event-1102960-1
+  - glide-event-FL-2024-000191-TCD
+  window: FL-2024-09-01-TCD
+- id: gdacs-EQ-1449585
+  name: Earthquake in Türkiye
+  kind: silver
+  members:
+  - gdacs-event-1449585-1598401
+  - usgs-event-us6000nyzk
+  - glide-event-EQ-2024-000190-TUR
+  window: EQ-2024-10-16-TUR
+- id: gdacs-FL-1102974
+  name: Flood in India
+  kind: silver
+  members:
+  - gdacs-event-1102974-1
+  - glide-event-FL-2024-000197-IND
+  window: FL-2024-10-20-IND
+- id: gdacs-TC-1001115
+  name: Tropical Cyclone TRAMI-24
+  kind: silver
+  members:
+  - gdacs-event-1001115-1
+  - glide-event-TC-2024-000193-VNM
+  - glide-event-TC-2024-000193-PHL
+  window: TC-2024-10-20-CHN
+- id: gdacs-TC-1001117
+  name: Tropical Cyclone DANA-24
+  kind: silver
+  members:
+  - gdacs-event-1001117-1
+  - glide-event-TC-2024-000195-IND
+  window: TC-2024-10-23-IND
+- id: gdacs-TC-1001118
+  name: Tropical Cyclone KONG-REY-24
+  kind: silver
+  members:
+  - gdacs-event-1001118-1
+  - glide-event-TC-2024-000200-CHN
+  window: TC-2024-10-20-CHN
+- id: gdacs-FL-1102983
+  name: Flood in Spain
+  kind: silver
+  members:
+  - gdacs-event-1102983-1
+  - glide-event-FL-2024-000199-ESP
+  window: FL-2024-10-27-ESP
+- id: gdacs-TC-1001124
+  name: Tropical Cyclone MAN-YI-24
+  kind: silver
+  members:
+  - gdacs-event-1001124-1
+  - glide-event-TC-2024-000213-PHL
+  window: TC-2024-10-20-CHN
+- id: gdacs-TC-1001131
+  name: Tropical Cyclone CHIDO-25
+  kind: silver
+  members:
+  - gdacs-event-1001131-1
+  - glide-event-TC-2024-000225-COM
+  window: TC-2024-12-09-COM
+- id: gdacs-EQ-1458084
+  name: Earthquake in Vanuatu
+  kind: silver
+  members:
+  - gdacs-event-1458084-1609727
+  - usgs-event-us7000nzf3
+  - glide-event-EQ-2024-000227-VUT
+  window: EQ-2024-12-17-VUT
+- id: gdacs-EQ-1460546
+  name: Earthquake in Ethiopia
+  kind: silver
+  members:
+  - gdacs-event-1460546-1612923
+  - usgs-event-us6000phnz
+  - glide-event-EQ-2025-000003-ETH
+  window: EQ-2025-01-03-ETH
+- id: gdacs-EQ-1460587
+  name: Earthquake in Ethiopia
+  kind: silver
+  members:
+  - gdacs-event-1460587-1612975
+  - usgs-event-us6000phrk
+  - glide-event-EQ-2025-000001-ETH
+  window: EQ-2025-01-03-ETH
+- id: gdacs-EQ-1461014
+  name: Earthquake in China
+  kind: silver
+  members:
+  - gdacs-event-1461014-1613519
+  - usgs-event-us6000pi9w
+  - glide-event-EQ-2025-000004-NPL
+  - glide-event-EQ-2025-000004-CHN
+  window: EQ-2025-01-07-CHN
+- id: gdacs-TC-1001135
+  name: Tropical Cyclone DIKELEDI-25
+  kind: silver
+  members:
+  - gdacs-event-1001135-1
+  - glide-event-TC-2025-000009-MDG
+  window: TC-2024-12-09-COM
+- id: gdacs-EQ-1461615
+  name: Earthquake in Ethiopia
+  kind: silver
+  members:
+  - gdacs-event-1461615-1614276
+  - usgs-event-us6000pj51
+  - glide-event-EQ-2025-000006-ETH
+  window: EQ-2025-01-03-ETH
+- id: gdacs-EQ-1461707
+  name: Earthquake in Ethiopia
+  kind: silver
+  members:
+  - gdacs-event-1461707-1614394
+  - usgs-event-us6000pjby
+  - glide-event-EQ-2025-000008-ETH
+  window: EQ-2025-01-03-ETH
+- id: gdacs-EQ-1468332
+  name: Earthquake in Ethiopia
+  kind: silver
+  members:
+  - gdacs-event-1468332-1622617
+  - usgs-event-us7000pdu6
+  - glide-event-EQ-2025-000019-ETH
+  window: EQ-2025-02-14-ETH
+- id: gdacs-TC-1001152
+  name: Tropical Cyclone HONDE-25
+  kind: silver
+  members:
+  - gdacs-event-1001152-1
+  - glide-event-TC-2025-000025-MDG
+  window: TC-2025-02-25-MDG
+- id: gdacs-TC-1001154
+  name: Tropical Cyclone JUDE-25
+  kind: silver
+  members:
+  - gdacs-event-1001154-1
+  - glide-event-TC-2025-000027-MOZ
+  window: TC-2025-02-25-MDG
+- id: gdacs-EQ-1472646
+  name: Earthquake in Ethiopia
+  kind: silver
+  members:
+  - gdacs-event-1472646-1628179
+  - usgs-event-us6000pz7g
+  - glide-event-EQ-2025-000031-ETH
+  window: EQ-2025-02-14-ETH
+- id: gdacs-FL-1103210
+  name: Flood in Democratic Republic of Congo
+  kind: silver
+  members:
+  - gdacs-event-1103210-1
+  - glide-event-FL-2025-000050-COD
+  window: FL-2025-03-28-COD
+- id: gdacs-EQ-1474477
+  name: Earthquake in Myanmar
+  kind: silver
+  members:
+  - gdacs-event-1474477-1630564
+  - usgs-event-us7000pn9s
+  window: EQ-2025-03-28-MMR
+- id: gdacs-EQ-1474479
+  name: Earthquake in Myanmar
+  kind: silver
+  members:
+  - gdacs-event-1474479-1630569
+  - usgs-event-us7000pn9z
+  - glide-event-EQ-2025-000043-THA
+  - glide-event-EQ-2025-000043-MMR
+  - glide-event-EQ-2025-000043-CHN
+  window: EQ-2025-03-28-MMR
+- id: gdacs-EQ-1477002
+  name: Earthquake in Myanmar
+  kind: silver
+  members:
+  - gdacs-event-1477002-1633419
+  - usgs-event-us6000q5ps
+  - glide-event-EQ-2025-000048-MMR
+  window: EQ-2025-03-28-MMR
+- id: gdacs-FL-1103218
+  name: Flood in Bolivia
+  kind: silver
+  members:
+  - gdacs-event-1103218-1
+  - glide-event-FL-2025-000057-BOL
+  window: FL-2025-04-16-BOL
+- id: gdacs-EQ-1478512
+  name: Earthquake in Türkiye
+  kind: silver
+  members:
+  - gdacs-event-1478512-1635100
+  - usgs-event-us7000pufs
+  - glide-event-EQ-2025-000054-TUR
+  window: EQ-2025-04-23-TUR
+- id: gdacs-EQ-1478853
+  name: Earthquake in Ecuador
+  kind: silver
+  members:
+  - gdacs-event-1478853-1635494
+  - usgs-event-us7000pv06
+  window: EQ-2025-04-25-ECU
+- id: gdacs-FL-1103255
+  name: Flood in Democratic Republic of Congo
+  kind: silver
+  members:
+  - gdacs-event-1103255-1
+  - glide-event-FL-2025-000061-COD
+  window: FL-2025-05-01-COD
+- id: gdacs-EQ-1481374
+  name: Earthquake in China
+  kind: silver
+  members:
+  - gdacs-event-1481374-1638362
+  - usgs-event-us7000pyq7
+  - glide-event-EQ-2025-000059-CHN
+  window: EQ-2025-05-11-CHN
+- id: gdacs-FL-1103277
+  name: Flood in China
+  kind: silver
+  members:
+  - gdacs-event-1103277-1
+  - glide-event-FL-2025-000066-VNM
+  window: FL-2025-05-16-CHN
+- id: gdacs-EQ-1482609
+  name: Earthquake in Papua New Guinea
+  kind: silver
+  members:
+  - gdacs-event-1482609-1639738
+  - usgs-event-us7000q0bm
+  - glide-event-EQ-2025-000067-PNG
+  window: EQ-2025-05-20-PNG
+- id: gdacs-FL-1103303
+  name: Flood in Nigeria
+  kind: silver
+  members:
+  - gdacs-event-1103303-1
+  - glide-event-FL-2025-000078-NGA
+  window: FL-2025-05-28-NGA
+- id: gdacs-EQ-1485124
+  name: Earthquake in Colombia
+  kind: silver
+  members:
+  - gdacs-event-1485124-1642572
+  - usgs-event-us6000qixr
+  - glide-event-EQ-2025-000080-COL
+  window: EQ-2025-06-08-COL
+- id: gdacs-FL-1103323
+  name: Flood in South Africa
+  kind: silver
+  members:
+  - gdacs-event-1103323-1
+  - glide-event-FL-2025-000089-ZAF
+  window: FL-2025-06-09-ZAF
+- id: gdacs-TC-1001166
+  name: Tropical Cyclone WUTIP-25
+  kind: silver
+  members:
+  - gdacs-event-1001166-1
+  - glide-event-TC-2025-000081-CHN
+  - glide-event-TC-2025-000081-VNM
+  window: TC-2025-06-10-CHN
+- id: gdacs-FL-1103329
+  name: Flood in Democratic Republic of Congo
+  kind: silver
+  members:
+  - gdacs-event-1103329-1
+  - glide-event-FL-2025-000096-COD
+  window: FL-2025-06-13-COD
+- id: gdacs-FL-1103339
+  name: Flood in United States
+  kind: silver
+  members:
+  - gdacs-event-1103339-1
+  - glide-event-FL-2025-000106-USA
+  window: FL-2025-06-15-USA
+- id: gdacs-EQ-1489306
+  name: Earthquake in Guatemala
+  kind: silver
+  members:
+  - gdacs-event-1489306-1647295
+  - usgs-event-us7000qbfv
+  - glide-event-EQ-2025-000111-GTM
+  window: EQ-2025-07-08-GTM
+- id: gdacs-FL-1103389
+  name: Flood in Pakistan
+  kind: silver
+  members:
+  - gdacs-event-1103389-1
+  - glide-event-FL-2025-000114-PAK
+  window: FL-2025-07-14-PAK
+- id: gdacs-FL-1103506
+  name: Flood in South Sudan
+  kind: silver
+  members:
+  - gdacs-event-1103506-1
+  - glide-event-FL-2025-000168-SSD
+  window: FL-2025-07-15-SSD
+- id: gdacs-EQ-1490667
+  name: Earthquake in Myanmar
+  kind: silver
+  members:
+  - gdacs-event-1490667-1648883
+  - usgs-event-us7000qddu
+  - glide-event-EQ-2025-000113-MMR
+  window: EQ-2025-07-18-MMR
+- id: gdacs-EQ-1492605
+  name: Earthquake in Guatemala
+  kind: silver
+  members:
+  - gdacs-event-1492605-1651208
+  - usgs-event-us6000qw59
+  - glide-event-EQ-2025-000122-GTM
+  window: EQ-2025-07-08-GTM
+- id: gdacs-EQ-1492624
+  name: Earthquake in Russia
+  kind: silver
+  members:
+  - gdacs-event-1492624-1651234
+  - usgs-event-us6000qw60
+  window: EQ-2025-07-29-RUS
+- id: gdacs-EQ-1494848
+  name: Earthquake in Türkiye
+  kind: silver
+  members:
+  - gdacs-event-1494848-1654189
+  - usgs-event-us6000qznb
+  - glide-event-EQ-2025-000128-TUR
+  window: EQ-2025-08-10-TUR
+- id: gdacs-FL-1103435
+  name: Flood in Pakistan
+  kind: silver
+  members:
+  - gdacs-event-1103435-1
+  - glide-event-FL-2025-000139-PAK
+  window: FL-2025-08-14-PAK
+- id: gdacs-FL-1103434
+  name: Flood in India
+  kind: silver
+  members:
+  - gdacs-event-1103434-1
+  - glide-event-FL-2025-000171-IND
+  window: FL-2025-08-16-IND
+- id: gdacs-EQ-1496100
+  name: Earthquake in Indonesia
+  kind: silver
+  members:
+  - gdacs-event-1496100-1655658
+  - usgs-event-us6000r1n3
+  window: EQ-2025-08-16-IDN
+- id: gdacs-TC-1001199
+  name: Tropical Cyclone KAJIKI-25
+  kind: silver
+  members:
+  - gdacs-event-1001199-1
+  - glide-event-TC-2025-000144-VNM
+  window: TC-2025-08-22-CHN
+- id: gdacs-EQ-1498339
+  name: Earthquake in Afghanistan
+  kind: silver
+  members:
+  - gdacs-event-1498339-1658191
+  - usgs-event-us7000qsvj
+  - glide-event-EQ-2025-000153-AFG
+  window: EQ-2025-08-31-AFG
+- id: gdacs-EQ-1498907
+  name: Earthquake in Afghanistan
+  kind: silver
+  members:
+  - gdacs-event-1498907-1658856
+  - usgs-event-us7000qtst
+  - glide-event-EQ-2025-000156-AFG
+  window: EQ-2025-08-31-AFG
+- id: gdacs-EQ-1499045
+  name: Earthquake in Afghanistan
+  kind: silver
+  members:
+  - gdacs-event-1499045-1659016
+  - usgs-event-us7000qu8p
+  - glide-event-EQ-2025-000159-AFG
+  window: EQ-2025-08-31-AFG
+- id: gdacs-TC-1001206
+  name: Tropical Cyclone TAPAH-25
+  kind: silver
+  members:
+  - gdacs-event-1001206-1
+  - glide-event-TC-2025-000160-CHN
+  window: TC-2025-08-22-CHN
+- id: gdacs-EQ-1500178
+  name: Earthquake in India
+  kind: silver
+  members:
+  - gdacs-event-1500178-1660329
+  - usgs-event-us7000qw56
+  - glide-event-EQ-2025-000164-IND
+  window: EQ-2025-09-14-IND
+- id: gdacs-FL-1103504
+  name: Flood in Yemen
+  kind: silver
+  members:
+  - gdacs-event-1103504-1
+  - glide-event-FL-2025-000177-YEM
+  window: FL-2025-09-16-YEM
+- id: gdacs-TC-1001211
+  name: Tropical Cyclone RAGASA-25
+  kind: silver
+  members:
+  - gdacs-event-1001211-1001847
+  - glide-event-TC-2025-000170-TWN
+  - glide-event-TC-2025-000170-CHN
+  - glide-event-TC-2025-000170-VNM
+  - glide-event-TC-2025-000170-PHL
+  window: TC-2025-08-22-CHN
+- id: gdacs-EQ-1500811
+  name: Earthquake in Russia
+  kind: silver
+  members:
+  - gdacs-event-1500811-1661025
+  - usgs-event-us7000qx2g
+  - glide-event-EQ-2025-000166-RUS
+  window: EQ-2025-09-18-RUS
+- id: gdacs-FL-1103514
+  name: Flood in China
+  kind: silver
+  members:
+  - gdacs-event-1103514-1154418
+  - glide-event-FL-2025-000178-CHN
+  window: FL-2025-09-23-CHN
+- id: gdacs-TC-1001214
+  name: Tropical Cyclone BUALOI-25
+  kind: silver
+  members:
+  - gdacs-event-1001214-1
+  - glide-event-TC-2025-000179-VNM
+  window: TC-2025-08-22-CHN
+- id: gdacs-EQ-1501915
+  name: Earthquake in Venezuela
+  kind: silver
+  members:
+  - gdacs-event-1501915-1662388
+  - usgs-event-us6000rcnw
+  - glide-event-EQ-2025-000173-VEN
+  window: EQ-2025-09-24-VEN
+- id: gdacs-EQ-1501948
+  name: Earthquake in Venezuela
+  kind: silver
+  members:
+  - gdacs-event-1501948-1662428
+  - usgs-event-us6000rcqw
+  - glide-event-EQ-2025-000175-VEN
+  window: EQ-2025-09-24-VEN
+- id: gdacs-EQ-1502713
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1502713-1663303
+  - glide-event-EQ-2025-000181-PHL
+  window: EQ-2025-09-30-PHL
+- id: gdacs-TC-1001219
+  name: Tropical Cyclone MATMO-25
+  kind: silver
+  members:
+  - gdacs-event-1001219-1
+  - glide-event-TC-2025-000183-VNM
+  window: TC-2025-08-22-CHN
+- id: gdacs-FL-1103540
+  name: Flood in Nepal
+  kind: silver
+  members:
+  - gdacs-event-1103540-1
+  - glide-event-FL-2025-000184-NPL
+  window: FL-2025-10-03-NPL
+- id: gdacs-EQ-1504188
+  name: Earthquake in China
+  kind: silver
+  members:
+  - gdacs-event-1504188-1664974
+  - usgs-event-us6000rfs1
+  - glide-event-EQ-2025-000188-CHN
+  window: EQ-2025-10-09-CHN
+- id: gdacs-EQ-1504268
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1504268-1665060
+  - usgs-event-us6000rfwz
+  - glide-event-EQ-2025-000189-PHL
+  window: EQ-2025-09-30-PHL
+- id: gdacs-EQ-1504616
+  name: Earthquake in Ethiopia
+  kind: silver
+  members:
+  - gdacs-event-1504616-1665495
+  - usgs-event-us6000rglb
+  - glide-event-EQ-2025-000191-ETH
+  window: EQ-2025-10-11-ETH
+- id: gdacs-EQ-1504796
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1504796-1665698
+  - usgs-event-us6000rgrd
+  - glide-event-EQ-2025-000192-PHL
+  window: EQ-2025-09-30-PHL
+- id: gdacs-TC-1001229
+  name: Tropical Cyclone FENGSHEN-25
+  kind: silver
+  members:
+  - gdacs-event-1001229-1
+  - glide-event-TC-2025-000195-VNM
+  - glide-event-TC-2025-000195-PHL
+  window: TC-2025-08-22-CHN
+- id: gdacs-EQ-1507329
+  name: Earthquake in Türkiye
+  kind: silver
+  members:
+  - gdacs-event-1507329-1668520
+  - usgs-event-us6000rjsu
+  - glide-event-EQ-2025-000197-TUR
+  window: EQ-2025-10-27-TUR
+- id: gdacs-FL-1103585
+  name: Flood in Cuba
+  kind: silver
+  members:
+  - gdacs-event-1103585-1
+  - glide-event-FL-2025-000201-CUB
+  window: FL-2025-10-28-CUB
+- id: gdacs-TC-1001233
+  name: Tropical Cyclone KALMAEGI-25
+  kind: silver
+  members:
+  - gdacs-event-1001233-1
+  - glide-event-TC-2025-000203-VNM
+  - glide-event-TC-2025-000203-PHL
+  window: TC-2025-08-22-CHN
+- id: gdacs-EQ-1508467
+  name: Earthquake in Afghanistan
+  kind: silver
+  members:
+  - gdacs-event-1508467-1669783
+  - usgs-event-us6000rl31
+  - glide-event-EQ-2025-000202-AFG
+  window: EQ-2025-11-02-AFG
+- id: gdacs-FL-1103621
+  name: Flood in Thailand
+  kind: silver
+  members:
+  - gdacs-event-1103621-1
+  - glide-event-FL-2025-000210-THA
+  window: FL-2025-11-17-THA
+- id: gdacs-FL-1103633
+  name: Flood in Indonesia
+  kind: silver
+  members:
+  - gdacs-event-1103633-1
+  - glide-event-FL-2025-000217-IDN
+  window: FL-2025-11-17-IDN
+- id: gdacs-EQ-1511252
+  name: Earthquake in Bangladesh
+  kind: silver
+  members:
+  - gdacs-event-1511252-1672965
+  - usgs-event-us6000rpht
+  window: EQ-2025-11-21-BGD
+- id: gdacs-TC-1001238
+  name: Tropical Cyclone DITWAH-25
+  kind: silver
+  members:
+  - gdacs-event-1001238-1
+  - glide-event-TC-2025-000218-LKA
+  window: TC-2025-11-27-IND
+- id: gdacs-FL-1103640
+  name: Flood in Sri Lanka
+  kind: silver
+  members:
+  - gdacs-event-1103640-1
+  - glide-event-FL-2025-000216-LKA
+  window: FL-2025-11-28-LKA
+- id: gdacs-FL-1103694
+  name: Flood in Mozambique
+  kind: silver
+  members:
+  - gdacs-event-1103694-1
+  - glide-event-FL-2025-000228-MOZ
+  window: FL-2025-12-22-MOZ
+- id: gdacs-FL-1103757
+  name: Flood in Brazil
+  kind: silver
+  members:
+  - gdacs-event-1103757-1
+  - glide-event-FL-2026-000028-BRA
+  window: FL-2026-02-03-BRA
+- id: gdacs-TC-1001256
+  name: Tropical Cyclone GEZANI-26
+  kind: silver
+  members:
+  - gdacs-event-1001256-1
+  - glide-event-TC-2026-000015-MDG
+  window: TC-2026-02-06-MDG
+- id: gdacs-FL-1103798
+  name: Flood in Ethiopia
+  kind: silver
+  members:
+  - gdacs-event-1103798-1
+  - glide-event-FL-2026-000033-ETH
+  window: FL-2026-03-09-ETH
+- id: gdacs-FL-1103815
+  name: Flood in Afghanistan
+  kind: silver
+  members:
+  - gdacs-event-1103815-1
+  - glide-event-FL-2026-000047-AFG
+  window: FL-2026-03-25-AFG
+- id: gdacs-TC-1001270
+  name: Tropical Cyclone SINLAKU-26
+  kind: silver
+  members:
+  - gdacs-event-1001270-1
+  - glide-event-TC-2026-000050-FSM
+  window: TC-2026-04-09-GUM
+- id: gdacs-EQ-1536386
+  name: Earthquake in Japan
+  kind: silver
+  members:
+  - gdacs-event-1536386-1701062
+  - glide-event-EQ-2026-000057-JPN
+  window: EQ-2026-04-20-JPN
+- id: gdacs-EQ-1541314
+  name: Earthquake in China
+  kind: silver
+  members:
+  - gdacs-event-1541314-1706481
+  - usgs-event-us6000syik
+  - glide-event-EQ-2026-000073-CHN
+  window: EQ-2026-05-18-CHN
+- id: gdacs-FL-1103933
+  name: Flood in China
+  kind: silver
+  members:
+  - gdacs-event-1103933-1
+  - glide-event-FL-2026-000105-CHN
+  window: FL-2026-06-06-CHN
+- id: gdacs-EQ-1544720
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1544720-1710259
+  - usgs-event-us7000srb1
+  window: EQ-2026-06-07-PHL
+- id: gdacs-EQ-1546617
+  name: Earthquake in Indonesia
+  kind: silver
+  members:
+  - gdacs-event-1546617-1712368
+  - usgs-event-us7000st95
+  window: EQ-2026-06-16-IDN
+- id: gdacs-EQ-1546719
+  name: Earthquake in China
+  kind: silver
+  members:
+  - gdacs-event-1546719-1712478
+  - usgs-event-us7000stbz
+  - glide-event-EQ-2026-000088-CHN
+  window: EQ-2026-05-18-CHN
+- id: gdacs-EQ-1548377
+  name: Earthquake in Venezuela
+  kind: silver
+  members:
+  - gdacs-event-1548377-1714321
+  - usgs-event-us6000t7zp
+  window: EQ-2026-06-24-VEN
+- id: gdacs-EQ-1548668
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1548668-1714633
+  - usgs-event-us6000t8ec
+  window: EQ-2026-06-07-PHL
+- id: gdacs-TC-1001279
+  name: Tropical Cyclone BAVI-26
+  kind: silver
+  members:
+  - gdacs-event-1001279-1
+  - glide-event-TC-2026-000099-TWN
+  - glide-event-TC-2026-000099-CHN
+  - glide-event-TC-2026-000099-GUM
+  window: TC-2026-07-01-CHN
+- id: gdacs-TC-1001281
+  name: Tropical Cyclone MAYSAK-26
+  kind: silver
+  members:
+  - gdacs-event-1001281-1
+  - glide-event-TC-2026-000098-CHN
+  - glide-event-TC-2026-000098-VNM
+  - glide-event-TC-2026-000098-LAO
+  window: TC-2026-07-01-CHN
+- id: gdacs-EQ-1552752
+  name: Earthquake in Peru
+  kind: silver
+  members:
+  - gdacs-event-1552752-1719206
+  - usgs-event-us7000t1q7
+  window: EQ-2026-07-19-PER
+- id: gdacs-FL-1104051
+  name: Flood in China
+  kind: silver
+  members:
+  - gdacs-event-1104051-1
+  - glide-event-FL-2026-000136-CHN
+  window: FL-2026-07-25-CHN
+- id: gdacs-TC-1001297
+  name: Tropical Cyclone DOLPHIN-26
+  kind: silver
+  members:
+  - gdacs-event-1001297-1
+  - glide-event-TC-2026-000144-CHN
+  - glide-event-TC-2026-000144-JPN
+  window: TC-2026-07-01-CHN
+- id: gdacs-EQ-1554552
+  name: Earthquake in Japan
+  kind: silver
+  members:
+  - gdacs-event-1554552-1721234
+  - glide-event-EQ-2026-000135-JPN
+  window: EQ-2026-07-28-JPN
+- id: gdacs-FL-1104081
+  name: Flood in China
+  kind: silver
+  members:
+  - gdacs-event-1104081-1
+  - glide-event-FL-2026-000148-CHN
+  window: FL-2026-07-25-CHN
+- id: gdacs-EQ-1556215
+  name: Earthquake in Philippines
+  kind: silver
+  members:
+  - gdacs-event-1556215-1723078
+  - usgs-event-us6000ti6x
+  window: EQ-2026-08-05-PHL
+- id: gdacs-FL-1104121
+  name: Flood in India
+  kind: silver
+  members:
+  - gdacs-event-1104121-1
+  - glide-event-FL-2026-000165-IND
+  window: FL-2026-08-09-IND
+- id: gdacs-EQ-1557236
+  name: Earthquake in Colombia
+  kind: silver
+  members:
+  - gdacs-event-1557236-1724205
+  - usgs-event-us6000tjl2
+  window: EQ-2026-08-10-COL
+- id: gdacs-EQ-1558059
+  name: Earthquake in Indonesia
+  kind: silver
+  members:
+  - gdacs-event-1558059-1725109
+  - usgs-event-us6000tkt2
+  window: EQ-2026-08-14-IDN
+- id: gdacs-FL-1104123
+  name: Flood in China
+  kind: silver
+  members:
+  - gdacs-event-1104123-1
+  - glide-event-FL-2026-000166-CHN
+  window: FL-2026-07-25-CHN
+- id: gdacs-FL-1104124
+  name: Flood in Nepal
+  kind: silver
+  members:
+  - gdacs-event-1104124-1
+  - glide-event-FL-2026-000167-NPL
+  window: FL-2026-08-26-NPL
+- id: gdacs-EQ-1562260
+  name: Earthquake in China
+  kind: silver
+  members:
+  - gdacs-event-1562260-1729706
+  - usgs-event-us7000tcht
+  - glide-event-EQ-2026-000168-CHN
+  window: EQ-2026-08-28-CHN
+- id: gdacs-TC-1001325
+  name: Tropical Cyclone POLO-26
+  kind: silver
+  members:
+  - gdacs-event-1001325-2
+  - glide-event-TC-2026-000184-MEX
+  window: TC-2026-09-21-MEX
+- id: gdacs-EQ-1570077
+  name: Earthquake in Vanuatu
+  kind: silver
+  members:
+  - gdacs-event-1570077-1738386
+  - usgs-event-us6000u0xi
+  - glide-event-EQ-2026-000186-VUT
+  window: EQ-2026-10-08-VUT
+- id: gdacs-EQ-1570339
+  name: Earthquake in Panama
+  kind: silver
+  members:
+  - gdacs-event-1570339-1738676
+  - usgs-event-us6000u18k
+  window: EQ-2026-10-09-PAN
+- id: gdacs-TC-1001338
+  name: Tropical Cyclone CHAMPI-26
+  kind: silver
+  members:
+  - gdacs-event-1001338-1
+  - glide-event-TC-2026-000192-GUM
+  window: TC-2026-10-14-CHN
+- id: gdacs-EQ-1573141
+  name: Earthquake in China
+  kind: silver
+  members:
+  - gdacs-event-1573141-1741831
+  - usgs-event-us6000u43g
+  window: EQ-2026-10-22-CHN
+ambiguous: []
