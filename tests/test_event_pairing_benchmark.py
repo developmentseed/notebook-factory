@@ -1,4 +1,4 @@
-"""The event-pairing benchmark template: its helpers, its gold set and its parity with the shipped matcher."""
+"""The event-pairing benchmark template: its helpers, its gold set and its parity with the notebook-factory matcher."""
 
 import ast
 import importlib.util
@@ -40,7 +40,7 @@ def _rec(
 
 # -- parity with factory/events/disasters.py ------------------------------------------------------------
 @pytest.mark.parametrize("fixture", ["myanmar-eq-2025-window.json", "china-eq-2026-window.json"])
-def test_heuristic_matches_the_shipped_score_when_no_id_is_shared(fixture):
+def test_heuristic_matches_the_notebook_factory_score_when_no_id_is_shared(fixture):
     items = json.loads((FIXTURES / fixture).read_text())["features"]
     members = [D.member_from_item(i) for i in items]
     records = [P.record_from_item(i) for i in items]

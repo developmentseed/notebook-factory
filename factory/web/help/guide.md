@@ -66,6 +66,8 @@ A disaster is reported by many sources, each with its own ID. **Disasters** ([`/
 
 No single ID ties a disaster together in Montandon. Sources often have different `monty:corr_id`s for the same event, and GDACS adds its episode number to its own. So the page is put together on the fly. It finds the item you named, then searches the catalog's event collections for the same hazard in the same countries, a few days to a few months around it (depending on the hazard). Items join the disaster when they share a corr_id (without the episode), link to each other, or are close in time and place. GLIDE, EM-DAT, IFRC GO and IDMC only give a date and a point somewhere in the country, so for these the date counts and the distance hardly does. Every ID of the same disaster opens the same page.
 
+This grouping is an experiment in this app, not an authoritative Montandon method, so check the match reasons before relying on it. It is known to miss true matches when a source's location is a wide area, such as a country-level record or a cyclone track ([#30](https://github.com/developmentseed/notebook-factory/issues/30)).
+
 The page shows:
 
 * the IDs of every source reporting the disaster, linking to the source's own site where there is one;

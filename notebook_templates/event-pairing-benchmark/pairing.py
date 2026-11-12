@@ -4,7 +4,8 @@ Pure Python + numpy (no Django). Network access is limited to `fetch_items` (the
 and `score_with_model` (the OpenRouter Decisions API).
 
 `heuristic_score` mirrors `factory/events/disasters.py::score` minus its shared-ID shortcuts, so the
-benchmark measures the matcher the app ships. `tests/test_event_pairing_benchmark.py` keeps the two
+benchmark measures that matcher, which is an experiment in notebook-factory and not an authoritative
+Montandon method. `tests/test_event_pairing_benchmark.py` keeps the two
 in step: change one and that test tells you to change the other.
 """
 
@@ -24,8 +25,8 @@ import numpy as np
 import requests
 
 # -- constants mirrored from factory/events/disasters.py -------------------------------------------
-STRONG = 0.7  # the app's "joins the disaster" threshold
-POSSIBLE = 0.4  # the app's "possibly the same disaster" threshold
+STRONG = 0.7  # notebook-factory's "joins the disaster" threshold
+POSSIBLE = 0.4  # notebook-factory's "possibly the same disaster" threshold
 # GLIDE hazard code -> (time window in days, radius in km)
 HAZARD_WINDOWS = {
     "EQ": (7, 300),
@@ -201,7 +202,7 @@ def fetch_items(api_url: str, token: str, ids: list[str], timeout: int = 90) -> 
     return found
 
 
-# -- the shipped heuristic -----------------------------------------------------------------------------
+# -- notebook-factory's experimental heuristic -----------------------------------------------------------------------------
 def haversine_km(a: tuple[float, float], b: tuple[float, float]) -> float:
     lon1, lat1, lon2, lat2 = map(math.radians, (*a, *b))
     h = math.sin((lat2 - lat1) / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin((lon2 - lon1) / 2) ** 2
@@ -231,7 +232,7 @@ def pair_anchor(a: Record, b: Record) -> tuple[Record, Record]:
 
 
 def proximity(anchor: Record, cand: Record) -> tuple[float, float, float, float | None]:
-    """(time score, distance score, gap in days, km): the two terms the app's score averages."""
+    """(time score, distance score, gap in days, km): the two terms notebook-factory's score averages."""
     days, radius = window(anchor)
     coarse = anchor.coarse or cand.coarse
     gap = gap_days(anchor, cand, by_day=coarse)
@@ -244,7 +245,7 @@ def proximity(anchor: Record, cand: Record) -> tuple[float, float, float, float 
 
 
 def heuristic_score(anchor: Record, cand: Record) -> float:
-    """The app's score for a pair with no shared source ID: time and distance, hazard-code penalty."""
+    """notebook-factory's score for a pair with no shared source ID: time and distance, hazard-code penalty."""
     t, d, _, _ = proximity(anchor, cand)
     s = (t + d) / 2
     if not (t and d):

@@ -13,6 +13,8 @@
 #   - Register-style sources (EM-DAT, GLIDE, IFRC, IDMC) hold one record per disaster. Precise
 #     sources (USGS, GDACS, PDC, IBTrACS) hold per-shock / per-alert records: only the principal
 #     shocks or alerts are listed, aftershocks and repeat alerts are left unlabelled.
+#   - IFRC GO events are ingested as event items but describe response operations (an operation page can span
+#     several disasters). They are scored as events here; dropping them changes no scorer's F1 by more than 0.01.
 #   - Several shocks of one sequence that a register records as a single disaster are all members.
 #   - `window` groups entries for leave-one-window-out cross-validation of the learned scorer.
 #   - `kind` is for reporting only: confusable = a close neighbour of another entry (same country,
@@ -20,7 +22,7 @@
 #   - Items that are genuinely ambiguous are under `ambiguous` and excluded, with the reason.
 
 # Review log
-#   2026-11-12  After the first run with a decision model (Jev 1.14), the 13 pairs on which both the shipped
+#   2026-11-12  After the first run with a decision model (Jev 1.14), the 13 pairs on which both the notebook-factory
 #   heuristic and the model disagreed with a label, and the 7 pairs only the model got wrong, were read against
 #   the source records. Three records moved to `ambiguous` (see below): the register text shows each spans
 #   several of the listed disasters. No label was changed to agree with a scorer and nothing was relabelled as a

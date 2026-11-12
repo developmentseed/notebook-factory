@@ -1,6 +1,14 @@
 """
 Disasters, worked out on demand from any of their IDs.
 
+Status: an experiment in this app. It is not an authoritative Montandon matching
+method and no other Montandon repo uses it (monty:corr_id is per source; the
+extension's documented cross-source method is the dynamic CQL2 correlation).
+Known limitation: `_centroid` averages every vertex, so wide geometries (country-level
+registers, cyclone tracks) land far from the event and true matches score 0.30, see
+https://github.com/developmentseed/notebook-factory/issues/30. The benchmark in
+notebook_templates/event-pairing-benchmark measures it against other methods.
+
 No source ID ties a disaster together in Montandon: for one earthquake, USGS, PDC
 and EM-DAT may share a monty:corr_id while GLIDE, IFRC GO, IDMC and CEMS each
 carry another, and GDACS puts its episode id in its corr_id. So a disaster is
