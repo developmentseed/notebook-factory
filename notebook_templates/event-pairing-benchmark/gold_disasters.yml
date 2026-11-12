@@ -1,0 +1,271 @@
+# Gold set for the event-pairing benchmark.
+#
+# Each entry under `disasters` is ONE real-world disaster and lists the Montandon event items that
+# describe it. Two items in the same entry are a positive pair; two items in different entries of
+# the same `window` are a negative pair. Items listed nowhere are unlabelled and never scored.
+#
+# How these labels were made: a person read titles, descriptions, dates, magnitudes and places in the
+# live catalog (montandon-eoapi) and grouped the items, using public knowledge of each disaster. No
+# deterministic ID was used as a label, so the scorers cannot "read the answer" off a shared ID.
+# They are one reviewer's judgement: correct them in this file, the notebook re-scores on every run.
+#
+# Conventions
+#   - Register-style sources (EM-DAT, GLIDE, IFRC, IDMC) hold one record per disaster. Precise
+#     sources (USGS, GDACS, PDC, IBTrACS) hold per-shock / per-alert records: only the principal
+#     shocks or alerts are listed, aftershocks and repeat alerts are left unlabelled.
+#   - Several shocks of one sequence that a register records as a single disaster are all members.
+#   - `window` groups entries for leave-one-window-out cross-validation of the learned scorer.
+#   - `kind` is for reporting only: confusable = a close neighbour of another entry (same country,
+#     days apart); cascade = members carry different hazard types (a cyclone and its floods).
+#   - Items that are genuinely ambiguous are under `ambiguous` and excluded, with the reason.
+
+version: 1
+
+disasters:
+  # ---- Türkiye, February 2023: three separate earthquakes inside 3 weeks -------------------------
+  - id: tur-2023-02-06
+    name: Kahramanmaraş earthquakes (M7.8 and M7.5), Türkiye
+    window: tur-2023-02
+    kind: confusable
+    members:
+      - emdat-event-2023-0054-TUR
+      - glide-event-EQ-2023-000015-TUR
+      - ifrcevent-event-6345
+      - idmc-gidd-event-22194
+      - usgs-event-us6000jlqa
+      - gdacs-event-1357372-1487094
+      - gdacs-event-1357560-1487318
+      - pdc-event-8db4b238-a1f8-4d08-9cf6-13a82c68eb65-393262-1769565651616
+      - pdc-event-269fee20-77e7-4098-a19f-bd43352bd361-393260-1769565578405
+  - id: tur-2023-02-20
+    name: Hatay earthquake (M6.3), Türkiye
+    window: tur-2023-02
+    kind: confusable
+    members:
+      - emdat-event-2023-0091-TUR
+      - glide-event-EQ-2023-000024-TUR
+      - usgs-event-us6000jqcn
+      - gdacs-event-1360964-1491088
+  - id: tur-2023-02-27
+    name: Yeşilyurt earthquake (Malatya), Türkiye
+    window: tur-2023-02
+    kind: confusable
+    members:
+      - emdat-event-2023-0107-TUR
+
+  # ---- Myanmar, 2025 ----------------------------------------------------------------------------
+  - id: mmr-2025-03-28
+    name: Mandalay earthquake (M7.7), Myanmar
+    window: mmr-2025
+    kind: confusable
+    members:
+      - emdat-event-2025-0223-MMR
+      - glide-event-EQ-2025-000043-MMR
+      - ifrcevent-event-7464
+      - idmc-idu-event-30892
+      - cems-event-EMSR798
+      - usgs-event-us7000pn9s
+      - gdacs-event-1474477-1630564
+      - pdc-event-670db46e-234a-4bba-8123-1124f6b6e312-393198-1769565197008
+  - id: mmr-2025-04-13
+    name: Kyaukse earthquake (M5.5), Myanmar
+    window: mmr-2025
+    kind: confusable
+    members:
+      - glide-event-EQ-2025-000048-MMR
+      - usgs-event-us6000q5ps
+      - gdacs-event-1477002-1633419
+  - id: mmr-2025-04-16
+    name: Yangon tornado, Myanmar
+    window: mmr-2025
+    kind: confusable
+    members:
+      - idmc-idu-event-31209
+      - idmc-gidd-event-31209
+
+  # ---- Afghanistan, October 2023: Herat earthquakes, three M6.3 within 8 days --------------------
+  - id: afg-2023-10-07
+    name: Herat earthquakes of 7 October (two M6.3), Afghanistan
+    window: afg-2023-10
+    kind: confusable
+    members:
+      - emdat-event-2023-0636-AFG
+      - glide-event-EQ-2023-000184-AFG
+      - usgs-event-us6000ldpg
+      - usgs-event-us6000ldpm
+      - gdacs-event-1394952-1529349
+      - gdacs-event-1394958-1529359
+  - id: afg-2023-10-11
+    name: Herat earthquake of 11 October (M6.3), Afghanistan
+    window: afg-2023-10
+    kind: confusable
+    members:
+      - emdat-event-2023-0660-AFG
+      - glide-event-EQ-2023-000188-AFG
+      - usgs-event-us6000len8
+      - gdacs-event-1395488-1529996
+  - id: afg-2023-10-15
+    name: Herat earthquake of 15 October (M6.3), Afghanistan
+    window: afg-2023-10
+    kind: confusable
+    members:
+      - glide-event-EQ-2023-000195-AFG
+      - usgs-event-us6000lfn5
+      - gdacs-event-1396085-1530682
+
+  # ---- Morocco, September 2023: one clear earthquake (control) ----------------------------------
+  - id: mar-2023-09-08
+    name: Al Haouz earthquake (M6.8), Morocco
+    window: mar-2023-09
+    kind: control
+    members:
+      - emdat-event-2023-0600-MAR
+      - glide-event-EQ-2023-000166-MAR
+      - ifrcevent-event-6646
+      - idmc-idu-event-18260
+      - idmc-gidd-event-18260
+      - cems-event-EMSR695
+      - usgs-event-us7000kufc
+      - gdacs-event-1390643-1524325
+      - pdc-event-56175b35-0d35-4945-aa2f-df0b2bcfe64a-393237-1769565499137
+
+  # ---- Venezuela, June 2026: USGS item has country UNK and hazard GH0311 (upstream bug) ----------
+  - id: ven-2026-06-24
+    name: Venezuela earthquake (M7.5)
+    window: ven-2026-06
+    kind: control
+    members:
+      - emdat-event-2026-0395-VEN
+      - glide-event-EQ-2026-000093-VEN
+      - ifrcevent-event-7990
+      - idmc-idu-event-42875
+      - cems-event-EMSR884
+      - charter-event-1036
+      - usgs-event-us6000t7zp
+      - gdacs-event-1548377-1714321
+
+  # ---- Spain, autumn 2024: four unrelated disasters, two of them on 27 Oct ---------------------
+  - id: esp-2024-10-29
+    name: Valencia floods (DANA), Spain
+    window: esp-2024
+    kind: confusable
+    members:
+      - emdat-event-2024-0796-ESP
+      - glide-event-FL-2024-000199-ESP
+      - cems-event-EMSR773
+      - idmc-idu-event-27864
+      - idmc-gidd-event-27864
+      - gdacs-event-1102983-1
+  - id: esp-2024-11-13
+    name: Málaga floods, Spain
+    window: esp-2024
+    kind: confusable
+    members:
+      - emdat-event-2024-0839-ESP
+      - idmc-idu-event-28064
+      - idmc-gidd-event-28064
+  - id: esp-2024-10-27-landslide
+    name: Plentzia landslide (Basque Country), Spain
+    window: esp-2024
+    kind: confusable
+    members:
+      - idmc-idu-event-28178
+  - id: esp-2024-11-07-wildfire
+    name: El Paso wildfire (Canarias), Spain
+    window: esp-2024
+    kind: confusable
+    members:
+      - idmc-idu-event-28177
+
+  # ---- Libya, September 2023: Storm Daniel recorded as storm, cyclone, wind and flood ------------
+  - id: lby-2023-09-daniel
+    name: Storm Daniel and the Derna floods, Libya
+    window: lby-2023-09
+    kind: cascade
+    members:
+      - emdat-event-2023-0610-LBY
+      - glide-event-FL-2023-000168-LBY
+      - glide-event-FL-2023-000170-LBY
+      - glide-event-FL-2023-000290-LBY
+      - ifrcevent-event-6647
+      - idmc-idu-event-22181
+      - idmc-gidd-event-22181
+      - cems-event-EMSR696
+      - gdacs-event-1102204-1
+  - id: lby-2023-09-30
+    name: Ghat flash floods, southern Libya
+    window: lby-2023-09
+    kind: confusable
+    members:
+      - idmc-idu-event-18555
+      - idmc-gidd-event-18555
+
+  # ---- Chile, February 2024 ---------------------------------------------------------------------
+  - id: chl-2024-02-02
+    name: Viña del Mar wildfires, Chile
+    window: chl-2024-02
+    kind: confusable
+    members:
+      - emdat-event-2024-0056-CHL
+      - glide-event-WF-2024-000010-CHL
+      - cems-event-EMSR715
+      - idmc-idu-event-21793
+      - idmc-gidd-event-29860
+  - id: chl-2024-02-02-sanpablo
+    name: San Pablo wildfire (Los Lagos), Chile, 900 km south
+    window: chl-2024-02
+    kind: confusable
+    members:
+      - idmc-idu-event-21794
+      - idmc-gidd-event-21794
+
+  # ---- Mozambique, February-March 2023: Cyclone Freddy and unrelated floods ----------------------
+  - id: moz-2023-freddy
+    name: Tropical Cyclone Freddy and the floods after its second landfall, Mozambique
+    window: moz-2023
+    kind: cascade
+    members:
+      - "2023036S12117"
+      - gdacs-event-1000961-1
+      - emdat-event-2023-0095-MOZ
+      - cems-event-EMSR663
+  - id: moz-2023-02-07
+    name: Maputo province floods, Mozambique
+    window: moz-2023
+    kind: confusable
+    members:
+      - emdat-event-2023-0078-MOZ
+      - glide-event-FL-2023-000018-MOZ
+      - idmc-idu-event-15605
+      - idmc-gidd-event-15605
+      - gdacs-event-1101856-1
+  - id: moz-2023-02-12
+    name: Niassa (Cuamba) floods, Mozambique
+    window: moz-2023
+    kind: confusable
+    members:
+      - idmc-idu-event-15606
+      - idmc-gidd-event-15606
+
+# Real records left out of scoring because the label is a matter of definition, not of evidence.
+ambiguous:
+  - id: idmc-idu-event-18582
+    why: IDMC files the whole Herat sequence (7-15 Oct 2023) as one record; it belongs to all three Afghan entries.
+  - id: idmc-gidd-event-18582
+    why: Same IDMC record as above, GIDD copy.
+  - id: ifrcevent-event-6357
+    why: IFRC Mozambique appeal covers both the February rains and Cyclone Freddy.
+  - id: idmc-idu-event-21625
+    why: O'Higgins fire of 31 Jan 2024; EM-DAT lists O'Higgins inside the Viña del Mar disaster, so it may be part of it.
+  - id: idmc-gidd-event-29861
+    why: IDMC regional split (Metropolitana) of the February 2024 Chile fire season.
+  - id: idmc-gidd-event-29859
+    why: IDMC regional split (O'Higgins) of the February 2024 Chile fire season.
+  - id: idmc-gidd-event-29857
+    why: IDMC regional split (Maule) of the February 2024 Chile fire season.
+  - id: idmc-gidd-event-29855
+    why: IDMC regional split (Araucanía) of the February 2024 Chile fire season.
+  - id: usgs-event-us6000jlm1
+    why: M6.7 aftershock 14 minutes after the first Kahramanmaraş shock; whether it is its own event is a definition.
+  - id: usgs-event-us7000pn9z
+    why: M6.7 aftershock 12 minutes after the Mandalay shock; same definitional question.

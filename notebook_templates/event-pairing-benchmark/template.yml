@@ -1,0 +1,73 @@
+title: Event pairing benchmark
+summary: Which method best decides that records from different sources are the same disaster? Scores the
+  shipped heuristic, a learned model and a System One decision model on a hand-labelled gold set.
+description: '**Analysis · event pairing.** `monty:corr_id` cannot join sources, so a matcher has to. This
+  notebook scores the app''s time-and-distance heuristic, a logistic regression and a decision model (Jev
+  and others, through OpenRouter''s Decisions API) on about 100 real Montandon events grouped into 22
+  disasters, including close neighbours (three Herat earthquakes in 8 days, four Spanish disasters in six weeks)
+  and cascades (Storm Daniel and the Derna floods).
+
+
+  Reports average precision, precision / recall, where each scorer fails, and what a link / drop / review
+  gate would do. Labels live in `gold_disasters.yml`; add item ids to extend them.
+
+
+  > Select **any Montandon event** when starting a run: it only supplies the catalog URL and key. The
+  decision-model rows need the `OPENROUTER_API_KEY` secret, which must be granted to this template (remove
+  it from `secrets` to run without).'
+version: '0.1'
+requires_area: false
+requires_stac_item: true
+stac_hints:
+  profile: montandon
+  roles:
+  - event
+supports_writeback: false
+estimated_runtime_minutes: 3
+secrets:
+- OPENROUTER_API_KEY
+parameters:
+  type: object
+  properties:
+    block_days:
+      type: integer
+      title: Candidate window (days)
+      description: Two records are candidates when their dates are at most this many days apart.
+      default: 45
+      minimum: 1
+      maximum: 365
+    decision_models:
+      type: string
+      title: Decision models
+      description: OpenRouter model ids, comma-separated, pinned versions (list them with
+        GET /api/v1/models?output_modalities=decisions). Empty skips the decision-model rows.
+      default: typesafe/jev-1.14-20261014
+    max_model_calls:
+      type: integer
+      title: Cap on Decisions API calls
+      description: One call per candidate pair per model. The run skips the model rows if more are needed.
+      default: 3000
+      minimum: 0
+      maximum: 20000
+    l2:
+      type: number
+      title: Learned scorer ridge strength
+      default: 1.0
+      minimum: 0
+      maximum: 100
+    band_low:
+      type: number
+      title: Hybrid band, low
+      description: Heuristic scores below this are settled as different without asking the model.
+      default: 0.4
+      minimum: 0
+      maximum: 1
+      multipleOf: 0.05
+    band_high:
+      type: number
+      title: Hybrid band, high
+      description: Heuristic scores at or above this are settled as the same disaster without asking the model.
+      default: 0.7
+      minimum: 0
+      maximum: 1
+      multipleOf: 0.05
