@@ -569,7 +569,7 @@ def test_silver_from_events_uses_source_references_and_drops_shared_glide_number
         {"eventid": 3, "eventtype": "TC", "name": "Saola", "fromdate": "2023-08-23T18:00:00",
          "countries": ["CHN"], "glide": "TC-2023-000164-CHN", "sourceid": ""},
         {"eventid": 4, "eventtype": "TC", "name": "Haikui", "fromdate": "2023-08-28T12:00:00",
-         "countries": ["CHN"], "glide": "TC-2023-000164-CHN", "sourceid": ""},
+         "countries": ["CHN", "PHL"], "glide": "TC-2023-000164-PHL", "sourceid": ""},
     ]  # fmt: skip
     found = {
         "gdacs:1": ["gdacs-event-1-10"], "usgs:us7000kufc": ["usgs-event-us7000kufc"],
@@ -586,9 +586,8 @@ def test_silver_from_events_uses_source_references_and_drops_shared_glide_number
         "glide-event-EQ-2023-000166-MAR",
     ]
     assert by_id["gdacs-EQ-2"]["members"] == ["gdacs-event-2-20", "glide-event-EQ-2023-000170-MAR"]
-    assert (
-        "gdacs-TC-3" not in by_id and "gdacs-TC-4" not in by_id
-    )  # one GLIDE number for two storms: left out
+    # one GLIDE number cited for two storms (with different country suffixes): left out
+    assert "gdacs-TC-3" not in by_id and "gdacs-TC-4" not in by_id
     assert by_id["gdacs-EQ-1"]["window"] == by_id["gdacs-EQ-2"]["window"]  # same country, 12 days apart
     assert BS.glide_number("TC-2023-000164-CHN") == ("TC", "2023-000164")
     label, windows, _ = P.gold_labels(silver)

@@ -65,16 +65,18 @@ def silver_from_events(events: list[dict], found: dict[str, list[str]]) -> dict:
     `events`: {eventid, eventtype, name, fromdate, countries, glide, sourceid}. `found`: {"gdacs:<eventid>":
     [item ids], "usgs:<sourceid>": [...], "glide:<hazard>-<number>": [...]}.
     """
-    cited: dict[str, int] = {}
+    cited: dict[
+        tuple[str, str], int
+    ] = {}  # by number: two events may cite it with different country suffixes
     for e in events:
         if e["glide"]:
-            cited[e["glide"]] = cited.get(e["glide"], 0) + 1
+            cited[glide_number(e["glide"])] = cited.get(glide_number(e["glide"]), 0) + 1
     disasters = []
     for e in sorted(events, key=lambda e: (e["fromdate"], e["eventid"])):
         gdacs = found.get(f"gdacs:{e['eventid']}", [])[:1]
         usgs = found.get(f"usgs:{e['sourceid']}", []) if e["eventtype"] == "EQ" and e["sourceid"] else []
         glide = []
-        if e["glide"] and cited[e["glide"]] == 1:
+        if e["glide"] and cited[glide_number(e["glide"])] == 1:
             hazard, number = glide_number(e["glide"])
             glide = found.get(f"glide:{hazard}-{number}", [])
         members = gdacs + usgs + glide
