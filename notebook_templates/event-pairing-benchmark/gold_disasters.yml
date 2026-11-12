@@ -32,6 +32,12 @@
 #   Labels revised after seeing results favour the scorers that were shown them: judge new scorers on windows
 #   labelled before they were run.
 
+#   2026-11-12 (later)  Held-out windows were labelled before scoring. Afterwards one inconsistency of mine was
+#   found and fixed: the three records of the Davao Oriental M6.7 second shock (about 10 hours after the M7.4)
+#   had been made members, while the Turkiye and Mandalay M6.7 aftershocks were ambiguous. They are ambiguous
+#   now. It was spotted because the model scored them low, so it favours the model slightly: on the held-out
+#   windows Jev's F1 moves from 0.971 to 0.980 and the other scorers by under 0.012.
+
 version: 1
 
 disasters:
@@ -252,6 +258,178 @@ disasters:
       - idmc-idu-event-15606
       - idmc-gidd-event-15606
 
+  # =============================================================================================
+  # HELD-OUT WINDOWS, added 2026-11-12. Labelled from the records and public knowledge BEFORE any
+  # scorer was run on them, so they test scorers that were tuned or judged on the windows above.
+  # Recent (2025), large (2004-2013) and historical (1965-1969) disasters.
+  # =============================================================================================
+
+  # ---- Jamaica, October 2025: Hurricane Melissa (cyclone, then floods) ---------------------------
+  - id: jam-2025-10-melissa
+    name: Hurricane Melissa, Jamaica
+    window: jam-2025
+    kind: cascade
+    heldout: true
+    members:
+      - "2025294N14290"
+      - ifrcevent-event-7678
+      - emdat-event-2025-0917-JAM
+      - charter-event-996
+      - cems-event-EMSR847
+      - glide-event-TC-2025-000196-JAM
+      - gdacs-event-1103587-1
+
+  # ---- Philippines, Sep-Oct 2025: three separate earthquakes in 17 days ---------------------------
+  - id: phl-2025-09-30
+    name: Cebu earthquake (M6.9), Philippines
+    window: phl-2025
+    kind: confusable
+    heldout: true
+    members:
+      - idmc-idu-event-33332
+      - idmc-gidd-event-33332
+      - glide-event-EQ-2025-000181-PHL
+      - emdat-event-2025-0844-PHL
+      - charter-event-992
+      - gdacs-event-1502713-1663303
+      - pdc-event-fac5a8c5-6268-4f94-b95f-37765d18d2ce-393174-1769564969034
+  - id: phl-2025-10-10
+    name: Davao Oriental earthquakes (M7.4 and M6.7), Philippines
+    window: phl-2025
+    kind: confusable
+    heldout: true
+    members:
+      - ifrcevent-event-7669
+      - idmc-idu-event-33524
+      - idmc-gidd-event-33524
+      - glide-event-EQ-2025-000189-PHL
+      - emdat-event-2025-0870-PHL
+      - charter-event-967
+      - gdacs-event-1504268-1665060
+      - usgs-event-us6000rfwz
+      - pdc-event-90f8fd42-c565-4a0e-8b53-7c88ccc4b932-393173-1769564934130
+  - id: phl-2025-10-16
+    name: Surigao del Sur earthquake (M6.0), Philippines
+    window: phl-2025
+    kind: confusable
+    heldout: true
+    members:
+      - idmc-idu-event-34780
+      - idmc-gidd-event-34780
+      - usgs-event-us6000rhns
+      - gdacs-event-1505544-1666538
+
+  # ---- Afghanistan, August 2025: Kunar earthquake (control) ----------------------------------------
+  - id: afg-2025-08-31
+    name: Kunar and Nangarhar earthquake (M6.0), Afghanistan
+    window: afg-2025
+    kind: control
+    heldout: true
+    members:
+      - idmc-idu-event-32931
+      - glide-event-EQ-2025-000153-AFG
+      - emdat-event-2025-0750-AFG
+      - cems-event-EMSR839
+      - usgs-event-us7000qsvj
+
+  # ---- Haiti 2010, Japan 2011, Philippines 2013, Indonesia 2004: large disasters ---------------------
+  - id: hti-2010-01-12
+    name: Haiti earthquake (M7.0)
+    window: hti-2010
+    kind: control
+    heldout: true
+    members:
+      - usgs-event-usp000h60h
+      - glide-event-EQ-2010-000009-HTI
+      - emdat-event-2010-0017-HTI
+      - ifrcevent-event-388
+      - idmc-gidd-event-579
+  - id: jpn-2011-03-11
+    name: Tohoku earthquake and tsunami, Japan
+    window: jpn-2011
+    kind: cascade
+    heldout: true
+    members:
+      - glide-event-EQ-2011-000028-JPN
+      - emdat-event-2011-0082-JPN
+      - idmc-gidd-event-43923
+      - idmc-gidd-event-10102
+      - gfd-event-3787
+      - gdacs-event-104722-104722
+  - id: phl-2013-11-haiyan
+    name: Typhoon Haiyan, Philippines
+    window: phl-2013-11
+    kind: confusable
+    heldout: true
+    members:
+      - "2013306N07162"
+      - ifrcevent-event-178
+      - glide-event-TC-2013-000139-PHL
+      - emdat-event-2013-0433-PHL
+  - id: phl-2013-11-unnamed
+    name: Unnamed tropical cyclone of 1 November 2013 (different storm)
+    window: phl-2013-11
+    kind: confusable
+    heldout: true
+    members:
+      - "2013305N07141"
+  - id: phl-2013-11-podul
+    name: Typhoon Podul, November 2013 (different storm)
+    window: phl-2013-11
+    kind: confusable
+    heldout: true
+    members:
+      - "2013316N06130"
+  - id: idn-2004-12-26
+    name: Sumatra-Andaman earthquake and Indian Ocean tsunami, Indonesia only
+    window: idn-2004
+    kind: cascade
+    heldout: true
+    members:
+      - usgs-event-official20041226005853450_30
+      - gdacs-event-9059-9059
+      - glide-event-TS-2004-000147-IDN
+      - emdat-event-2004-0659-IDN
+      - desinventar-event-idn-2474
+      - desinventar-event-idn-2475
+      - desinventar-event-idn-2476
+
+  # ---- 1960s: three tropical cyclones (EM-DAT, GLIDE and IBTrACS only; no USGS or GDACS that far back)
+  - id: usa-1965-09-betsy
+    name: Hurricane Betsy, United States, 1965
+    window: usa-1965-09
+    kind: confusable
+    heldout: true
+    members:
+      - emdat-event-1965-0053-USA
+      - glide-event-TC-1965-000001-USA
+      - "1965239N11310"
+  - id: usa-1965-09-debbie
+    name: Tropical cyclone Debbie, September 1965 (different storm)
+    window: usa-1965-09
+    kind: confusable
+    heldout: true
+    members:
+      - "1965268N17275"
+  - id: usa-1969-08-camille
+    name: Hurricane Camille, United States, 1969
+    window: usa-1969-08
+    kind: control
+    heldout: true
+    members:
+      - emdat-event-1969-0087-USA
+      - glide-event-TC-1969-000001-USA
+      - "1969226N18280"
+  - id: mmr-1968-05-sittwe
+    name: Cyclone at Sittwe, Myanmar, 1968
+    window: mmr-1968-05
+    kind: control
+    heldout: true
+    members:
+      - emdat-event-1968-0049-MMR
+      - glide-event-TC-1968-000001-MMR
+      - "1968128N14096"
+
 # Real records left out of scoring because the label is a matter of definition, not of evidence.
 ambiguous:
   - id: ifrcevent-event-6345
@@ -280,3 +458,42 @@ ambiguous:
     why: M6.7 aftershock 14 minutes after the first Kahramanmaraş shock; whether it is its own event is a definition.
   - id: usgs-event-us7000pn9z
     why: M6.7 aftershock 12 minutes after the Mandalay shock; same definitional question.
+  # --- held-out windows (2026-11-12)
+  - id: ifrcevent-event-7656
+    why: IFRC page titled "Earthquake and Typhoons 2025"; it spans the Cebu earthquake and typhoons.
+  - id: idmc-idu-event-33525
+    why: Displacement in Cagwait on 11 Oct 2025, probably from the 10 Oct Davao Oriental sequence but filed on its own.
+  - id: idmc-gidd-event-33525
+    why: Same IDMC Cagwait record, GIDD copy.
+  - id: glide-event-EQ-2025-000192-PHL
+    why: GLIDE number for an M5.7 aftershock of 12 Oct; whether an aftershock is its own disaster is a definition.
+  - id: usgs-event-us6000rgrd
+    why: The M5.8 aftershock behind GLIDE EQ-2025-000192.
+  - id: ifrcevent-event-7628
+    why: IFRC page titled "Southeastern and Northern Earthquake, 2025"; it spans two earthquakes.
+  - id: glide-event-EQ-2025-000156-AFG
+    why: GLIDE number for the M5.6 aftershock of 4 Sep 2025; same aftershock question.
+  - id: usgs-event-us7000qtst
+    why: The M5.6 aftershock behind GLIDE EQ-2025-000156.
+  - id: gdacs-event-1498907-1658856
+    why: GDACS alert for the same M5.6 aftershock.
+  - id: glide-event-EQ-2025-000159-AFG
+    why: GLIDE number for the M5.2 aftershock of 5 Sep 2025; same aftershock question.
+  - id: usgs-event-us7000qu8p
+    why: The M5.2 aftershock behind GLIDE EQ-2025-000159.
+  - id: gdacs-event-1499045-1659016
+    why: GDACS alert for the same M5.2 aftershock.
+  - id: gdacs-event-104563-104563
+    why: GDACS alert for the M7.2 foreshock of 9 March 2011; whether a foreshock belongs to the disaster is a definition.
+  - id: gdacs-event-104721-104721
+    why: GDACS alert for an M7.2 aftershock minutes after the Tohoku mainshock; same aftershock question.
+  - id: desinventar-event-idn-2477
+    why: DesInventar "SURGE" record of 26 Dec 2004; probably the tsunami, but it is filed as a separate hazard.
+  - id: ifrcevent-event-2793
+    why: IFRC dates every pre-2000 record to 1 January of its year; this is probably the 1968 Sittwe cyclone but the date cannot confirm it.
+  - id: usgs-event-us6000rg2r
+    why: M6.7 second shock about 10 hours after the Davao Oriental M7.4. Same aftershock question as the Turkiye and Mandalay M6.7 records; it was wrongly labelled a member first (see review log).
+  - id: gdacs-event-1504359-1665174
+    why: GDACS alert for the Davao Oriental M6.7 second shock.
+  - id: pdc-event-79e6342c-0dd1-4df9-bb5b-17a2ac2f2feb-393172-1769564924832
+    why: PDC alert for the Davao Oriental M6.7 second shock.
