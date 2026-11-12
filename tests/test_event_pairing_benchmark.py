@@ -613,3 +613,21 @@ def test_decision_request_swap_reverses_the_records_only():
     assert plain["state"]["record_a"] == swapped["state"]["record_b"]
     assert plain["state"]["record_b"] == swapped["state"]["record_a"]
     assert plain["state"]["days_apart"] == swapped["state"]["days_apart"]
+
+
+def test_same_source_links_join_one_disasters_country_records():
+    ids = [
+        "emdat-event-2023-0095-MOZ", "emdat-event-2023-0095-MWI", "emdat-event-2023-0095-MDG",
+        "glide-event-TC-2023-000023-MDG", "idmc-idu-event-15605", "idmc-gidd-event-15605",
+        "gdacs-event-1000961-1", "gdacs-event-1000961-9", "emdat-event-2023-0078-MOZ", "2023036S12117",
+    ]  # fmt: skip
+    assert P.source_key("emdat-event-2023-0095-MOZ") == "emdat:2023-0095"
+    assert P.source_key("glide-event-TC-2023-000023-MDG") == "glide:TC-2023-000023"
+    assert P.source_key("2023036S12117") is None
+    links = P.same_source_links(ids)
+    events = P.assemble_events(ids, [a for a, _ in links], [b for _, b in links], [1.0] * len(links), 0.5)
+    assert len({events[i] for i in ids if i.startswith("emdat-event-2023-0095")}) == 1
+    assert events["emdat-event-2023-0078-MOZ"] != events["emdat-event-2023-0095-MOZ"]
+    assert events["idmc-idu-event-15605"] == events["idmc-gidd-event-15605"]
+    assert events["gdacs-event-1000961-1"] == events["gdacs-event-1000961-9"]
+    assert len(links) == 2 + 1 + 1

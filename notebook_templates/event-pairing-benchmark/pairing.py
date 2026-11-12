@@ -1035,3 +1035,32 @@ def bcubed(event_of: dict[str, int], label: dict[str, str]) -> tuple[float, floa
         np.mean([len(by_event[event_of[i]] & by_label[label[i]]) / len(by_label[label[i]]) for i in ids])
     )
     return p, r, (2 * p * r / (p + r) if p + r else 0.0)
+
+
+# -- links a source already makes ----------------------------------------------------------------------------
+# One id a source gives to every record of one disaster: EM-DAT's DisNo and the GLIDE number repeat on each
+# affected country's record, IDMC publishes one event as IDU and GIDD, GDACS keeps one event id across
+# episodes. These link records of one source across countries for free; scorers never see them.
+_SOURCE_KEYS = (
+    ("emdat", re.compile(r"^emdat-event-(\d{4}-\d{4})-[A-Z]{3}$")),
+    ("glide", re.compile(r"^glide-event-([A-Z]{2}-\d{4}-\d{6})-[A-Z]{3}$")),
+    ("idmc", re.compile(r"^idmc-(?:idu|gidd)-event-(\d+)$")),
+    ("gdacs", re.compile(r"^gdacs-event-(\d+)-\d+$")),
+)
+
+
+def source_key(item_id: str) -> str | None:
+    """ "emdat:2023-0095" for every country record of EM-DAT disaster 2023-0095, and so on; None otherwise."""
+    for name, pattern in _SOURCE_KEYS:
+        if m := pattern.match(item_id):
+            return f"{name}:{m.group(1)}"
+    return None
+
+
+def same_source_links(ids) -> list[tuple[str, str]]:
+    """Pairs of records that share a source key, chained (a-b, b-c) so each group is connected."""
+    groups: dict[str, list[str]] = {}
+    for i in sorted(ids):
+        if key := source_key(i):
+            groups.setdefault(key, []).append(i)
+    return [(g[k], g[k + 1]) for g in groups.values() for k in range(len(g) - 1)]
