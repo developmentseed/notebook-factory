@@ -4,18 +4,29 @@
 # describe it. Two items in the same entry are a positive pair; two items in different entries of
 # the same `window` are a negative pair. Items listed nowhere are unlabelled and never scored.
 #
-# How these labels were made: a person read titles, descriptions, dates, magnitudes and places in the
-# live catalog (montandon-eoapi) and grouped the items, using public knowledge of each disaster. No
-# deterministic ID was used as a label, so the scorers cannot "read the answer" off a shared ID.
-# They are one reviewer's judgement: correct them in this file, the notebook re-scores on every run.
+# How these labels were made: an AI agent (Claude) read titles, descriptions, dates, magnitudes and
+# places in the live catalog (montandon-eoapi) and grouped the items, using public knowledge of each
+# disaster. No person has reviewed them yet. They were cross-checked against the references GDACS
+# publishes for its own events (`sourceid` = the USGS event, `glide` = the GLIDE number, from the GDACS
+# API; Montandon does not ingest these fields): every gold GDACS record that cites a USGS or GLIDE record
+# of the gold set sits in the same disaster as that record (0 conflicts on 2026-11-12). Scorers never see
+# ids, so they cannot read the answer off a shared one. Correct labels in this file; the notebook
+# re-scores on every run.
 #
 # Conventions
-#   - Register-style sources (EM-DAT, GLIDE, IFRC, IDMC) hold one record per disaster. Precise
-#     sources (USGS, GDACS, PDC, IBTrACS) hold per-shock / per-alert records: only the principal
-#     shocks or alerts are listed, aftershocks and repeat alerts are left unlabelled.
+#   - An entry is one real-world disaster, across countries: the records of every affected country
+#     belong to it (EM-DAT and GLIDE share one number across a disaster's country records).
+#   - Register-style sources (EM-DAT, GLIDE, IFRC, IDMC, DesInventar) hold one record per disaster and
+#     country. Precise sources (USGS, GDACS, PDC, IBTrACS) hold per-shock / per-alert records: only the
+#     principal shocks or alerts are listed; repeat alerts are left unlabelled.
+#   - Aftershocks are `ambiguous` for now: whether an aftershock is part of its mainshock's disaster is
+#     an open definition (monty-stac-extension does not define it). Candidate rule: defer to the
+#     registers, one EM-DAT DisNo, else one GLIDE number, is one disaster. Two shocks of one register
+#     record within hours of each other (Kahramanmaras M7.8 and M7.5, Herat 7 Oct) stay members.
+#   - Cascades (a cyclone and its floods, an earthquake and its tsunami) are one disaster, as in the
+#     extension's hazard relations (`triggers` / `triggered by`).
 #   - IFRC GO events are ingested as event items but describe response operations (an operation page can span
 #     several disasters). They are scored as events here; dropping them changes no scorer's F1 by more than 0.01.
-#   - Several shocks of one sequence that a register records as a single disaster are all members.
 #   - `window` groups entries for leave-one-window-out cross-validation of the learned scorer.
 #   - `kind` is for reporting only: confusable = a close neighbour of another entry (same country,
 #     days apart); cascade = members carry different hazard types (a cyclone and its floods).
@@ -38,10 +49,27 @@
 #   now. It was spotted because the model scored them low, so it favours the model slightly: on the held-out
 #   windows Jev's F1 moves from 0.971 to 0.980 and the other scorers by under 0.012.
 
+#   2026-11-12 (review)  A review of the whole file against the catalog, after scoring. Every change below
+#   touches windows that scorers had already been run on, held-out ones included (marked H).
+#   - Mislabel fixed (H jpn-2011): the GDACS member 104722 was the M7.9 aftershock 29 min after the
+#     mainshock (06:15 UTC, 36.2N 141.2E). The M9.0 mainshock (GDACS 104706, 05:46 UTC, 38.3N 142.4E) and
+#     USGS official20110311054624120_30 (M9.1) replace it; 104722 is ambiguous like the other aftershocks.
+#   - Missing members added: GDACS flood 3787-1 (same DFO number as gfd-event-3787, H), the GDACS mainshock
+#     alerts for Kunar (H) and Haiti (H), IDMC "Typhoon Haiyan (Yolanda)" (H) and the GDACS Haiyan flood (H),
+#     a 4th identical DesInventar Sumatra record (H), the GIDD copy of the Plentzia landslide.
+#   - Aftershocks made consistent: Kyaukse M5.5 (16 days after Mandalay, its own GLIDE number and a GDACS
+#     Red alert) moved from its own entry to `ambiguous`, like the Kunar and Cebu aftershocks.
+#   - Across countries: records of the same disasters in Syria, Madagascar, Zimbabwe, Malawi, Haiti, Cuba,
+#     Bahamas, Viet Nam and China added (EM-DAT country records of one DisNo, GLIDE records of one number,
+#     IFRC and IDMC pages naming the storm or quake).
+#   - New confusable neighbours: Typhoon Krosa (31 Oct 2013, northern Luzon, 8 days before Haiyan; H) and
+#     the central Viet Nam floods of 14-20 Nov 2013 from Tropical Depression Podul (3 days after Haiyan
+#     crossed Viet Nam; H), both found as unlabelled records next to the Haiyan window.
+
 version: 1
 
 disasters:
-  # ---- Türkiye, February 2023: three separate earthquakes inside 3 weeks -------------------------
+  # ---- Türkiye and Syria, February 2023: three separate earthquakes inside 3 weeks ---------------
   - id: tur-2023-02-06
     name: Kahramanmaraş earthquakes (M7.8 and M7.5), Türkiye
     window: tur-2023-02
@@ -55,6 +83,8 @@ disasters:
       - gdacs-event-1357560-1487318
       - pdc-event-8db4b238-a1f8-4d08-9cf6-13a82c68eb65-393262-1769565651616
       - pdc-event-269fee20-77e7-4098-a19f-bd43352bd361-393260-1769565578405
+      - emdat-event-2023-0054-SYR
+      - glide-event-EQ-2023-000015-SYR
   - id: tur-2023-02-20
     name: Hatay earthquake (M6.3), Türkiye
     window: tur-2023-02
@@ -64,12 +94,16 @@ disasters:
       - glide-event-EQ-2023-000024-TUR
       - usgs-event-us6000jqcn
       - gdacs-event-1360964-1491088
+      - emdat-event-2023-0091-SYR
+      - idmc-idu-event-14977
+      - idmc-gidd-event-14977
   - id: tur-2023-02-27
     name: Yeşilyurt earthquake (Malatya), Türkiye
     window: tur-2023-02
     kind: confusable
     members:
       - emdat-event-2023-0107-TUR
+      - emdat-event-2023-0107-SYR
 
   # ---- Myanmar, 2025 ----------------------------------------------------------------------------
   - id: mmr-2025-03-28
@@ -85,14 +119,6 @@ disasters:
       - usgs-event-us7000pn9s
       - gdacs-event-1474477-1630564
       - pdc-event-670db46e-234a-4bba-8123-1124f6b6e312-393198-1769565197008
-  - id: mmr-2025-04-13
-    name: Kyaukse earthquake (M5.5), Myanmar
-    window: mmr-2025
-    kind: confusable
-    members:
-      - glide-event-EQ-2025-000048-MMR
-      - usgs-event-us6000q5ps
-      - gdacs-event-1477002-1633419
   - id: mmr-2025-04-16
     name: Yangon tornado, Myanmar
     window: mmr-2025
@@ -188,6 +214,7 @@ disasters:
     kind: confusable
     members:
       - idmc-idu-event-28178
+      - idmc-gidd-event-28178
   - id: esp-2024-11-07-wildfire
     name: El Paso wildfire (Canarias), Spain
     window: esp-2024
@@ -232,7 +259,7 @@ disasters:
 
   # ---- Mozambique, February-March 2023: Cyclone Freddy and unrelated floods ----------------------
   - id: moz-2023-freddy
-    name: Tropical Cyclone Freddy and the floods after its second landfall, Mozambique
+    name: Tropical Cyclone Freddy and its floods (Madagascar, Mozambique, Zimbabwe, Malawi)
     window: moz-2023
     kind: cascade
     members:
@@ -240,6 +267,15 @@ disasters:
       - gdacs-event-1000961-1
       - emdat-event-2023-0095-MOZ
       - cems-event-EMSR663
+      - emdat-event-2023-0095-MDG
+      - emdat-event-2023-0095-ZWE
+      - emdat-event-2023-0095-MWI
+      - glide-event-TC-2023-000023-MDG
+      - ifrcevent-event-6358
+      - ifrcevent-event-6377
+      - idmc-gidd-event-22186
+      - glide-event-FL-2023-000037-MWI
+      - gdacs-event-1101890-1
   - id: moz-2023-02-07
     name: Maputo province floods, Mozambique
     window: moz-2023
@@ -264,9 +300,9 @@ disasters:
   # Recent (2025), large (2004-2013) and historical (1965-1969) disasters.
   # =============================================================================================
 
-  # ---- Jamaica, October 2025: Hurricane Melissa (cyclone, then floods) ---------------------------
+  # ---- Caribbean, October 2025: Hurricane Melissa (cyclone, then floods) -------------------------
   - id: jam-2025-10-melissa
-    name: Hurricane Melissa, Jamaica
+    name: Hurricane Melissa (Jamaica, Haiti, Cuba, Bahamas)
     window: jam-2025
     kind: cascade
     heldout: true
@@ -278,6 +314,14 @@ disasters:
       - cems-event-EMSR847
       - glide-event-TC-2025-000196-JAM
       - gdacs-event-1103587-1
+      - emdat-event-2025-0917-HTI
+      - emdat-event-2025-0917-BHS
+      - emdat-event-2025-0917-CUB
+      - glide-event-TC-2025-000196-HTI
+      - ifrcevent-event-7687
+      - idmc-gidd-event-34778
+      - glide-event-FL-2025-000201-CUB
+      - gdacs-event-1103585-1
 
   # ---- Philippines, Sep-Oct 2025: three separate earthquakes in 17 days ---------------------------
   - id: phl-2025-09-30
@@ -331,6 +375,7 @@ disasters:
       - emdat-event-2025-0750-AFG
       - cems-event-EMSR839
       - usgs-event-us7000qsvj
+      - gdacs-event-1498339-1658520
 
   # ---- Haiti 2010, Japan 2011, Philippines 2013, Indonesia 2004: large disasters ---------------------
   - id: hti-2010-01-12
@@ -344,6 +389,7 @@ disasters:
       - emdat-event-2010-0017-HTI
       - ifrcevent-event-388
       - idmc-gidd-event-579
+      - gdacs-event-72807-72972
   - id: jpn-2011-03-11
     name: Tohoku earthquake and tsunami, Japan
     window: jpn-2011
@@ -355,9 +401,11 @@ disasters:
       - idmc-gidd-event-43923
       - idmc-gidd-event-10102
       - gfd-event-3787
-      - gdacs-event-104722-104722
+      - gdacs-event-3787-1
+      - gdacs-event-104706-105456
+      - usgs-event-official20110311054624120_30
   - id: phl-2013-11-haiyan
-    name: Typhoon Haiyan, Philippines
+    name: Typhoon Haiyan (Philippines, Viet Nam, China)
     window: phl-2013-11
     kind: confusable
     heldout: true
@@ -366,6 +414,13 @@ disasters:
       - ifrcevent-event-178
       - glide-event-TC-2013-000139-PHL
       - emdat-event-2013-0433-PHL
+      - idmc-gidd-event-79577
+      - gdacs-event-4100-2
+      - emdat-event-2013-0433-VNM
+      - emdat-event-2013-0433-CHN
+      - glide-event-TC-2013-000139-VNM
+      - glide-event-TC-2013-000139-CHN
+      - idmc-gidd-event-44119
   - id: phl-2013-11-unnamed
     name: Unnamed tropical cyclone of 1 November 2013 (different storm)
     window: phl-2013-11
@@ -374,12 +429,24 @@ disasters:
     members:
       - "2013305N07141"
   - id: phl-2013-11-podul
-    name: Typhoon Podul, November 2013 (different storm)
+    name: Tropical Depression Podul and the central Viet Nam floods, November 2013 (different storm)
     window: phl-2013-11
     kind: confusable
     heldout: true
     members:
       - "2013316N06130"
+      - emdat-event-2013-0443-VNM
+      - gdacs-event-4103-2
+      - glide-event-FL-2013-000142-VNM
+      - idmc-gidd-event-44120
+  - id: phl-2013-10-krosa
+    name: Typhoon Krosa, northern Luzon, 31 October 2013 (different storm)
+    window: phl-2013-11
+    kind: confusable
+    heldout: true
+    members:
+      - "2013301N13142"
+      - emdat-event-2013-0437-PHL
   - id: idn-2004-12-26
     name: Sumatra-Andaman earthquake and Indian Ocean tsunami, Indonesia only
     window: idn-2004
@@ -393,6 +460,7 @@ disasters:
       - desinventar-event-idn-2474
       - desinventar-event-idn-2475
       - desinventar-event-idn-2476
+      - desinventar-event-idn-2473
 
   # ---- 1960s: three tropical cyclones (EM-DAT, GLIDE and IBTrACS only; no USGS or GDACS that far back)
   - id: usa-1965-09-betsy
@@ -458,6 +526,20 @@ ambiguous:
     why: M6.7 aftershock 14 minutes after the first Kahramanmaraş shock; whether it is its own event is a definition.
   - id: usgs-event-us7000pn9z
     why: M6.7 aftershock 12 minutes after the Mandalay shock; same definitional question.
+  - id: glide-event-EQ-2025-000048-MMR
+    why: Kyaukse M5.5 of 13 Apr 2025, an aftershock 16 days after Mandalay with its own GLIDE number (and a GDACS Red alert); aftershock question.
+  - id: usgs-event-us6000q5ps
+    why: The Kyaukse M5.3 behind GLIDE EQ-2025-000048; aftershock question.
+  - id: gdacs-event-1477002-1633419
+    why: GDACS alert for the Kyaukse aftershock; aftershock question.
+  - id: gdacs-event-1474479-1630686
+    why: GDACS alert for the Mandalay M6.7 aftershock; aftershock question.
+  - id: glide-event-EQ-2023-000020-SYR
+    why: A second Syria GLIDE number for 6 Feb 2023 whose text only names the PRCS-Syria response; the first (EQ-2023-000015-SYR) is a member.
+  - id: ifrcevent-event-6346
+    why: IFRC Syria operation page for the February 2023 earthquakes; like the Turkiye page it spans the 6, 20 and 27 February entries.
+  - id: ifrcevent-event-6351
+    why: IFRC Syria operation page (Palestinian refugee camps) for the February 2023 earthquakes; spans the entries like the page above.
   # --- held-out windows (2026-11-12)
   - id: ifrcevent-event-7656
     why: IFRC page titled "Earthquake and Typhoons 2025"; it spans the Cebu earthquake and typhoons.
@@ -485,6 +567,8 @@ ambiguous:
     why: GDACS alert for the same M5.2 aftershock.
   - id: gdacs-event-104563-104563
     why: GDACS alert for the M7.2 foreshock of 9 March 2011; whether a foreshock belongs to the disaster is a definition.
+  - id: gdacs-event-104722-104722
+    why: GDACS alert for the M7.9 Ibaraki aftershock 29 minutes after the Tohoku mainshock; it was wrongly a member (see review log); aftershock question.
   - id: gdacs-event-104721-104721
     why: GDACS alert for an M7.2 aftershock minutes after the Tohoku mainshock; same aftershock question.
   - id: desinventar-event-idn-2477
@@ -494,6 +578,12 @@ ambiguous:
   - id: usgs-event-us6000rg2r
     why: M6.7 second shock about 10 hours after the Davao Oriental M7.4. Same aftershock question as the Turkiye and Mandalay M6.7 records; it was wrongly labelled a member first (see review log).
   - id: gdacs-event-1504359-1665174
-    why: GDACS alert for the Davao Oriental M6.7 second shock.
+    why: GDACS alert for the Davao Oriental M6.7 second shock. GDACS cites the M7.4's GLIDE number (EQ-2025-000189-PHL) for it, so the registers count it as the same disaster.
   - id: pdc-event-79e6342c-0dd1-4df9-bb5b-17a2ac2f2feb-393172-1769564924832
     why: PDC alert for the Davao Oriental M6.7 second shock.
+  - id: gdacs-event-1103586-1
+    why: GDACS Green flood in Haiti, 23-25 Oct 2025, probably Melissa's rains while it stalled south of Hispaniola, but before its main impact.
+  - id: pdc-event-59aea6e4-3230-465d-a8cd-a522c9bb221c-294590-1731541642
+    why: PDC "Severe Weather - Spain" from 13 Nov 2024 with 3,000 displaced, probably the Malaga floods; a warning-type record, not confirmed.
+  - id: pdc-event-3e60d9fb-db75-4985-be34-d1a9cbd52811-291919-1730140518
+    why: PDC "Storms - Southern Spain" warnings of 28-31 Oct 2024, probably the DANA that caused the Valencia floods; warning-type record, not confirmed.
