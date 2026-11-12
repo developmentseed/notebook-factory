@@ -408,6 +408,7 @@ def build_pairs(records: dict[str, Record], gold: dict, block_days: float) -> li
         }
         if verdict == "ok":
             row["heuristic"] = heuristic_score(anchor, cand)
+            row["gap_days"] = proximity(anchor, cand)[2]
             row.update({f"f_{k}": v for k, v in pair_features(a, b).items()})
         rows.append(row)
     return rows
@@ -625,3 +626,240 @@ def score_with_model(
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
         return list(pool.map(one, pairs))
+
+
+# -- pipeline stages around a scorer: a date gate and candidate ranking -----------------------------------
+def gate_scores(scores: np.ndarray, gap_days: np.ndarray, gate_days: float) -> np.ndarray:
+    """Pairs whose records are more than `gate_days` apart are settled as different (score 0) before any scorer."""
+    return np.where(np.asarray(gap_days) > gate_days, 0.0, scores)
+
+
+def margin_scores(
+    scores: np.ndarray,
+    a: np.ndarray,
+    b: np.ndarray,
+    source_a: np.ndarray,
+    source_b: np.ndarray,
+    margin: float,
+) -> np.ndarray:
+    """Rank candidates against each other: a pair keeps its score only when it is within `margin` of the best
+    score either of its records has in the other's source. Several matches per source can survive, so this is
+    not one-to-one matching (a source can hold many records of one disaster)."""
+    scores = np.asarray(scores, dtype=float)
+    best: dict[tuple[str, str], float] = {}
+    for x, y, fx, fy, sc in zip(a, b, source_a, source_b, scores, strict=True):
+        if np.isnan(sc):
+            continue
+        for rec, fam in ((x, fy), (y, fx)):
+            best[(rec, fam)] = max(best.get((rec, fam), -1.0), sc)
+    keep = [
+        np.isnan(sc) or (sc >= best[(x, fy)] - margin and sc >= best[(y, fx)] - margin)
+        for x, y, fx, fy, sc in zip(a, b, source_a, source_b, scores, strict=True)
+    ]
+    return np.where(keep, scores, 0.0)
+
+
+# -- stage 3, listwise: one request per record and source, all of that source's candidates together -------
+EVENT_COLLECTIONS = [f"{prefix}-events" for prefix in _PREFIXES] + ["ibtracs-events"]
+
+LISTWISE_NOTE = (
+    "The candidates are records from one source. None, one or several may describe the same disaster as "
+    "the anchor: a source can hold several records of one disaster, such as an alert for each shock. Judge "
+    "every candidate against the anchor and against the other candidates; a candidate that fits the anchor "
+    "worse than a rival, or differs in place or date, is probably a different disaster. `days_apart` and "
+    "`km_apart` were measured by the application between the anchor and that candidate; take them as given. "
+    "Aftershocks minutes or hours after a main shock belong to the same disaster; a separate strong "
+    "earthquake days or weeks later does not."
+)
+
+
+def listwise_request(model: str, anchor: Record, candidates: list[Record]) -> dict:
+    """One request: the anchor, its candidates keyed by name, a yes/no per candidate and the single best one."""
+    keys = [f"candidate_{i + 1}" for i in range(len(candidates))]
+    state_candidates = {}
+    for key, cand in zip(keys, candidates, strict=True):
+        _, _, gap, km = proximity(*pair_anchor(anchor, cand))
+        state_candidates[key] = {
+            **describe(cand),
+            "days_apart": int(round(gap)),
+            "km_apart": "unknown" if km is None else int(round(km)),
+        }
+    questions: dict[str, dict] = {
+        f"same_{key}": {
+            "type": "noul",
+            "instructions": f"Does `candidates.{key}` describe the same disaster as `anchor`? {LISTWISE_NOTE}",
+            "criteria": {
+                "true": f"`candidates.{key}` is about the same physical disaster as `anchor`, whatever its date precision, location detail or wording.",
+                "false": f"`candidates.{key}` is a different disaster: a separate earthquake, a later flood or storm, a different hazard, or a distant region.",
+            },
+        }
+        for key in keys
+    }
+    questions["best"] = {
+        "type": "choice",
+        "instructions": f"Which candidate is the best match for `anchor`, the one most likely to be the same disaster? {LISTWISE_NOTE}",
+        "criteria": {
+            key: f"`candidates.{key}` ({cand.title[:60]}, {cand.start.date().isoformat() if cand.start else 'no date'}) is the best match."
+            for key, cand in zip(keys, candidates, strict=True)
+        },
+    }
+    questions["any_match"] = {
+        "type": "noul",
+        "instructions": f"Does at least one candidate describe the same disaster as `anchor`? {LISTWISE_NOTE}",
+        "criteria": {
+            "true": "At least one candidate is the same disaster as the anchor.",
+            "false": "No candidate is the same disaster as the anchor.",
+        },
+    }
+    return {
+        "model": model,
+        "state": {"anchor": describe(anchor), "candidates": state_candidates},
+        "questions": questions,
+    }
+
+
+def parse_listwise(response: dict, n: int) -> dict:
+    """{p_same: [n floats or None], best: [n floats or None], any_match, model, cost}, in candidate order."""
+    answers = response.get("answers") or {}
+    p_same = []
+    for i in range(n):
+        a = answers.get(f"same_candidate_{i + 1}") or {}
+        p_same.append(float(a["noul"]) if a.get("type") == "noul" and a.get("noul") is not None else None)
+    probabilities = (answers.get("best") or {}).get("probabilities") or {}
+    any_match = answers.get("any_match") or {}
+    return {
+        "p_same": p_same,
+        "best": [probabilities.get(f"candidate_{i + 1}") for i in range(n)],
+        "any_match": any_match.get("noul") if any_match.get("type") == "noul" else None,
+        "model": response.get("model"),
+        "cost": (response.get("usage") or {}).get("cost") or 0.0,
+    }
+
+
+def listwise_groups(
+    pairs: list[tuple[str, str]],
+    records: dict[str, Record],
+    max_candidates: int = 12,
+    extra: dict[tuple[str, str], list[str]] | None = None,
+) -> list[tuple[str, list[str]]]:
+    """[(anchor id, candidate ids)]: one group per record and per other source family, split at `max_candidates`.
+
+    `extra` adds unscored distractor ids to a (anchor id, family) group. Candidates are sorted by id so their
+    order says nothing about the label.
+    """
+    by: dict[tuple[str, str], set[str]] = {}
+    for a, b in pairs:
+        by.setdefault((a, records[b].family), set()).add(b)
+        by.setdefault((b, records[a].family), set()).add(a)
+    for key, ids in (extra or {}).items():
+        if key in by:
+            by[key].update(ids)
+    groups = []
+    for (anchor, _family), ids in sorted(by.items()):
+        ordered = sorted(ids)
+        for i in range(0, len(ordered), max_candidates):
+            groups.append((anchor, ordered[i : i + max_candidates]))
+    return groups
+
+
+def score_listwise(
+    groups: list[tuple[str, list[str]]],
+    records: dict[str, Record],
+    model: str,
+    api_key: str,
+    workers: int = 8,
+) -> list[dict]:
+    """One result per group, in order. A failed call gives {"error": ...} instead of raising."""
+
+    def one(group: tuple[str, list[str]]) -> dict:
+        anchor, ids = group
+        try:
+            request = listwise_request(model, records[anchor], [records[i] for i in ids])
+            return parse_listwise(call_decisions(request, api_key), len(ids))
+        except Exception as exc:  # one bad group must not sink the run
+            return {
+                "p_same": [None] * len(ids),
+                "best": [None] * len(ids),
+                "error": f"{type(exc).__name__}: {str(exc)[:160]}",
+            }
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(one, groups))
+
+
+def pair_scores_from_listwise(
+    groups: list[tuple[str, list[str]]], results: list[dict], pairs: list[tuple[str, str]]
+) -> tuple[np.ndarray, np.ndarray]:
+    """(score, best) per pair: the mean of the two directions (each record as anchor), NaN when no call answered."""
+    directional: dict[tuple[str, str], tuple[float | None, float | None]] = {}
+    for (anchor, ids), res in zip(groups, results, strict=True):
+        for cand, p, best in zip(ids, res["p_same"], res["best"], strict=True):
+            directional[(anchor, cand)] = (p, best)
+
+    def mean(values):
+        values = [v for v in values if v is not None]
+        return float(np.mean(values)) if values else np.nan
+
+    score = np.array(
+        [
+            mean([directional.get((a, b), (None, None))[0], directional.get((b, a), (None, None))[0]])
+            for a, b in pairs
+        ]
+    )
+    best = np.array(
+        [
+            mean([directional.get((a, b), (None, None))[1], directional.get((b, a), (None, None))[1]])
+            for a, b in pairs
+        ]
+    )
+    return score, best
+
+
+def fetch_context(
+    api_url: str,
+    token: str,
+    countries: set[str],
+    start: datetime,
+    end: datetime,
+    max_items: int = 1500,
+    timeout: int = 90,
+) -> list[dict]:
+    """Event items of every source in these countries and dates: the realistic crowd around a disaster."""
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    body = {
+        "collections": EVENT_COLLECTIONS,
+        "limit": 200,
+        "datetime": f"{start.strftime('%Y-%m-%dT%H:%M:%SZ')}/{end.strftime('%Y-%m-%dT%H:%M:%SZ')}",
+        "filter-lang": "cql2-json",
+        "filter": {"op": "a_overlaps", "args": [{"property": "monty:country_codes"}, sorted(countries)]},
+    }
+    items: list[dict] = []
+    url, payload = f"{api_url.rstrip('/')}/search", body
+    while url and len(items) < max_items:
+        r = requests.post(url, json=payload, headers=headers, timeout=timeout)
+        r.raise_for_status()
+        page = r.json()
+        items += page.get("features", [])
+        nxt = next((link for link in page.get("links", []) if link.get("rel") == "next"), None)
+        url, payload = (nxt["href"], nxt.get("body") or body) if nxt else (None, None)
+    return items[:max_items]
+
+
+def choose_distractors(
+    keys: list[tuple[str, str]],
+    records: dict[str, Record],
+    context: dict[str, Record],
+    gate_days: float,
+    per_group: int,
+) -> dict[tuple[str, str], list[str]]:
+    """{(anchor id, family): context ids}: the closest unlabelled records of that source that could be rivals."""
+    by_family: dict[str, list[Record]] = {}
+    for rec in context.values():
+        by_family.setdefault(rec.family, []).append(rec)
+    out: dict[tuple[str, str], list[str]] = {}
+    for anchor_id, family in keys:
+        anchor = records[anchor_id]
+        rivals = [c for c in by_family.get(family, []) if block(anchor, c, gate_days) == "ok"]
+        rivals.sort(key=lambda c: (gap_days(anchor, c, by_day=True), c.id))
+        out[(anchor_id, family)] = [c.id for c in rivals[:per_group]]
+    return out

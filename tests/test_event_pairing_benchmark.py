@@ -264,6 +264,129 @@ def test_score_with_model_retries_throttling_and_reports_failures_instead_of_rai
     assert failed["p_same"] is None and "400" in failed["error"]
 
 
+# -- pipeline stages: date gate and candidate ranking --------------------------------------------------------
+def test_gate_and_margin_scores():
+    scores = np.array([0.9, 0.6, 0.85, 0.95, np.nan])
+    a = np.array(["a1", "a1", "a1", "a2", "a2"])
+    b = np.array(["b1", "b2", "b3", "b4", "b5"])
+    fam_a, fam_b = np.array(["x"] * 5), np.array(["y"] * 5)
+    gated = P.gate_scores(scores, np.array([1, 10, 3, 8, 0]), gate_days=7)
+    assert list(gated[:4]) == [0.9, 0.0, 0.85, 0.0] and np.isnan(
+        gated[4]
+    )  # beyond 7 days: settled as different
+    ranked = P.margin_scores(scores, a, b, fam_a, fam_b, margin=0.15)
+    assert list(ranked[:4]) == [
+        0.9,
+        0.0,
+        0.85,
+        0.95,
+    ]  # 0.6 loses to 0.9; 0.85 stays (several matches per source)
+    assert np.isnan(ranked[4])  # an unanswered pair is not turned into a verdict
+    assert P.margin_scores(scores, a, b, fam_a, fam_b, margin=0.0)[2] == 0.0  # margin 0 is one-to-one
+
+
+# -- the listwise decision call ------------------------------------------------------------------------------------
+def test_listwise_request_names_candidates_and_carries_no_ids():
+    anchor = _rec(
+        "emdat-event-1", "emdat", start="2023-10-07", country="AFG", title="Ground movement in Afghanistan"
+    )
+    cands = [
+        _rec("usgs-event-b", "usgs", start="2023-10-07", country="AFG", title="M 6.3 - Herat"),
+        _rec("usgs-event-c", "usgs", start="2023-10-11", country="AFG", title="M 6.3 - Herat"),
+    ]
+    request = P.listwise_request("typesafe/jev-1.14-20261014", anchor, cands)
+    assert set(request) == {"model", "state", "questions"}
+    assert list(request["state"]["candidates"]) == ["candidate_1", "candidate_2"]
+    assert [c["days_apart"] for c in request["state"]["candidates"].values()] == [0, 4]
+    q = request["questions"]
+    assert set(q) == {"same_candidate_1", "same_candidate_2", "best", "any_match"}
+    assert set(q["best"]["criteria"]) == {"candidate_1", "candidate_2"} and q["best"]["type"] == "choice"
+    text = json.dumps(request["state"])
+    assert "usgs-event-b" not in text and "emdat-event-1" not in text and "GH0101" not in text
+
+
+def test_parse_listwise_and_pair_scores_use_both_directions():
+    response = {
+        "answers": {
+            "same_candidate_1": {"type": "noul", "noul": 0.9},
+            "same_candidate_2": {"type": "noul", "noul": 0.2},
+            "best": {
+                "type": "choice",
+                "choice": "candidate_1",
+                "probabilities": {"candidate_1": 0.8, "candidate_2": 0.2},
+            },
+            "any_match": {"type": "noul", "noul": 0.95},
+        },
+        "model": "typesafe/jev-1.14-20261014",
+        "usage": {"cost": 0.00003},
+    }
+    parsed = P.parse_listwise(response, 2)
+    assert parsed["p_same"] == [0.9, 0.2] and parsed["best"] == [0.8, 0.2] and parsed["any_match"] == 0.95
+    refusal = {"answers": {"same_candidate_1": {"type": "refusal"}}}
+    assert P.parse_listwise(refusal, 2)["p_same"] == [None, None]
+    groups = [("a", ["b", "c"]), ("b", ["a"])]
+    results = [parsed, {"p_same": [0.7], "best": [0.6]}]
+    score, best = P.pair_scores_from_listwise(groups, results, [("a", "b"), ("a", "c"), ("b", "z")])
+    assert (
+        score[0] == pytest.approx(0.8) and score[1] == pytest.approx(0.2) and np.isnan(score[2])
+    )  # mean of directions
+    assert best[0] == pytest.approx(0.7)
+
+
+def test_listwise_groups_one_per_record_and_family_with_distractors_and_chunking():
+    recs = {i: _rec(i, s) for i, s in [("a", "emdat"), ("b", "usgs"), ("c", "usgs"), ("d", "gdacs")]}
+    groups = P.listwise_groups([("a", "b"), ("a", "c"), ("a", "d")], recs)
+    assert (
+        ("a", ["b", "c"]) in groups and ("a", ["d"]) in groups and ("b", ["a"]) in groups and len(groups) == 5
+    )
+    with_extra = P.listwise_groups([("a", "b")], recs, extra={("a", "usgs"): ["x"], ("zz", "usgs"): ["y"]})
+    assert ("a", ["b", "x"]) in with_extra  # distractors join an existing group only
+    chunked = P.listwise_groups([("a", "b"), ("a", "c")], recs, max_candidates=1)
+    assert [g for g in chunked if g[0] == "a"] == [("a", ["b"]), ("a", ["c"])]
+
+
+def test_choose_distractors_takes_the_closest_rivals_of_the_right_source():
+    anchor = _rec("emdat-event-1", "emdat", start="2024-10-27", country="ESP")
+    context = {
+        c.id: c
+        for c in [
+            _rec("usgs-near", "usgs", start="2024-10-27", country="ESP"),
+            _rec("usgs-mid", "usgs", start="2024-10-30", country="ESP"),
+            _rec("usgs-far", "usgs", start="2024-12-30", country="ESP"),  # beyond the gate
+            _rec("usgs-abroad", "usgs", start="2024-10-27", country="THA"),  # other country
+            _rec("gdacs-near", "gdacs", start="2024-10-27", country="ESP"),  # other source
+        ]
+    }
+    chosen = P.choose_distractors(
+        [("emdat-event-1", "usgs")], {anchor.id: anchor}, context, gate_days=7, per_group=5
+    )
+    assert chosen == {("emdat-event-1", "usgs"): ["usgs-near", "usgs-mid"]}
+    assert P.choose_distractors([("emdat-event-1", "usgs")], {anchor.id: anchor}, context, 7, 1)[
+        ("emdat-event-1", "usgs")
+    ] == ["usgs-near"]
+
+
+@responses.activate
+def test_score_listwise_calls_once_per_group_and_reports_failures():
+    recs = {i: _rec(i, s) for i, s in [("a", "emdat"), ("b", "usgs"), ("c", "usgs")]}
+    body = {
+        "answers": {
+            "same_candidate_1": {"type": "noul", "noul": 0.9},
+            "same_candidate_2": {"type": "noul", "noul": 0.1},
+            "best": {"type": "choice", "probabilities": {"candidate_1": 0.9, "candidate_2": 0.1}},
+        }
+    }
+    responses.add(responses.POST, P.DECISIONS_URL, status=200, json=body)
+    (res,) = P.score_listwise([("a", ["b", "c"])], recs, "typesafe/jev-1.14-20261014", "key", workers=1)
+    assert res["p_same"] == [0.9, 0.1] and len(responses.calls) == 1
+    sent = json.loads(responses.calls[0].request.body)
+    assert set(sent["questions"]) == {"same_candidate_1", "same_candidate_2", "best", "any_match"}
+    responses.reset()
+    responses.add(responses.POST, P.DECISIONS_URL, status=400, json={"error": {"code": 400}})
+    (failed,) = P.score_listwise([("a", ["b"])], recs, "typesafe/jev-1.14-20261014", "key", workers=1)
+    assert failed["p_same"] == [None] and "400" in failed["error"]
+
+
 # -- the template files -------------------------------------------------------------------------------------------
 def test_notebook_parameters_match_template_yml():
     nb = nbformat.read(TEMPLATE / "notebook.ipynb", as_version=4)
