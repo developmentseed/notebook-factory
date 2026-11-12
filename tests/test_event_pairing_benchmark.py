@@ -631,3 +631,18 @@ def test_same_source_links_join_one_disasters_country_records():
     assert events["idmc-idu-event-15605"] == events["idmc-gidd-event-15605"]
     assert events["gdacs-event-1000961-1"] == events["gdacs-event-1000961-9"]
     assert len(links) == 2 + 1 + 1
+
+
+def test_hazard_filters():
+    storm = _rec("s", "emdat", codes=("MH0301", "ST"))
+    flood = _rec("f", "gdacs", codes=("MH0600", "FL"))
+    quake = _rec("q", "usgs", codes=("GH0101", "EQ"))
+    blank = _rec("b", "glide", codes=())
+    assert P.passes_hazard_filter(storm, flood, "related") and not P.passes_hazard_filter(
+        storm, flood, "same"
+    )
+    assert P.passes_hazard_filter(quake, flood, "any")
+    assert not P.passes_hazard_filter(quake, flood, "related") and not P.passes_hazard_filter(
+        quake, flood, "same"
+    )
+    assert all(P.passes_hazard_filter(quake, blank, f) for f in P.HAZARD_FILTERS)

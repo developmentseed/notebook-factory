@@ -348,6 +348,21 @@ def hazard_relation(a: Record, b: Record) -> str:
     return "different"
 
 
+# Candidate filters by hazard: which `hazard_relation` values a pair may have to be asked about at all.
+# "any" asks about every pair; "related" adds hazards that often occur together (a cyclone and its floods);
+# "same" keeps one hazard family only. Records with missing codes always pass.
+HAZARD_FILTERS: dict[str, set[str] | None] = {
+    "any": None,
+    "related": {"same", "cluster", "cascade", "unknown"},
+    "same": {"same", "cluster", "unknown"},
+}
+
+
+def passes_hazard_filter(a: Record, b: Record, name: str) -> bool:
+    allowed = HAZARD_FILTERS[name]
+    return allowed is None or hazard_relation(a, b) in allowed
+
+
 FEATURES = (
     "time", "gap_log", "near", "no_geo", "time_x_near", "one_coarse", "both_coarse",
     "same_undrr", "same_cluster", "cascade", "text_overlap", "mag_known", "mag_diff",
