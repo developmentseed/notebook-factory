@@ -256,13 +256,26 @@ def heuristic_score(anchor: Record, cand: Record) -> float:
 
 
 # -- stage 1: candidates ---------------------------------------------------------------------------------
+def within_radius(a: Record, b: Record) -> bool:
+    """The two records' points are within the pair's radius (the anchor's hazard radius; 1,500 km at least
+    when one record is only located at country level). False when either has no point."""
+    anchor, cand = pair_anchor(a, b)
+    km = proximity(anchor, cand)[3]
+    if km is None:
+        return False
+    radius = window(anchor)[1]
+    return km <= (max(radius, COARSE_RADIUS_KM) if anchor.coarse or cand.coarse else radius)
+
+
 def block(a: Record, b: Record, block_days: float) -> str:
     """ "ok" when the pair is a candidate, else the reason it is not: "country" or "time".
 
+    Records naming different countries are still candidates when they lie within the pair's radius: a
+    cyclone or an earthquake crosses borders, and one disaster has a record per country in EM-DAT and GLIDE.
     An unknown country (UNK or none) never blocks: upstream sources do mislabel countries.
     """
     ca, cb = set(a.countries) - {UNKNOWN_COUNTRY}, set(b.countries) - {UNKNOWN_COUNTRY}
-    if ca and cb and not ca & cb:
+    if ca and cb and not ca & cb and not within_radius(a, b):
         return "country"
     if gap_days(a, b, by_day=True) > block_days:
         return "time"
@@ -415,31 +428,40 @@ def build_pairs(records: dict[str, Record], gold: dict, block_days: float) -> li
 
 
 # -- metrics ---------------------------------------------------------------------------------------------------
-def pr_curve(y: np.ndarray, s: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """(thresholds high to low, precision, recall), one point per distinct score (ties stay together)."""
+def _weights(y: np.ndarray, w: np.ndarray | None) -> np.ndarray:
+    return np.ones(len(y)) if w is None else np.asarray(w, dtype=float)
+
+
+def pr_curve(
+    y: np.ndarray, s: np.ndarray, w: np.ndarray | None = None
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """(thresholds high to low, precision, recall), one point per distinct score (ties stay together).
+    `w` weighs each pair (see `pair_weights`); none means every pair counts once."""
     y, s = np.asarray(y), np.asarray(s, dtype=float)
+    w = _weights(y, w)
     thr = np.unique(s)[::-1]
     pred = s[None, :] >= thr[:, None]
-    tp = (pred & (y[None, :] == 1)).sum(axis=1)
-    return thr, tp / pred.sum(axis=1), tp / max(int(y.sum()), 1)
+    tp = (pred * (w * (y == 1))[None, :]).sum(axis=1)
+    return thr, tp / (pred * w[None, :]).sum(axis=1), tp / (float((w * (y == 1)).sum()) or 1.0)
 
 
-def average_precision(y: np.ndarray, s: np.ndarray) -> float:
-    _, precision, recall = pr_curve(y, s)
+def average_precision(y: np.ndarray, s: np.ndarray, w: np.ndarray | None = None) -> float:
+    _, precision, recall = pr_curve(y, s, w)
     return float(np.sum(np.diff(np.concatenate([[0.0], recall])) * precision))
 
 
-def prf(y: np.ndarray, pred: np.ndarray) -> tuple[float, float, float]:
+def prf(y: np.ndarray, pred: np.ndarray, w: np.ndarray | None = None) -> tuple[float, float, float]:
     y, pred = np.asarray(y).astype(bool), np.asarray(pred).astype(bool)
-    tp, fp, fn = int((pred & y).sum()), int((pred & ~y).sum()), int((~pred & y).sum())
+    w = _weights(y, w)
+    tp, fp, fn = float(w[pred & y].sum()), float(w[pred & ~y].sum()), float(w[~pred & y].sum())
     p = tp / (tp + fp) if tp + fp else 0.0
     r = tp / (tp + fn) if tp + fn else 0.0
     return p, r, (2 * p * r / (p + r) if p + r else 0.0)
 
 
-def best_f1(y: np.ndarray, s: np.ndarray) -> tuple[float, float]:
+def best_f1(y: np.ndarray, s: np.ndarray, w: np.ndarray | None = None) -> tuple[float, float]:
     """(threshold, F1) at the best threshold. Chosen on the data it is reported on, so optimistic."""
-    thr, precision, recall = pr_curve(y, s)
+    thr, precision, recall = pr_curve(y, s, w)
     with np.errstate(invalid="ignore", divide="ignore"):
         f1 = np.where(precision + recall > 0, 2 * precision * recall / (precision + recall), 0.0)
     i = int(np.argmax(f1))
@@ -555,16 +577,26 @@ QUESTIONS = {
 }
 
 
+# What a person labelling the records also looks at: the magnitude and the end date. False reproduces the
+# first runs, which sent neither.
+DESCRIBE_DETAIL = True
+
+
 def describe(rec: Record) -> dict:
     """What the model reads about one record: words and facts, no ids and no codes."""
-    return {
+    out = {
         "kind": SOURCE_LABELS.get(rec.family, rec.family),
         "title": rec.title,
         "description": rec.text[:400],
         "hazard": HAZARD_LABELS.get(rec.glide, "unknown"),
         "starts": rec.start.date().isoformat() if rec.start else "unknown",
-        "countries": [c for c in rec.countries if c != UNKNOWN_COUNTRY] or ["unknown"],
     }
+    if DESCRIBE_DETAIL:
+        out["ends"] = rec.end.date().isoformat() if rec.end else out["starts"]
+        if rec.magnitude is not None:
+            out["magnitude"] = rec.magnitude
+    out["countries"] = [c for c in rec.countries if c != UNKNOWN_COUNTRY] or ["unknown"]
+    return out
 
 
 def decision_request(model: str, a: Record, b: Record) -> dict:
@@ -863,3 +895,136 @@ def choose_distractors(
         rivals.sort(key=lambda c: (gap_days(anchor, c, by_day=True), c.id))
         out[(anchor_id, family)] = [c.id for c in rivals[:per_group]]
     return out
+
+
+# -- scope: destructive events ------------------------------------------------------------------------------
+# Sources that record a disaster only when it hurt people or property: registers, response operations,
+# displacement figures and damage maps. A pair is in scope when at least one record comes from them; a
+# small offshore quake that only USGS and GDACS report needs no pairing.
+IMPACT_SOURCES = frozenset({"emdat", "glide", "ifrcevent", "idmc", "desinventar", "cems", "charter"})
+
+
+def destructive(rec: Record) -> bool:
+    return rec.family in IMPACT_SOURCES
+
+
+# -- duplicates, uncertainty and confidence ------------------------------------------------------------------
+def copy_counts(records: dict[str, Record], label: dict[str, str]) -> dict[str, int]:
+    """How many identical copies each record has in its disaster: same source family, title and dates.
+
+    IDMC publishes one record twice (IDU and GIDD) and DesInventar repeats rows, so without weights their
+    pairs count two to four times.
+    """
+
+    def key(r: Record) -> tuple:
+        return (label.get(r.id), r.family, r.title, r.start and r.start.date(), r.end and r.end.date())
+
+    counts: dict[tuple, int] = {}
+    for r in records.values():
+        counts[key(r)] = counts.get(key(r), 0) + 1
+    return {i: counts[key(r)] for i, r in records.items()}
+
+
+def pair_weights(a, b, copies: dict[str, int]) -> np.ndarray:
+    """1 / (copies of a x copies of b): a pair repeated through identical copies counts once in all."""
+    return np.array([1.0 / (copies[x] * copies[y]) for x, y in zip(a, b, strict=True)])
+
+
+def bootstrap_f1(
+    y: np.ndarray,
+    scores: dict[str, tuple[np.ndarray, float]],
+    groups: np.ndarray,
+    w: np.ndarray | None = None,
+    n: int = 1000,
+    seed: int = 0,
+) -> dict[str, np.ndarray]:
+    """{scorer: n F1 values} over resamples of whole windows, at each scorer's threshold.
+
+    Pairs inside a window share records, so windows, not pairs, are resampled. Every scorer sees the same
+    resamples, so the difference of two scorers' samples gives a paired interval for the difference.
+    """
+    y, groups, w = np.asarray(y), np.asarray(groups), _weights(y, w)
+    rng = np.random.default_rng(seed)
+    windows = np.unique(groups)
+    rows = {g: np.flatnonzero(groups == g) for g in windows}
+    out = {name: np.empty(n) for name in scores}
+    for i in range(n):
+        take = np.concatenate([rows[g] for g in rng.choice(windows, len(windows))])
+        for name, (s, thr) in scores.items():
+            s = np.asarray(s, dtype=float)
+            t = take[~np.isnan(s[take])]
+            out[name][i] = prf(y[t], s[t] >= thr, w[t])[2]
+    return out
+
+
+def interval(samples: np.ndarray, level: float = 0.95) -> tuple[float, float]:
+    lo, hi = np.quantile(samples, [(1 - level) / 2, (1 + level) / 2])
+    return float(lo), float(hi)
+
+
+def calibration_table(y: np.ndarray, p: np.ndarray, bins: int = 5, w: np.ndarray | None = None) -> list[dict]:
+    """Per probability bin: pairs, mean predicted P(same) and the share that really is the same disaster.
+    A calibrated scorer has the two close, which is what a stored link confidence needs."""
+    y, p, w = np.asarray(y, dtype=float), np.asarray(p, dtype=float), _weights(y, w)
+    ok = ~np.isnan(p)
+    edges = np.linspace(0, 1, bins + 1)
+    which = np.clip(np.digitize(p, edges[1:-1]), 0, bins - 1)
+    rows = []
+    for k in range(bins):
+        m = ok & (which == k)
+        if m.any():
+            rows.append({
+                "P(same) bin": f"{edges[k]:.1f}-{edges[k + 1]:.1f}",
+                "pairs": int(m.sum()),
+                "mean P(same)": float(np.average(p[m], weights=w[m])),
+                "share same": float(np.average(y[m], weights=w[m])),
+            })  # fmt: skip
+    return rows
+
+
+def brier(y: np.ndarray, p: np.ndarray, w: np.ndarray | None = None) -> float:
+    """Mean squared error of P(same) against the label (0 is perfect, 0.25 is a coin flip)."""
+    y, p, w = np.asarray(y, dtype=float), np.asarray(p, dtype=float), _weights(y, w)
+    ok = ~np.isnan(p)
+    return float(np.average((p[ok] - y[ok]) ** 2, weights=w[ok]))
+
+
+# -- from pairs to events -----------------------------------------------------------------------------------
+def assemble_events(ids, a, b, scores, thr: float) -> dict[str, int]:
+    """{record id: event number}: the connected groups of records joined by pairs scored at or above `thr`."""
+    parent = {i: i for i in ids}
+
+    def root(x: str) -> str:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for x, y, s in zip(a, b, scores, strict=True):
+        if s is not None and not np.isnan(s) and s >= thr:
+            parent[root(x)] = root(y)
+    numbers: dict[str, int] = {}
+    return {i: numbers.setdefault(root(i), len(numbers)) for i in sorted(parent)}
+
+
+def bcubed(event_of: dict[str, int], label: dict[str, str]) -> tuple[float, float, float]:
+    """B-cubed (precision, recall, F1) of assembled events against the gold disasters, averaged per record.
+
+    Precision: of the records grouped with a record, the share from its disaster. Recall: of its disaster's
+    records, the share grouped with it.
+    """
+    ids = [i for i in event_of if i in label]
+    if not ids:
+        return 0.0, 0.0, 0.0
+    by_event: dict[int, set[str]] = {}
+    by_label: dict[str, set[str]] = {}
+    for i in ids:
+        by_event.setdefault(event_of[i], set()).add(i)
+        by_label.setdefault(label[i], set()).add(i)
+    p = float(
+        np.mean([len(by_event[event_of[i]] & by_label[label[i]]) / len(by_event[event_of[i]]) for i in ids])
+    )
+    r = float(
+        np.mean([len(by_event[event_of[i]] & by_label[label[i]]) / len(by_label[label[i]]) for i in ids])
+    )
+    return p, r, (2 * p * r / (p + r) if p + r else 0.0)

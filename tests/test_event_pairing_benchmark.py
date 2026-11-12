@@ -88,7 +88,12 @@ def test_collection_of():
 # -- candidates and pairs -------------------------------------------------------------------------------
 def test_blocking_uses_country_and_time_and_ignores_unknown_country():
     a = _rec("a", country="MMR")
-    assert P.block(a, _rec("b", country="THA"), 45) == "country"
+    assert P.block(a, _rec("b", country="CHL", point=(-70.6, -33.4)), 45) == "country"
+    # across a border, 230 km away
+    assert P.block(a, _rec("f", country="THA", point=(97.5, 20.5)), 45) == "ok"
+    coarse_abroad = _rec("g", "emdat", country="THA", point=(100.9, 15.1))  # country centroid, 900 km away
+    assert P.block(a, coarse_abroad, 45) == "ok"  # a country-level record is located loosely
+    assert P.block(a, _rec("h", country="THA", point=None), 45) == "country"  # no point: the country decides
     assert P.block(a, _rec("c", start="2025-06-01"), 45) == "time"
     assert P.block(a, _rec("d", start="2025-03-30"), 45) == "ok"
     assert P.block(a, _rec("e", country="UNK"), 45) == "ok"  # a mislabelled country must not drop a match
@@ -353,7 +358,7 @@ def test_choose_distractors_takes_the_closest_rivals_of_the_right_source():
             _rec("usgs-near", "usgs", start="2024-10-27", country="ESP"),
             _rec("usgs-mid", "usgs", start="2024-10-30", country="ESP"),
             _rec("usgs-far", "usgs", start="2024-12-30", country="ESP"),  # beyond the gate
-            _rec("usgs-abroad", "usgs", start="2024-10-27", country="THA"),  # other country
+            _rec("usgs-abroad", "usgs", start="2024-10-27", country="CHL", point=(-70.6, -33.4)),
             _rec("gdacs-near", "gdacs", start="2024-10-27", country="ESP"),  # other source
         ]
     }
@@ -395,3 +400,206 @@ def test_notebook_parameters_match_template_yml():
     names = {t.targets[0].id for t in ast.parse(cell.source).body if isinstance(t, ast.Assign)}
     assert names - set(RESERVED_PARAMETERS) == set(meta["parameters"]["properties"])
     assert meta["secrets"] == ["OPENROUTER_API_KEY"] and meta["requires_stac_item"] is True
+
+
+# -- gold set against the sources' own references (offline snapshot) ------------------------------------------
+GOLD_CHECKS = json.loads(
+    (Path(__file__).resolve().parent / "fixtures" / "event_pairing" / "gold_checks.json").read_text()
+)
+
+
+def _gold():
+    gold = yaml.safe_load((TEMPLATE / "gold_disasters.yml").read_text())
+    return gold, P.gold_labels(gold)[0]
+
+
+def test_gold_agrees_with_the_usgs_and_glide_references_gdacs_publishes():
+    _, label = _gold()
+    glide_members = {
+        i.removeprefix("glide-event-"): d for i, d in label.items() if i.startswith("glide-event-")
+    }
+    checked = 0
+    for gdacs_id, ref in GOLD_CHECKS["gdacs_refs"].items():
+        if gdacs_id not in label:
+            continue
+        usgs = f"usgs-event-{ref['usgs']}"
+        if ref["usgs"] and usgs in label:
+            assert label[usgs] == label[gdacs_id], (gdacs_id, usgs)
+            checked += 1
+        if ref["glide"] in glide_members:
+            assert glide_members[ref["glide"]] == label[gdacs_id], (gdacs_id, ref["glide"])
+            checked += 1
+    assert checked >= 15
+
+
+def test_each_earthquake_disaster_holds_its_largest_shock():
+    """The Tohoku error: a member alert that was an aftershock while the mainshock was left out."""
+    _, label = _gold()
+
+    def event(item_id: str) -> str:  # GDACS repeats an event once per episode
+        return item_id.rsplit("-", 1)[0] if item_id.startswith("gdacs-") else item_id
+
+    for disaster, shocks in GOLD_CHECKS["largest_shocks"].items():
+        members = {event(i) for i, d in label.items() if d == disaster}
+        for source in ("usgs", "gdacs"):
+            rows = [s for s in shocks if s["source"] == source]
+            if not rows or not any(event(i) in members for i in (s["id"] for s in rows)):
+                continue  # the disaster has no member from this source
+            top = max(s["magnitude"] for s in rows)
+            assert members & {event(s["id"]) for s in rows if s["magnitude"] == top}, (disaster, source, top)
+
+
+def test_gold_spans_countries():
+    gold, label = _gold()
+    countries = {
+        d["id"]: {i.rsplit("-", 1)[1] for i in d["members"] if i.startswith("emdat-event-")}
+        for d in gold["disasters"]
+    }
+    assert sum(len(c) > 1 for c in countries.values()) >= 4  # Türkiye/Syria, Freddy, Melissa, Haiyan
+
+
+# -- scope, weights, uncertainty, confidence, events ----------------------------------------------------------
+def test_destructive_means_a_record_from_an_impact_source():
+    assert P.destructive(_rec("e", "emdat")) and P.destructive(_rec("i", "idmc-gidd"))
+    assert not P.destructive(_rec("u", "usgs")) and not P.destructive(_rec("g", "gdacs"))
+
+
+def test_copies_are_weighted_so_a_duplicated_pair_counts_once():
+    recs = {
+        "idmc-idu-event-1": _rec("idmc-idu-event-1", "idmc-idu", title="Flood - X"),
+        "idmc-gidd-event-1": _rec("idmc-gidd-event-1", "idmc-gidd", title="Flood - X"),
+        "usgs-1": _rec("usgs-1"),
+    }
+    label = dict.fromkeys(recs, "d")
+    copies = P.copy_counts(recs, label)
+    assert copies == {"idmc-idu-event-1": 2, "idmc-gidd-event-1": 2, "usgs-1": 1}
+    w = P.pair_weights(["idmc-idu-event-1", "idmc-gidd-event-1"], ["usgs-1", "usgs-1"], copies)
+    assert w.tolist() == [0.5, 0.5]
+    y, pred = np.array([1, 1, 0]), np.array([True, False, True])
+    assert P.prf(y, pred) == P.prf(y, pred, np.ones(3))
+    assert P.prf(y, pred, np.array([1.0, 0.0, 1.0]))[1] == 1.0  # the missed pair weighs nothing
+    assert P.average_precision(y, np.array([0.9, 0.1, 0.5]), np.ones(3)) == P.average_precision(
+        y, np.array([0.9, 0.1, 0.5])
+    )
+
+
+def test_bootstrap_resamples_windows_and_pairs_scorers():
+    y = np.array([1, 1, 0, 0, 1, 0, 1, 0])
+    groups = np.array(["a", "a", "a", "b", "b", "c", "c", "c"])
+    good, coin = y.astype(float), np.array([0.9, 0.2, 0.8, 0.1, 0.6, 0.7, 0.3, 0.4])
+    samples = P.bootstrap_f1(
+        y, {"good": (good, 0.5), "coin": (coin, 0.5), "same": (good, 0.5)}, groups, n=200
+    )
+    assert np.all(samples["good"] == 1.0)
+    assert np.all(samples["good"] - samples["same"] == 0)  # identical scorers, identical resamples
+    lo, hi = P.interval(samples["coin"])
+    assert 0 <= lo <= P.prf(y, coin >= 0.5)[2] <= hi <= 1
+    again = P.bootstrap_f1(y, {"coin": (coin, 0.5)}, groups, n=200)
+    assert np.array_equal(again["coin"], samples["coin"])  # seeded
+
+
+def test_calibration_table_and_brier():
+    y = np.array([1, 1, 0, 0])
+    assert P.brier(y, y.astype(float)) == 0.0
+    assert P.brier(y, np.full(4, 0.5)) == 0.25
+    assert P.brier(y, np.array([1.0, np.nan, 0.0, 0.0])) == 0.0  # unanswered pairs are left out
+    rows = P.calibration_table(y, np.array([0.95, 0.85, 0.05, 0.15]), bins=5)
+    assert [r["pairs"] for r in rows] == [2, 2]
+    assert rows[0]["share same"] == 0.0 and rows[-1]["share same"] == 1.0
+
+
+def test_assemble_events_and_bcubed():
+    ids = ["a", "b", "c", "d", "e"]
+    a, b, s = ["a", "b", "c", "d"], ["b", "c", "d", "e"], [0.9, 0.2, 0.8, np.nan]
+    events = P.assemble_events(ids, a, b, s, 0.5)
+    assert events["a"] == events["b"] and events["c"] == events["d"] and events["a"] != events["c"]
+    assert len(set(events.values())) == 3  # e stays alone
+    gold = {"a": "x", "b": "x", "c": "y", "d": "y", "e": "y"}
+    p, r, _ = P.bcubed(events, gold)
+    assert p == 1.0 and r == pytest.approx((1 + 1 + 2 / 3 + 2 / 3 + 1 / 3) / 5)
+    merged = P.assemble_events(ids, a, b, [0.9, 0.9, 0.9, 0.9], 0.5)
+    assert P.bcubed(merged, gold)[1] == 1.0 and P.bcubed(merged, gold)[0] < 1.0
+
+
+def test_describe_adds_magnitude_and_end_date_but_still_no_ids(monkeypatch):
+    rec = _rec(
+        "usgs-event-us7000pn9s",
+        magnitude=7.7,
+        title="M 7.7 - Mandalay",
+        corr_id="20250328-MMR-1-GH0101-1-GCDB",
+    )
+    d = P.describe(rec)
+    assert d["magnitude"] == 7.7 and d["ends"] == "2025-03-28"
+    assert "us7000pn9s" not in json.dumps(d) and "GH0101" not in json.dumps(d)
+    monkeypatch.setattr(P, "DESCRIBE_DETAIL", False)
+    assert "magnitude" not in P.describe(rec) and "ends" not in P.describe(rec)
+
+
+# -- the silver set builder ---------------------------------------------------------------------------------
+_bs_spec = importlib.util.spec_from_file_location("build_silver", TEMPLATE / "build_silver.py")
+BS = importlib.util.module_from_spec(_bs_spec)
+_bs_spec.loader.exec_module(BS)
+
+
+@responses.activate
+def test_gdacs_refs_reads_the_usgs_event_and_glide_number():
+    responses.get(
+        f"{BS.GDACS_API}/geteventdata",
+        json={
+            "properties": {
+                "sourceid": "us7000kufc",
+                "glide": "EQ-2023-000166-MAR",
+                "alertlevel": "Red",
+                "source": "NEIC",
+            }
+        },
+    )
+    assert BS.gdacs_refs("EQ", 1390643) == {
+        "sourceid": "us7000kufc", "glide": "EQ-2023-000166-MAR", "alertlevel": "Red", "source": "NEIC",
+    }  # fmt: skip
+    assert "eventid=1390643" in responses.calls[0].request.url
+
+
+def test_silver_from_events_uses_source_references_and_drops_shared_glide_numbers():
+    events = [
+        {"eventid": 1, "eventtype": "EQ", "name": "Earthquake in Morocco", "fromdate": "2023-09-08T22:11:02",
+         "countries": ["MAR"], "glide": "EQ-2023-000166-MAR", "sourceid": "us7000kufc"},
+        {"eventid": 2, "eventtype": "EQ", "name": "Earthquake in Morocco", "fromdate": "2023-09-20T00:00:00",
+         "countries": ["MAR"], "glide": "EQ-2023-000170-MAR", "sourceid": "us7000zzzz"},
+        {"eventid": 3, "eventtype": "TC", "name": "Saola", "fromdate": "2023-08-23T18:00:00",
+         "countries": ["CHN"], "glide": "TC-2023-000164-CHN", "sourceid": ""},
+        {"eventid": 4, "eventtype": "TC", "name": "Haikui", "fromdate": "2023-08-28T12:00:00",
+         "countries": ["CHN"], "glide": "TC-2023-000164-CHN", "sourceid": ""},
+    ]  # fmt: skip
+    found = {
+        "gdacs:1": ["gdacs-event-1-10"], "usgs:us7000kufc": ["usgs-event-us7000kufc"],
+        "glide:EQ-2023-000166": ["glide-event-EQ-2023-000166-MAR"],
+        "gdacs:2": ["gdacs-event-2-20"], "glide:EQ-2023-000170": ["glide-event-EQ-2023-000170-MAR"],
+        "gdacs:3": ["gdacs-event-3-1"], "gdacs:4": ["gdacs-event-4-1"],
+        "glide:TC-2023-000164": ["glide-event-TC-2023-000164-CHN", "glide-event-TC-2023-000164-PHL"],
+    }  # fmt: skip
+    silver = BS.silver_from_events(events, found)
+    by_id = {d["id"]: d for d in silver["disasters"]}
+    assert by_id["gdacs-EQ-1"]["members"] == [
+        "gdacs-event-1-10",
+        "usgs-event-us7000kufc",
+        "glide-event-EQ-2023-000166-MAR",
+    ]
+    assert by_id["gdacs-EQ-2"]["members"] == ["gdacs-event-2-20", "glide-event-EQ-2023-000170-MAR"]
+    assert (
+        "gdacs-TC-3" not in by_id and "gdacs-TC-4" not in by_id
+    )  # one GLIDE number for two storms: left out
+    assert by_id["gdacs-EQ-1"]["window"] == by_id["gdacs-EQ-2"]["window"]  # same country, 12 days apart
+    assert BS.glide_number("TC-2023-000164-CHN") == ("TC", "2023-000164")
+    label, windows, _ = P.gold_labels(silver)
+    assert label["glide-event-EQ-2023-000170-MAR"] == "gdacs-EQ-2"
+
+
+def test_silver_file_is_well_formed_when_present():
+    path = TEMPLATE / "silver_disasters.yml"
+    if not path.exists():
+        pytest.skip("silver_disasters.yml not built")
+    silver = yaml.safe_load(path.read_text())
+    ids = [m for d in silver["disasters"] for m in d["members"]]
+    assert len(ids) == len(set(ids)) and all(len(d["members"]) >= 2 for d in silver["disasters"])
+    assert all(P.collection_of(i).endswith("-events") for i in ids)

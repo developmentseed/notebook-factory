@@ -1,0 +1,1016 @@
+{
+ "_note": "Snapshot of 2026-11-12. gdacs_refs: USGS event and GLIDE number GDACS cites for each gold/ambiguous GDACS record (GDACS API). largest_shocks: USGS/GDACS shocks of M6+ within 3 degrees and on the days of each earthquake disaster's precise members (Montandon).",
+ "gdacs_refs": {
+  "gdacs-event-1000961-1": {
+   "glide": "TC-2023-000023-MDG",
+   "usgs": ""
+  },
+  "gdacs-event-104563-104563": {
+   "glide": "",
+   "usgs": ""
+  },
+  "gdacs-event-104706-105456": {
+   "glide": "EQ-2011-000028-JPN",
+   "usgs": ""
+  },
+  "gdacs-event-104721-104721": {
+   "glide": "",
+   "usgs": ""
+  },
+  "gdacs-event-104722-104722": {
+   "glide": "",
+   "usgs": ""
+  },
+  "gdacs-event-1101856-1": {
+   "glide": "",
+   "usgs": ""
+  },
+  "gdacs-event-1101890-1": {
+   "glide": "FL-2023-000037-MWI",
+   "usgs": ""
+  },
+  "gdacs-event-1102204-1": {
+   "glide": "FL-2023-000170-LBY",
+   "usgs": ""
+  },
+  "gdacs-event-1102983-1": {
+   "glide": "FL-2024-000199-ESP",
+   "usgs": ""
+  },
+  "gdacs-event-1103585-1": {
+   "glide": "FL-2025-000201-CUB",
+   "usgs": ""
+  },
+  "gdacs-event-1103586-1": {
+   "glide": "",
+   "usgs": ""
+  },
+  "gdacs-event-1103587-1": {
+   "glide": "",
+   "usgs": ""
+  },
+  "gdacs-event-1357372-1487094": {
+   "glide": "EQ-2023-000015-TUR",
+   "usgs": "us6000jllz"
+  },
+  "gdacs-event-1357560-1487318": {
+   "glide": "EQ-2023-000015-TUR",
+   "usgs": "us6000jlqa"
+  },
+  "gdacs-event-1360964-1491088": {
+   "glide": "EQ-2023-000024-TUR",
+   "usgs": "us6000jqcn"
+  },
+  "gdacs-event-1390643-1524325": {
+   "glide": "EQ-2023-000166-MAR",
+   "usgs": "us7000kufc"
+  },
+  "gdacs-event-1394952-1529349": {
+   "glide": "EQ-2023-000184-AFG",
+   "usgs": "us6000ldpg"
+  },
+  "gdacs-event-1394958-1529359": {
+   "glide": "EQ-2023-000184-AFG",
+   "usgs": "us6000ldpm"
+  },
+  "gdacs-event-1395488-1529996": {
+   "glide": "EQ-2023-000188-AFG",
+   "usgs": "us6000len8"
+  },
+  "gdacs-event-1396085-1530682": {
+   "glide": "EQ-2023-000195-AFG",
+   "usgs": "us6000lfn5"
+  },
+  "gdacs-event-1474477-1630564": {
+   "glide": "",
+   "usgs": "us7000pn9s"
+  },
+  "gdacs-event-1474479-1630686": {
+   "glide": "EQ-2025-000043-MMR",
+   "usgs": "us7000pn9z"
+  },
+  "gdacs-event-1477002-1633419": {
+   "glide": "EQ-2025-000048-MMR",
+   "usgs": "us6000q5ps"
+  },
+  "gdacs-event-1498339-1658520": {
+   "glide": "EQ-2025-000153-AFG",
+   "usgs": "us7000qsvj"
+  },
+  "gdacs-event-1498907-1658856": {
+   "glide": "EQ-2025-000156-AFG",
+   "usgs": "us7000qtst"
+  },
+  "gdacs-event-1499045-1659016": {
+   "glide": "EQ-2025-000159-AFG",
+   "usgs": "us7000qu8p"
+  },
+  "gdacs-event-1502713-1663303": {
+   "glide": "EQ-2025-000181-PHL",
+   "usgs": "us6000rdrz"
+  },
+  "gdacs-event-1504268-1665060": {
+   "glide": "EQ-2025-000189-PHL",
+   "usgs": "us6000rfwz"
+  },
+  "gdacs-event-1504359-1665174": {
+   "glide": "EQ-2025-000189-PHL",
+   "usgs": "us6000rg2r"
+  },
+  "gdacs-event-1505544-1666538": {
+   "glide": "",
+   "usgs": "us6000rhns"
+  },
+  "gdacs-event-1548377-1714321": {
+   "glide": "",
+   "usgs": "us6000t7zp"
+  },
+  "gdacs-event-3787-1": {
+   "glide": "",
+   "usgs": ""
+  },
+  "gdacs-event-4100-2": {
+   "glide": "",
+   "usgs": ""
+  },
+  "gdacs-event-4103-2": {
+   "glide": "",
+   "usgs": ""
+  },
+  "gdacs-event-72807-72972": {
+   "glide": "EQ-2010-000009-HTI",
+   "usgs": "usp000h60h"
+  },
+  "gdacs-event-9059-9059": {
+   "glide": "TS-2004-000147-IDN",
+   "usgs": ""
+  }
+ },
+ "largest_shocks": {
+  "afg-2023-10-07": [
+   {
+    "id": "gdacs-event-1394952-1529349",
+    "magnitude": 6.3,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-1394952-1529360",
+    "magnitude": 6.3,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-1394958-1529359",
+    "magnitude": 6.3,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-1394958-1529364",
+    "magnitude": 6.3,
+    "source": "gdacs"
+   },
+   {
+    "id": "usgs-event-us6000ldpg",
+    "magnitude": 6.3,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-us6000ldpm",
+    "magnitude": 6.3,
+    "source": "usgs"
+   }
+  ],
+  "afg-2023-10-11": [
+   {
+    "id": "gdacs-event-1395488-1529996",
+    "magnitude": 6.3,
+    "source": "gdacs"
+   },
+   {
+    "id": "usgs-event-us6000len8",
+    "magnitude": 6.3,
+    "source": "usgs"
+   }
+  ],
+  "afg-2023-10-15": [
+   {
+    "id": "gdacs-event-1396085-1530682",
+    "magnitude": 6.3,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-1396085-1530685",
+    "magnitude": 6.3,
+    "source": "gdacs"
+   },
+   {
+    "id": "usgs-event-us6000lfn5",
+    "magnitude": 6.3,
+    "source": "usgs"
+   }
+  ],
+  "afg-2025-08-31": [
+   {
+    "id": "gdacs-event-1498339-1658191",
+    "magnitude": 6.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-1498339-1658195",
+    "magnitude": 6.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-1498339-1658520",
+    "magnitude": 6.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "usgs-event-us7000qsvj",
+    "magnitude": 6.0,
+    "source": "usgs"
+   }
+  ],
+  "hti-2010-01-12": [
+   {
+    "id": "gdacs-event-72807-72807",
+    "magnitude": 7.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-72807-72808",
+    "magnitude": 7.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-72807-72809",
+    "magnitude": 7.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-72807-72812",
+    "magnitude": 7.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-72807-72936",
+    "magnitude": 7.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-72807-72972",
+    "magnitude": 7.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "usgs-event-usp000h60h",
+    "magnitude": 7.0,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000h60j",
+    "magnitude": 6.0,
+    "source": "usgs"
+   }
+  ],
+  "idn-2004-12-26": [
+   {
+    "id": "usgs-event-official20041226005853450_30",
+    "magnitude": 9.1,
+    "source": "usgs"
+   },
+   {
+    "id": "gdacs-event-9059-9059",
+    "magnitude": 8.5,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-9085-9085",
+    "magnitude": 6.2,
+    "source": "gdacs"
+   },
+   {
+    "id": "usgs-event-usp000dbej",
+    "magnitude": 6.1,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000dbnq",
+    "magnitude": 6.1,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000dbku",
+    "magnitude": 6.0,
+    "source": "usgs"
+   }
+  ],
+  "jpn-2011-03-11": [
+   {
+    "id": "usgs-event-official20110311054624120_30",
+    "magnitude": 9.1,
+    "source": "usgs"
+   },
+   {
+    "id": "gdacs-event-104706-104706",
+    "magnitude": 9.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104706-104707",
+    "magnitude": 9.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104706-104708",
+    "magnitude": 9.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104706-104709",
+    "magnitude": 9.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104706-104710",
+    "magnitude": 9.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104706-104712",
+    "magnitude": 9.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104706-104714",
+    "magnitude": 9.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104706-104715",
+    "magnitude": 9.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104706-104716",
+    "magnitude": 9.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104706-104717",
+    "magnitude": 9.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104706-104723",
+    "magnitude": 9.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104706-105456",
+    "magnitude": 9.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104722-104722",
+    "magnitude": 7.9,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104722-104766",
+    "magnitude": 7.9,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104722-104800",
+    "magnitude": 7.9,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104722-105627",
+    "magnitude": 7.9,
+    "source": "gdacs"
+   },
+   {
+    "id": "usgs-event-usp000hvpa",
+    "magnitude": 7.9,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvpg",
+    "magnitude": 7.7,
+    "source": "usgs"
+   },
+   {
+    "id": "gdacs-event-104721-104721",
+    "magnitude": 7.2,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104721-104730",
+    "magnitude": 7.2,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104721-104731",
+    "magnitude": 7.2,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104721-104732",
+    "magnitude": 7.2,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104721-104733",
+    "magnitude": 7.2,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104721-104734",
+    "magnitude": 7.2,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104721-104765",
+    "magnitude": 7.2,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104718-104718",
+    "magnitude": 7.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104718-104719",
+    "magnitude": 7.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104718-104767",
+    "magnitude": 7.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104735-104735",
+    "magnitude": 6.8,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104735-104736",
+    "magnitude": 6.8,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104735-104737",
+    "magnitude": 6.8,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104735-104758",
+    "magnitude": 6.8,
+    "source": "gdacs"
+   },
+   {
+    "id": "usgs-event-usp000hvp5",
+    "magnitude": 6.7,
+    "source": "usgs"
+   },
+   {
+    "id": "gdacs-event-104738-104738",
+    "magnitude": 6.6,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104738-104740",
+    "magnitude": 6.6,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104738-104757",
+    "magnitude": 6.6,
+    "source": "gdacs"
+   },
+   {
+    "id": "usgs-event-usp000hvpc",
+    "magnitude": 6.6,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvuu",
+    "magnitude": 6.6,
+    "source": "usgs"
+   },
+   {
+    "id": "gdacs-event-104753-104753",
+    "magnitude": 6.5,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104753-104775",
+    "magnitude": 6.5,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104753-104782",
+    "magnitude": 6.5,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104828-104828",
+    "magnitude": 6.5,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104828-104830",
+    "magnitude": 6.5,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104828-104836",
+    "magnitude": 6.5,
+    "source": "gdacs"
+   },
+   {
+    "id": "usgs-event-usp000hvpd",
+    "magnitude": 6.5,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvrd",
+    "magnitude": 6.5,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvnw",
+    "magnitude": 6.4,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvp4",
+    "magnitude": 6.4,
+    "source": "usgs"
+   },
+   {
+    "id": "gdacs-event-104957-104957",
+    "magnitude": 6.3,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104957-104958",
+    "magnitude": 6.3,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104957-104961",
+    "magnitude": 6.3,
+    "source": "gdacs"
+   },
+   {
+    "id": "usgs-event-usp000hvnv",
+    "magnitude": 6.3,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvnx",
+    "magnitude": 6.3,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvp3",
+    "magnitude": 6.3,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvp9",
+    "magnitude": 6.3,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvq4",
+    "magnitude": 6.3,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvqf",
+    "magnitude": 6.3,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvqm",
+    "magnitude": 6.3,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvy0",
+    "magnitude": 6.3,
+    "source": "usgs"
+   },
+   {
+    "id": "gdacs-event-104887-104887",
+    "magnitude": 6.2,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104887-104888",
+    "magnitude": 6.2,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104887-104892",
+    "magnitude": 6.2,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104887-104894",
+    "magnitude": 6.2,
+    "source": "gdacs"
+   },
+   {
+    "id": "usgs-event-usp000hvnz",
+    "magnitude": 6.2,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvp7",
+    "magnitude": 6.2,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvp8",
+    "magnitude": 6.2,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvpe",
+    "magnitude": 6.2,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvpf",
+    "magnitude": 6.2,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvpx",
+    "magnitude": 6.2,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvra",
+    "magnitude": 6.2,
+    "source": "usgs"
+   },
+   {
+    "id": "gdacs-event-104724-104724",
+    "magnitude": 6.1,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104724-104726",
+    "magnitude": 6.1,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104724-104728",
+    "magnitude": 6.1,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104724-104760",
+    "magnitude": 6.1,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104771-104771",
+    "magnitude": 6.1,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104771-104772",
+    "magnitude": 6.1,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104771-104779",
+    "magnitude": 6.1,
+    "source": "gdacs"
+   },
+   {
+    "id": "usgs-event-usp000hvph",
+    "magnitude": 6.1,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvpy",
+    "magnitude": 6.1,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvqj",
+    "magnitude": 6.1,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvqk",
+    "magnitude": 6.1,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvrb",
+    "magnitude": 6.1,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvre",
+    "magnitude": 6.1,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hw29",
+    "magnitude": 6.1,
+    "source": "usgs"
+   },
+   {
+    "id": "gdacs-event-104804-104806",
+    "magnitude": 6.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104804-104808",
+    "magnitude": 6.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104840-104840",
+    "magnitude": 6.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104840-104841",
+    "magnitude": 6.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-104840-104843",
+    "magnitude": 6.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "usgs-event-usp000hvq3",
+    "magnitude": 6.0,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvqn",
+    "magnitude": 6.0,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvrf",
+    "magnitude": 6.0,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvrg",
+    "magnitude": 6.0,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvrh",
+    "magnitude": 6.0,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvtb",
+    "magnitude": 6.0,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hvy2",
+    "magnitude": 6.0,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-usp000hw19",
+    "magnitude": 6.0,
+    "source": "usgs"
+   }
+  ],
+  "mar-2023-09-08": [
+   {
+    "id": "gdacs-event-1390643-1524325",
+    "magnitude": 6.8,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-1390643-1524529",
+    "magnitude": 6.8,
+    "source": "gdacs"
+   },
+   {
+    "id": "usgs-event-us7000kufc",
+    "magnitude": 6.8,
+    "source": "usgs"
+   }
+  ],
+  "mmr-2025-03-28": [
+   {
+    "id": "gdacs-event-1474477-1630564",
+    "magnitude": 7.7,
+    "source": "gdacs"
+   },
+   {
+    "id": "usgs-event-us7000pn9s",
+    "magnitude": 7.7,
+    "source": "usgs"
+   },
+   {
+    "id": "gdacs-event-1474479-1630569",
+    "magnitude": 6.7,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-1474479-1630686",
+    "magnitude": 6.7,
+    "source": "gdacs"
+   },
+   {
+    "id": "usgs-event-us7000pn9z",
+    "magnitude": 6.7,
+    "source": "usgs"
+   }
+  ],
+  "phl-2025-09-30": [
+   {
+    "id": "gdacs-event-1502713-1663303",
+    "magnitude": 6.9,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-1502713-1663305",
+    "magnitude": 6.9,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-1502713-1663312",
+    "magnitude": 6.9,
+    "source": "gdacs"
+   }
+  ],
+  "phl-2025-10-10": [
+   {
+    "id": "gdacs-event-1504268-1665060",
+    "magnitude": 7.4,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-1504268-1665061",
+    "magnitude": 7.4,
+    "source": "gdacs"
+   },
+   {
+    "id": "usgs-event-us6000rfwz",
+    "magnitude": 7.4,
+    "source": "usgs"
+   },
+   {
+    "id": "gdacs-event-1504359-1665174",
+    "magnitude": 6.7,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-1504359-1665175",
+    "magnitude": 6.7,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-1504359-1665176",
+    "magnitude": 6.7,
+    "source": "gdacs"
+   },
+   {
+    "id": "usgs-event-us6000rg2r",
+    "magnitude": 6.7,
+    "source": "usgs"
+   }
+  ],
+  "phl-2025-10-16": [
+   {
+    "id": "gdacs-event-1505544-1666538",
+    "magnitude": 6.1,
+    "source": "gdacs"
+   },
+   {
+    "id": "usgs-event-us6000rhns",
+    "magnitude": 6.0,
+    "source": "usgs"
+   }
+  ],
+  "tur-2023-02-06": [
+   {
+    "id": "gdacs-event-1357372-1487094",
+    "magnitude": 7.8,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-1357372-1487096",
+    "magnitude": 7.8,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-1357560-1487318",
+    "magnitude": 7.5,
+    "source": "gdacs"
+   },
+   {
+    "id": "usgs-event-us6000jlqa",
+    "magnitude": 7.5,
+    "source": "usgs"
+   },
+   {
+    "id": "gdacs-event-1357374-1487098",
+    "magnitude": 6.7,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-1357374-1487126",
+    "magnitude": 6.7,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-1357374-1487207",
+    "magnitude": 6.7,
+    "source": "gdacs"
+   },
+   {
+    "id": "usgs-event-us6000jlm1",
+    "magnitude": 6.7,
+    "source": "usgs"
+   },
+   {
+    "id": "gdacs-event-1357591-1487359",
+    "magnitude": 6.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-1357770-1487564",
+    "magnitude": 6.0,
+    "source": "gdacs"
+   },
+   {
+    "id": "usgs-event-us6000jlrc",
+    "magnitude": 6.0,
+    "source": "usgs"
+   },
+   {
+    "id": "usgs-event-us6000jm1y",
+    "magnitude": 6.0,
+    "source": "usgs"
+   }
+  ],
+  "tur-2023-02-20": [
+   {
+    "id": "gdacs-event-1360964-1491088",
+    "magnitude": 6.3,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-1360964-1491095",
+    "magnitude": 6.3,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-1360964-1491129",
+    "magnitude": 6.3,
+    "source": "gdacs"
+   },
+   {
+    "id": "usgs-event-us6000jqcn",
+    "magnitude": 6.3,
+    "source": "usgs"
+   }
+  ],
+  "ven-2026-06-24": [
+   {
+    "id": "gdacs-event-1548377-1714321",
+    "magnitude": 7.5,
+    "source": "gdacs"
+   },
+   {
+    "id": "gdacs-event-1548377-1714328",
+    "magnitude": 7.5,
+    "source": "gdacs"
+   },
+   {
+    "id": "usgs-event-us6000t7zp",
+    "magnitude": 7.5,
+    "source": "usgs"
+   },
+   {
+    "id": "gdacs-event-1548473-1714423",
+    "magnitude": 7.2,
+    "source": "gdacs"
+   }
+  ]
+ }
+}
