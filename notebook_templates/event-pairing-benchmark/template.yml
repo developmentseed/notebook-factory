@@ -2,14 +2,20 @@ title: Event pairing benchmark
 summary: Which method best decides that records from different sources are the same disaster? Scores the
   notebook-factory heuristic, a learned model and a System One decision model on a hand-labelled gold set.
 description: '**Analysis · event pairing.** `monty:corr_id` cannot join sources, so a matcher has to. This
-  notebook scores notebook-factory''s experimental time-and-distance heuristic, a logistic regression and a decision model (Jev
-  and others, through OpenRouter''s Decisions API) on about 160 real Montandon events grouped into 36
-  disasters, 15 of them in held-out windows (recent, large and 1960s), including close neighbours (three Herat earthquakes in 8 days, four Spanish disasters in six weeks)
-  and cascades (Storm Daniel and the Derna floods).
+  notebook compares the rules in use across Montandon (corr_id, date + country, the extension''s CQL2 Algorithm 1),
+  notebook-factory''s experimental time-and-distance heuristic, a logistic regression and a decision model (Jev
+  and others, through OpenRouter''s Decisions API, asked pair by pair or about all candidates at once).
 
 
-  Reports average precision, precision / recall, where each scorer fails, and what a link / drop / review
-  gate would do. Labels live in `gold_disasters.yml`; add item ids to extend them.
+  Two label sets: a gold set of about 200 Montandon events grouped into 36 disasters across countries (AI-labelled,
+  not yet reviewed by a person, consistent with the USGS and GLIDE references GDACS publishes), with close
+  neighbours (three Herat earthquakes in 8 days, four Spanish disasters in six weeks) and cascades (Storm Daniel
+  and the Derna floods); and a silver set labelled by GDACS''s references alone (`build_silver.py`).
+
+
+  Reports precision / recall with 95% intervals on pairs that involve an impact source, calibration of the
+  model''s confidence, records grouped into events (with example event cards), how aftershocks are treated, and
+  the cost of running the method on the whole catalog.
 
 
   > Select **any Montandon event** when starting a run: it only supplies the catalog URL and key. The
@@ -23,7 +29,7 @@ stac_hints:
   roles:
   - event
 supports_writeback: false
-estimated_runtime_minutes: 3
+estimated_runtime_minutes: 10
 secrets:
 - OPENROUTER_API_KEY
 parameters:
@@ -104,3 +110,36 @@ parameters:
       default: 0
       minimum: 0
       maximum: 20
+    describe_detail:
+      type: boolean
+      title: Send magnitude and end date to the model
+      default: true
+    bootstrap_samples:
+      type: integer
+      title: Resamples for the 95% intervals
+      default: 1000
+      minimum: 100
+      maximum: 10000
+    silver:
+      type: boolean
+      title: Also score the silver set
+      description: Labels from the USGS ids and GLIDE numbers GDACS cites (silver_disasters.yml, built by build_silver.py).
+      default: true
+    stability_pairs:
+      type: integer
+      title: Pairs re-asked to measure stability
+      description: Asked again and with the two records swapped. 0 skips.
+      default: 100
+      minimum: 0
+      maximum: 1000
+    scale_sample_days:
+      type: integer
+      title: Catalog days sampled for the cost estimate
+      description: 0 skips the cost section.
+      default: 7
+      minimum: 0
+      maximum: 31
+    scale_sample_end:
+      type: string
+      title: Last day of the cost sample
+      default: '2025-09-15'

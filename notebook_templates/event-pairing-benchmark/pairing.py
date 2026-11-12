@@ -599,9 +599,11 @@ def describe(rec: Record) -> dict:
     return out
 
 
-def decision_request(model: str, a: Record, b: Record) -> dict:
+def decision_request(model: str, a: Record, b: Record, swap: bool = False) -> dict:
+    """The request for one pair. Records go in a fixed order so position carries no meaning; `swap` reverses
+    it, to check that the answer does not depend on the order."""
     _, _, gap, km = proximity(*pair_anchor(a, b))
-    first, second = sorted((a, b), key=lambda r: r.id)  # a fixed order, so position carries no meaning
+    first, second = sorted((a, b), key=lambda r: r.id, reverse=swap)
     state = {
         "record_a": describe(first),
         "record_b": describe(second),
@@ -646,13 +648,13 @@ def call_decisions(payload: dict, api_key: str, retries: int = 3, timeout: int =
 
 
 def score_with_model(
-    pairs: list[tuple[Record, Record]], model: str, api_key: str, workers: int = 8
+    pairs: list[tuple[Record, Record]], model: str, api_key: str, workers: int = 8, swap: bool = False
 ) -> list[dict]:
     """One result per pair, in order. A failed call gives {"error": ...} instead of raising."""
 
     def one(pair: tuple[Record, Record]) -> dict:
         try:
-            return parse_decision(call_decisions(decision_request(model, *pair), api_key))
+            return parse_decision(call_decisions(decision_request(model, *pair, swap=swap), api_key))
         except Exception as exc:  # one bad pair must not sink the run
             return {"p_same": None, "error": f"{type(exc).__name__}: {str(exc)[:160]}"}
 
@@ -850,21 +852,26 @@ def pair_scores_from_listwise(
 def fetch_context(
     api_url: str,
     token: str,
-    countries: set[str],
+    countries: set[str] | None,
     start: datetime,
     end: datetime,
     max_items: int = 1500,
     timeout: int = 90,
 ) -> list[dict]:
-    """Event items of every source in these countries and dates: the realistic crowd around a disaster."""
+    """Event items of every source in these countries (all countries when None) and dates: the realistic
+    crowd around a disaster."""
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     body = {
         "collections": EVENT_COLLECTIONS,
-        "limit": 200,
+        "limit": 200 if countries else 1000,
         "datetime": f"{start.strftime('%Y-%m-%dT%H:%M:%SZ')}/{end.strftime('%Y-%m-%dT%H:%M:%SZ')}",
-        "filter-lang": "cql2-json",
-        "filter": {"op": "a_overlaps", "args": [{"property": "monty:country_codes"}, sorted(countries)]},
     }
+    if countries:
+        body["filter-lang"] = "cql2-json"
+        body["filter"] = {
+            "op": "a_overlaps",
+            "args": [{"property": "monty:country_codes"}, sorted(countries)],
+        }
     items: list[dict] = []
     url, payload = f"{api_url.rstrip('/')}/search", body
     while url and len(items) < max_items:

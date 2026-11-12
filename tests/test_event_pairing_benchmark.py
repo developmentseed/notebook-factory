@@ -603,3 +603,14 @@ def test_silver_file_is_well_formed_when_present():
     ids = [m for d in silver["disasters"] for m in d["members"]]
     assert len(ids) == len(set(ids)) and all(len(d["members"]) >= 2 for d in silver["disasters"])
     assert all(P.collection_of(i).endswith("-events") for i in ids)
+
+
+def test_decision_request_swap_reverses_the_records_only():
+    a, b = (
+        _rec("usgs-event-1", title="M 7.7 - Mandalay"),
+        _rec("emdat-event-1", "emdat", title="Ground movement"),
+    )
+    plain, swapped = P.decision_request("m", a, b), P.decision_request("m", a, b, swap=True)
+    assert plain["state"]["record_a"] == swapped["state"]["record_b"]
+    assert plain["state"]["record_b"] == swapped["state"]["record_a"]
+    assert plain["state"]["days_apart"] == swapped["state"]["days_apart"]
