@@ -1,0 +1,107 @@
+title: 'Demo: one event, every source'
+summary: Pick any Montandon event. The notebook finds the same disaster in the other sources and puts what they
+  say into one fact sheet, one chart and one map.
+description: '**Demo · event matching.** Each Montandon source records a disaster its own way: USGS the magnitude,
+  EM-DAT the losses, IDMC the displacement, CEMS the maps. `monty:corr_id` does not join them, so this notebook
+  searches the other sources around the selected event and asks Jev, a decision model, which records describe the
+  same disaster.
+
+
+  What you get: a fact sheet with one column per source (numbers the sources disagree on are highlighted), a chart
+  of deaths, people affected and displaced by source, and a map of every candidate with a slider for the
+  minimum confidence.
+
+
+  > Select **any Montandon event** when starting a run. The Jev scores need the `OPENROUTER_API_KEY` secret,
+  granted to this template; without it the notebook still runs and lists the candidates unscored.
+
+
+  The time window and radius per hazard, and the other candidate rules, are parameters: change them to widen or
+  narrow the search.'
+filters:
+  use_case:
+  - other
+version: '0.1'
+requires_area: false
+requires_stac_item: true
+stac_hints:
+  profile: montandon
+  roles:
+  - event
+supports_writeback: false
+estimated_runtime_minutes: 2
+secrets:
+- OPENROUTER_API_KEY
+parameters:
+  type: object
+  properties:
+    confidence_threshold:
+      type: number
+      title: Minimum confidence to join
+      description: A candidate joins the event when Jev's probability that it is the same disaster is at least this.
+        Between 0.3 and this value it is listed as possible.
+      default: 0.6
+      minimum: 0
+      maximum: 1
+      multipleOf: 0.05
+    max_candidates:
+      type: integer
+      title: Most candidates to judge
+      description: The search keeps the most plausible candidates by time and distance and asks Jev about these
+        only. Each batch of up to 25 costs a fraction of a cent.
+      default: 60
+      minimum: 5
+      maximum: 200
+    hazard_windows:
+      type: string
+      title: Time window and radius per hazard
+      description: 'One hazard per line: GLIDE hazard code, days either side of the event, radius in km (for example
+        "EQ 7 300"). A record is a candidate when it falls inside the window of the selected event''s hazard and
+        shares a country with it or lies inside the radius. Lines starting with # are ignored.'
+      default: |-
+        EQ 7 300
+        TS 7 1500
+        VO 30 200
+        LS 7 100
+        AV 7 100
+        FL 30 500
+        FF 14 300
+        TC 21 2500
+        ST 14 800
+        SS 14 800
+        DR 180 2000
+        WF 30 300
+        HT 30 1500
+        CW 30 1500
+        EP 90 3000
+      x-widget: textarea
+    default_window_days:
+      type: integer
+      title: Window for other hazards (days)
+      description: Days either side of the event for a hazard that is not in the table above.
+      default: 14
+      minimum: 1
+      maximum: 365
+    default_radius_km:
+      type: integer
+      title: Radius for other hazards (km)
+      description: Radius for a hazard that is not in the table above.
+      default: 500
+      minimum: 1
+      maximum: 5000
+    coarse_radius_km:
+      type: integer
+      title: Radius for country-level records (km)
+      description: GLIDE, EM-DAT, IFRC GO and IDMC only locate an event at country level. When either record is one
+        of them, the radius is at least this.
+      default: 1500
+      minimum: 1
+      maximum: 5000
+    min_cross_hazard_magnitude:
+      type: number
+      title: Smallest earthquake that can cause other hazards
+      description: An earthquake below this magnitude, with no tsunami flag, is compared only with other earthquakes.
+      default: 5.0
+      minimum: 0
+      maximum: 10
+      multipleOf: 0.1

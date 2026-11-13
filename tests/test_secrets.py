@@ -5,6 +5,7 @@ from pathlib import Path
 
 import nbformat
 import pytest
+import yaml
 from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
 from django.urls import reverse
@@ -172,11 +173,16 @@ def test_a_failing_cell_does_not_leak_the_secret_into_the_error(
 
 
 def test_existing_example_templates_only_read_run_variables():
-    """The bundled templates must keep working with the allowlisted environment."""
+    """The bundled templates must keep working with the allowlisted environment.
+
+    A template may also read the secrets its own template.yml declares.
+    """
     root = Path(__file__).resolve().parent.parent / "notebook_templates"
     for path in root.glob("*/notebook.ipynb"):
         nb = nbformat.read(path, as_version=4)
-        assert SB.env_reads(nb) <= set(environment.RUN_ENV), path
+        meta = yaml.safe_load((path.parent / "template.yml").read_text()) or {}
+        allowed = set(environment.RUN_ENV) | set(meta.get("secrets") or [])
+        assert SB.env_reads(nb) <= allowed, path
 
 
 # -- warnings ---------------------------------------------------------------------------------
