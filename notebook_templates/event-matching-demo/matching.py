@@ -351,8 +351,10 @@ def find_candidates(
 
     Two searches over every events collection, both limited to the hazard's time window: one by the seed's
     countries (a CQL2 `a_overlaps`), one by a box around its point (a disaster crosses borders, and a register
-    holds one record per country), plus the records with the seed's `monty:corr_id`. Records of the seed's own
-    collection are dropped unless Montandon links them to the seed, and the episodes of one source event (same `monty:src_event_id`) count once.
+    holds one record per country), plus the records with the seed's `monty:corr_id`. Those are candidates like any
+    other (Jev scores them), but they skip the place and time rules and come first when the list is capped.
+    Records of the seed's own collection are dropped unless Montandon links them to the seed, and the episodes of
+    one source event (same `monty:src_event_id`) count once.
     """
     if not seed.start:
         raise ValueError("the selected event has no date, so there is nothing to search around")
@@ -364,7 +366,7 @@ def find_candidates(
         "datetime": f"{first:%Y-%m-%dT%H:%M:%SZ}/{last:%Y-%m-%dT%H:%M:%SZ}",
     }  # fmt: skip
     found: dict[str, dict] = {}
-    if seed.corr_id:  # the catalog's own link, asked for directly so the window and the caps never hide it
+    if seed.corr_id:  # asked for directly, so the window and the search caps never hide these records from Jev
         same = {"op": "=", "args": [{"property": "monty:corr_id"}, seed.corr_id]}
         found.update({
             f["id"]: f
@@ -385,14 +387,15 @@ def find_candidates(
     for item in found.values():
         rec = record_from_item(item)
         exact = is_linked(seed, rec)
+        same_corr = bool(seed.corr_id) and rec.corr_id == seed.corr_id
         if rec.id == seed.id or (rec.source == seed.source and not exact):
             continue
-        if exact or (passes_place_and_time(seed, rec, rules) and quake_can_trigger(seed, rec, rules)):
-            kept.append((not exact, -heuristic_score(*pair_anchor(seed, rec), rules), rec.id, rec))
-    kept.sort(key=lambda x: x[:3])
+        if exact or same_corr or (passes_place_and_time(seed, rec, rules) and quake_can_trigger(seed, rec, rules)):
+            kept.append((not exact, not same_corr, -heuristic_score(*pair_anchor(seed, rec), rules), rec.id, rec))
+    kept.sort(key=lambda x: x[:4])
     first_episode: dict[tuple[str, str], object] = {}
     unique = []
-    for not_exact, _, _, rec in kept:
+    for not_exact, _, _, _, rec in kept:
         # A source files one record per episode of an event (GDACS): keep the best-ranked episode only.
         # Records that share the id and the episode number (a register's records for several countries) stay.
         if not_exact and rec.src_event_id:
@@ -403,10 +406,11 @@ def find_candidates(
 
 
 # -- exact links -----------------------------------------------------------------------------------------------------
-# An exact link is something Montandon itself says about two records: a `related` link with the role `event`
-# between them, or the same `monty:corr_id`. Nothing is inferred from ids or numbers.
-def link_reason(a: Record, b: Record) -> str | None:
-    """Why the catalog links the two records, or None. A related event link counts in either direction."""
+# An exact link is a `related` link with the role `event` between two records that Montandon itself holds (for
+# now a CEMS activation to its GDACS and Charter events). It skips Jev. A shared `monty:corr_id` does not: it only
+# makes the record a candidate. Nothing is inferred from ids or numbers.
+def is_linked(a: Record, b: Record) -> bool:
+    """True when the catalog links one of the two records to the other, in either direction."""
 
     def points_at(src: Record, dst: Record) -> bool:
         # Montandon writes some link targets as the bare source id ("1474477-1630564" for the item
@@ -417,20 +421,12 @@ def link_reason(a: Record, b: Record) -> str | None:
             for role, coll, iid in src.links
         )
 
-    if points_at(a, b) or points_at(b, a):
-        return "linked in Montandon"
-    if a.corr_id and a.corr_id == b.corr_id:
-        return "same Montandon correlation id"
-    return None
-
-
-def is_linked(a: Record, b: Record) -> bool:
-    return link_reason(a, b) is not None
+    return points_at(a, b) or points_at(b, a)
 
 
 def exact_links(seed: Record, records: list[Record]) -> dict[str, str]:
     """{record id: why} for the records Montandon links to the seed. These join without asking Jev."""
-    return {rec.id: why for rec in records if rec.id != seed.id and (why := link_reason(seed, rec))}
+    return {rec.id: "linked in Montandon" for rec in records if rec.id != seed.id and is_linked(seed, rec)}
 
 
 # -- Jev: the decision model ---------------------------------------------------------------------------------------------

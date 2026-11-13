@@ -91,8 +91,7 @@ def test_record_keeps_the_related_links_by_role():
 
 
 # -- exact links -------------------------------------------------------------------------------------------
-# An exact link is something the catalog itself says: a `related` link with the role `event`, or the same
-# `monty:corr_id`. No numbers are read out of item ids and there is no table of which source numbers its events how.
+# An exact link is a `related` link with the role `event` that the catalog holds. No numbers are read out of item ids and there is no table of which source numbers its events how.
 def _event_link(collection, item_id):
     return {"rel": "related", "href": f"{API}/collections/{collection}/items/{item_id}", "roles": ["event"]}
 
@@ -119,25 +118,11 @@ def test_exact_links_work_for_any_collection_the_catalog_links_to():
     assert list(M.exact_links(M.record_from_item(cems), [charter])) == [charter.id]
 
 
-def test_exact_links_join_records_with_the_same_corr_id():
+def test_the_same_corr_id_is_not_an_exact_link():
     usgs = _rec(MAIN_SHOCK)  # in the fixture USGS and EM-DAT carry one monty:corr_id for the M 7.7 quake
     emdat = _rec("emdat-event-2025-0223-MMR")
-    glide = _rec("glide-event-EQ-2025-000043-MMR")  # another corr_id
-    assert usgs.corr_id == emdat.corr_id != glide.corr_id
-    assert M.exact_links(usgs, [emdat, glide]) == {emdat.id: "same Montandon correlation id"}
-    assert M.exact_links(emdat, [usgs]) == {usgs.id: "same Montandon correlation id"}
-
-
-def test_the_two_idmc_collections_link_through_their_corr_id():
-    idu = _rec("idmc-idu-event-30892")
-    gidd = M.record_from_item(_clone("idmc-idu-event-30892", "idmc-gidd-event-30892", "idmc-gidd-events"))
-    assert list(M.exact_links(idu, [gidd])) == [gidd.id]
-
-
-def test_records_without_a_corr_id_never_link_on_it():
-    a = M.record_from_item(_item(MAIN_SHOCK, **{"monty:corr_id": None}))
-    b = M.record_from_item(_item("emdat-event-2025-0223-MMR", **{"monty:corr_id": None}))
-    assert a.corr_id == b.corr_id == "" and M.exact_links(a, [b]) == {}
+    assert usgs.corr_id == emdat.corr_id
+    assert M.exact_links(usgs, [emdat]) == {} and M.exact_links(emdat, [usgs]) == {}  # Jev decides
 
 
 def test_a_number_shared_by_two_ids_is_not_a_link():
@@ -263,13 +248,7 @@ def test_candidates_keep_other_sources_inside_the_window_and_drop_the_rest():
     found, total = M.find_candidates(API, "tok", seed, max_items=100)
     ids = {r.id for r in found}
     assert seed.id not in ids
-    # the seed's own source is not a candidate, except the USGS events Montandon gives the seed's corr_id
-    same_corr = {
-        i
-        for i, f in ITEMS.items()
-        if f["collection"] == "usgs-events" and M.record_from_item(f).corr_id == seed.corr_id
-    }
-    assert {i for i in ids if i.startswith("usgs-")} == same_corr - {seed.id} and same_corr - {seed.id}
+    assert not {i for i in ids if i.startswith("usgs-")}, "the seed's own source is not a candidate"
     assert {"emdat-event-2025-0223-MMR", "cems-event-EMSR798", "ifrcevent-event-7464"} <= ids
     assert "gdacs-event-1-1" not in ids and "gdacs-event-2-1" not in ids
     assert total == len(found)
@@ -281,10 +260,27 @@ def test_candidates_are_capped_and_the_most_plausible_come_first():
     _mock_search(list(ITEMS.values()))
     found, total = M.find_candidates(API, "tok", seed, max_items=5)
     assert len(found) == 5 and total > 5
-    linked = [r for r in found if M.is_linked(seed, r)]
-    assert found[: len(linked)] == linked and linked  # the catalog's own links come first
-    scores = [M.heuristic_score(*M.pair_anchor(seed, r)) for r in found[len(linked) :]]
+    first = [
+        r for r in found if M.is_linked(seed, r) or r.corr_id == seed.corr_id
+    ]  # the catalog's own hints lead
+    assert found[: len(first)] == first and first
+    scores = [M.heuristic_score(*M.pair_anchor(seed, r)) for r in found[len(first) :]]
     assert scores == sorted(scores, reverse=True)
+
+
+@responses.activate
+def test_a_record_with_the_seeds_corr_id_reaches_jev_even_outside_the_rules_and_the_cap():
+    seed = _rec(MAIN_SHOCK)
+    near = _clone(
+        "gdacs-event-1474489-1630585", "gdacs-event-8-1"
+    )  # same time and place as the seed: top of the ranking
+    far = _clone("gdacs-event-1474489-1630585", "gdacs-event-9-1", **{"monty:corr_id": seed.corr_id})
+    far["properties"]["monty:country_codes"] = ["PER"]
+    far["geometry"] = {"type": "Point", "coordinates": [-75.0, -10.0]}  # nowhere near Myanmar
+    _mock_search([near, far])
+    found, _ = M.find_candidates(API, "tok", seed, max_items=1)
+    assert [r.id for r in found] == ["gdacs-event-9-1"]  # first in line for the cap, rules or not
+    assert M.exact_links(seed, found) == {}  # and not joined for free: it goes to Jev
 
 
 @responses.activate
@@ -344,7 +340,7 @@ def test_candidates_drop_the_seeds_own_collection_unless_the_catalog_links_them(
     same_corr = _clone("emdat-event-2025-0223-MMR", "emdat-event-2025-0888-MMR")  # copies the seed's corr_id
     _mock_search([sibling, linked, same_corr])
     found, _ = M.find_candidates(API, "tok", seed, max_items=10)
-    assert sorted(r.id for r in found) == ["emdat-event-2025-0777-MMR", "emdat-event-2025-0888-MMR"]
+    assert [r.id for r in found] == ["emdat-event-2025-0777-MMR"]  # a shared corr_id does not keep it
 
 
 @responses.activate
