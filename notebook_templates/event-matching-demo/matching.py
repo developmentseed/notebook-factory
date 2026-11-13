@@ -114,6 +114,8 @@ class Record:
     magnitude: float | None
     tsunami: bool = False
     links: tuple[tuple[str, str, str], ...] = ()  # (role, collection, item id) of the item's related links
+    src_event_id: str = ""  # monty:src_event_id: the source's own id, shared by the episodes of one event
+    episode: object = None  # monty:episode_number
     geometry: dict | None = field(default=None, compare=False)
 
     @property
@@ -127,11 +129,6 @@ class Record:
     @property
     def undrr(self) -> str:
         return next((c for c in self.hazard_codes if UNDRR_RE.match(c)), "")
-
-
-def collection_of(item_id: str) -> str:
-    """The events collection an item id lives in (IBTrACS ids are bare storm ids)."""
-    return next((f"{p}-events" for p in _PREFIXES if item_id.startswith(f"{p}-event-")), "ibtracs-events")
 
 
 def _dt(value) -> datetime | None:
@@ -192,7 +189,9 @@ def _related_links(item: dict) -> tuple[tuple[str, str, str], ...]:
 
 def record_from_item(item: dict) -> Record:
     props = item.get("properties") or {}
-    source = (item.get("collection") or collection_of(item.get("id", ""))).removesuffix("-events")
+    if not item.get("collection"):
+        raise ValueError(f"item {item.get('id')!r} has no collection")
+    source = item["collection"].removesuffix("-events")
     start = _dt(props.get("start_datetime") or props.get("datetime"))
     point = _centroid(item.get("geometry"))
     return Record(
@@ -209,6 +208,8 @@ def record_from_item(item: dict) -> Record:
         magnitude=_magnitude(source, props),
         tsunami=str(props.get("eq:tsunami", "")).lower() == "true",
         links=_related_links(item),
+        src_event_id=str(props.get("monty:src_event_id") or ""),
+        episode=props.get("monty:episode_number"),
         geometry=item.get("geometry"),
     )
 
@@ -328,7 +329,8 @@ def find_candidates(
 
     Two searches over every events collection, both limited to the hazard's time window: one by the seed's
     countries (a CQL2 `a_overlaps`), one by a box around its point (a disaster crosses borders, and a register
-    holds one record per country). Records of the seed's own source are dropped unless an exact link joins them.
+    holds one record per country). Records of the seed's own collection are dropped unless Montandon links them
+    to the seed, and the episodes of one source event (same `monty:src_event_id`) count once.
     """
     if not seed.start:
         raise ValueError("the selected event has no date, so there is nothing to search around")
@@ -349,64 +351,45 @@ def find_candidates(
         for f in _search(api, token, {**base, "bbox": box}, max_items=800):
             found.setdefault(f["id"], f)
 
-    seed_keys, kept = keys(seed), []
+    kept = []
     for item in found.values():
         rec = record_from_item(item)
-        exact = bool(keys(rec) & seed_keys)
-        if rec.id == seed.id or (rec.family == seed.family and not exact):
+        exact = is_linked(seed, rec)
+        if rec.id == seed.id or (rec.source == seed.source and not exact):
             continue
         if exact or (passes_place_and_time(seed, rec, rules) and quake_can_trigger(seed, rec, rules)):
             kept.append((not exact, -heuristic_score(*pair_anchor(seed, rec), rules), rec.id, rec))
     kept.sort(key=lambda x: x[:3])
-    seen, unique = set(), []
-    for not_exact, _, _, rec in kept:  # GDACS files one record per episode: keep the best one per event
-        key = event_key(f"{rec.source}-events", rec.id) if rec.source == "gdacs" and not_exact else None
-        if key is None or key not in seen:
-            seen.add(key)
-            unique.append(rec)
+    first_episode: dict[tuple[str, str], object] = {}
+    unique = []
+    for not_exact, _, _, rec in kept:
+        # A source files one record per episode of an event (GDACS): keep the best-ranked episode only.
+        # Records that share the id and the episode number (a register's records for several countries) stay.
+        if not_exact and rec.src_event_id:
+            if first_episode.setdefault((rec.source, rec.src_event_id), rec.episode) != rec.episode:
+                continue
+        unique.append(rec)
     return unique[:max_items], len(unique)
 
 
 # -- exact links -----------------------------------------------------------------------------------------------------
-# A number a source gives every record of one disaster: EM-DAT's DisNo and the GLIDE number repeat on each
-# country's record, IDMC publishes one event under two collections, GDACS keeps one event id across episodes.
-# Montandon does not yet carry these across sources, so this finds mostly same-source siblings and the
-# event links a CEMS activation makes to GDACS; it grows as the ETL ingests more.
-_KEYS = {
-    "emdat": ("emdat", re.compile(r"^(?:emdat-event-)?(\d{4}-\d{4})(?:-[A-Z]{3})?$")),
-    "glide": ("glide", re.compile(r"^(?:glide-event-)?([A-Z]{2}-\d{4}-\d{6})(?:-[A-Z]{3})?$")),
-    "idmc-idu": ("idmc", re.compile(r"^(?:idmc-idu-event-)?(\d+)$")),
-    "idmc-gidd": ("idmc", re.compile(r"^(?:idmc-gidd-event-)?(\d+)$")),
-    "gdacs": ("gdacs", re.compile(r"^(?:gdacs-event-)?(\d+)-\d+$")),
-}
-_KEY_LABELS = {"emdat": "EM-DAT number", "glide": "GLIDE number", "idmc": "IDMC event", "gdacs": "GDACS event"}
+# An exact link is a `related` link with the role `event` that Montandon itself holds between two records
+# (for now a CEMS activation to its GDACS and Charter events). Nothing is inferred from ids or numbers.
+def is_linked(a: Record, b: Record) -> bool:
+    """True when the catalog links one of the two records to the other, in either direction."""
 
+    def points_at(src: Record, dst: Record) -> bool:
+        # Montandon writes some link targets as the bare source id ("1474477-1630564" for the item
+        # "gdacs-event-1474477-1630564"), so a target matches the item id with or without its prefix.
+        names = {dst.id, dst.id.removeprefix(f"{dst.source}-event-")}
+        return any(role == "event" and coll == f"{dst.source}-events" and iid in names for role, coll, iid in src.links)
 
-def event_key(collection: str, item_id: str) -> str | None:
-    """"emdat:2023-0600" for every country record of EM-DAT disaster 2023-0600, and so on; None otherwise."""
-    scheme, pattern = _KEYS.get(collection.removesuffix("-events"), (None, None))
-    if scheme and (m := pattern.match(item_id)):
-        return f"{scheme}:{m.group(1)}"
-    return None
-
-
-def keys(rec: Record) -> set[str]:
-    """The record's own key plus the keys of the other-source events it links to."""
-    out = {event_key(f"{rec.source}-events", rec.id)}
-    out |= {event_key(collection, item_id) for role, collection, item_id in rec.links if role == "event"}
-    return out - {None}
+    return points_at(a, b) or points_at(b, a)
 
 
 def exact_links(seed: Record, records: list[Record]) -> dict[str, str]:
-    """{record id: why} for the records that share a key with the seed. These link without asking Jev."""
-    seed_keys = keys(seed)
-    out = {}
-    for rec in records:
-        shared = sorted(keys(rec) & seed_keys)
-        if rec.id != seed.id and shared:
-            scheme, value = shared[0].split(":", 1)
-            out[rec.id] = f"same {_KEY_LABELS[scheme]} {value}"
-    return out
+    """{record id: why} for the records Montandon links to the seed. These join without asking Jev."""
+    return {rec.id: "linked in Montandon" for rec in records if rec.id != seed.id and is_linked(seed, rec)}
 
 
 # -- Jev: the decision model ---------------------------------------------------------------------------------------------

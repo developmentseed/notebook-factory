@@ -86,37 +86,47 @@ def test_record_keeps_the_related_links_by_role():
 
 
 # -- exact links -------------------------------------------------------------------------------------------
-def test_event_keys_name_the_shared_register_numbers():
-    assert M.event_key("emdat-events", "emdat-event-2023-0600-MAR") == "emdat:2023-0600"
-    assert M.event_key("glide-events", "glide-event-EQ-2025-000043-MMR") == "glide:EQ-2025-000043"
-    assert M.event_key("idmc-idu-events", "idmc-idu-event-18260") == "idmc:18260"
-    assert M.event_key("idmc-gidd-events", "idmc-gidd-event-18260") == "idmc:18260"
-    assert M.event_key("gdacs-events", "gdacs-event-1474477-1630564") == "gdacs:1474477"
-    assert M.event_key("gdacs-events", "1474477-1630564") == "gdacs:1474477"  # as a link target
-    assert M.event_key("usgs-events", "usgs-event-us7000pn9s") is None
+# An exact link is a `related` link with the role `event` in the catalog, and nothing else: no numbers read
+# out of item ids, no table of which source numbers its events how.
+def _event_link(collection, item_id):
+    return {"rel": "related", "href": f"{API}/collections/{collection}/items/{item_id}", "roles": ["event"]}
 
 
-def test_exact_links_join_records_that_share_a_register_number():
-    seed = _rec("emdat-event-2025-0223-MMR")
-    same = M.record_from_item(_clone("emdat-event-2025-0223-MMR", "emdat-event-2025-0223-THA"))
-    other = M.record_from_item(_clone("emdat-event-2025-0223-MMR", "emdat-event-2025-0999-MMR"))
-    links = M.exact_links(seed, [seed, same, other, _rec(MAIN_SHOCK)])
-    assert list(links) == [same.id]
-    assert "EM-DAT" in links[same.id] and "2025-0223" in links[same.id]
-
-
-def test_exact_links_follow_a_related_event_link_to_another_source():
-    seed = _rec("cems-event-EMSR798")  # links to GDACS event 1474477
+def test_exact_links_follow_a_related_event_link_from_the_seed():
+    # The catalog links the CEMS record to "1474477-1630564": the bare id of this GDACS item.
+    seed = _rec("cems-event-EMSR798")
     gdacs = _rec("gdacs-event-1474477-1630564")
     unrelated = _rec("gdacs-event-1474489-1630585")
     links = M.exact_links(seed, [gdacs, unrelated])
-    assert list(links) == [gdacs.id] and "GDACS" in links[gdacs.id]
+    assert links == {gdacs.id: "linked in Montandon"}
 
 
-def test_exact_links_pair_the_two_idmc_collections():
-    idu = _rec("idmc-idu-event-30892")
+def test_exact_links_also_follow_a_link_that_points_at_the_seed():
+    seed = _rec("gdacs-event-1474477-1630564")
+    cems = _rec("cems-event-EMSR798")
+    assert list(M.exact_links(seed, [cems])) == [cems.id]
+
+
+def test_exact_links_work_for_any_collection_the_catalog_links_to():
+    cems = _item("cems-event-EMSR798")
+    cems["links"].append(_event_link("charter-events", "charter-event-838"))
+    charter = M.record_from_item(_clone(MAIN_SHOCK, "charter-event-838", "charter-events"))
+    assert list(M.exact_links(M.record_from_item(cems), [charter])) == [charter.id]
+
+
+def test_a_number_shared_by_two_ids_is_not_a_link():
+    emdat = _rec("emdat-event-2025-0223-MMR")  # EM-DAT writes one record per country under one number
+    same_number = M.record_from_item(_clone("emdat-event-2025-0223-MMR", "emdat-event-2025-0223-THA"))
+    assert M.exact_links(emdat, [same_number]) == {}
+    idu = _rec("idmc-idu-event-30892")  # IDMC publishes one event under two collections
     gidd = M.record_from_item(_clone("idmc-idu-event-30892", "idmc-gidd-event-30892", "idmc-gidd-events"))
-    assert list(M.exact_links(idu, [gidd])) == [gidd.id]
+    assert M.exact_links(idu, [gidd]) == {}
+
+
+def test_the_module_reads_no_numbers_out_of_ids():
+    source = (TEMPLATE / "matching.py").read_text()
+    for name in ("event_key", "_KEYS", "collection_of"):
+        assert name not in source
 
 
 # -- the rules a user can change ---------------------------------------------------------------------------
@@ -280,13 +290,43 @@ def test_a_small_quake_with_a_tsunami_flag_may_still_match_other_hazards():
 
 
 @responses.activate
-def test_candidates_keep_siblings_of_the_seeds_own_source_only_when_exactly_linked():
+def test_candidates_drop_the_seeds_own_collection_unless_the_catalog_links_them():
     seed = _rec("emdat-event-2025-0223-MMR")
-    sibling = _clone("emdat-event-2025-0223-MMR", "emdat-event-2025-0223-THA")
-    stranger = _clone("emdat-event-2025-0223-MMR", "emdat-event-2025-0777-MMR")
-    _mock_search([sibling, stranger])
+    sibling = _clone("emdat-event-2025-0223-MMR", "emdat-event-2025-0223-THA")  # same number: not a link
+    linked = _clone("emdat-event-2025-0223-MMR", "emdat-event-2025-0777-MMR")
+    linked["links"].append(_event_link("emdat-events", seed.id))
+    _mock_search([sibling, linked])
     found, _ = M.find_candidates(API, "tok", seed, max_items=10)
-    assert [r.id for r in found] == ["emdat-event-2025-0223-THA"]
+    assert [r.id for r in found] == ["emdat-event-2025-0777-MMR"]
+
+
+@responses.activate
+def test_the_two_idmc_collections_are_separate_sources_to_search():
+    idu = _rec("idmc-idu-event-30892")
+    gidd = _clone("idmc-idu-event-30892", "idmc-gidd-event-30892", "idmc-gidd-events")
+    _mock_search([gidd])
+    found, _ = M.find_candidates(API, "tok", idu, max_items=10)
+    assert [r.id for r in found] == [gidd["id"]]
+
+
+@responses.activate
+def test_gdacs_episodes_of_one_event_count_once():
+    # the catalog gives every episode of a GDACS event the same monty:src_event_id and its own episode number
+    seed = _rec(MAIN_SHOCK)
+    episodes = [ITEMS["gdacs-event-1474479-1630686"], ITEMS["gdacs-event-1474479-1630569"]]
+    _mock_search(episodes)
+    found, searched = M.find_candidates(API, "tok", seed, max_items=10)
+    assert len(found) == 1 and searched == 1
+
+
+@responses.activate
+def test_records_that_share_a_source_event_id_but_not_an_episode_are_kept():
+    seed = _rec(MAIN_SHOCK)  # two country records of one register number: the same episode (1), both kept
+    a = _clone("glide-event-EQ-2025-000043-MMR", "glide-event-EQ-2025-000043-MMR")
+    b = _clone("glide-event-EQ-2025-000043-MMR", "glide-event-EQ-2025-000043-THA")
+    _mock_search([a, b])
+    found, _ = M.find_candidates(API, "tok", seed, max_items=10)
+    assert len(found) == 2
 
 
 @responses.activate
@@ -600,7 +640,7 @@ def test_match_table_sorts_by_confidence_and_says_why():
     table = M.match_table([gdacs, emdat, glide], exact, {emdat.id: 0.97, glide.id: 0.41})
     assert list(table["id"]) == [gdacs.id, emdat.id, glide.id]
     assert list(table["p_same"]) == [1.0, 0.97, 0.41]
-    assert table.loc[0, "why"].startswith("same GDACS") and table.loc[1, "why"] == "Jev"
+    assert table.loc[0, "why"] == "linked in Montandon" and table.loc[1, "why"] == "Jev"
     assert table.loc[1, "source"] == "EM-DAT"
 
 
@@ -655,6 +695,11 @@ def test_the_notebook_reads_the_api_key_only_from_the_environment():
     source = "\n".join(c.source for c in nb.cells if c.cell_type == "code")
     assert 'os.environ.get("OPENROUTER_API_KEY"' in source or 'os.environ["OPENROUTER_API_KEY"]' in source
     assert "sk-or-" not in source and "OPENROUTER_API_KEY =" not in source
+
+
+def test_the_notebook_writes_no_csv_files():
+    source = "\n".join(c.source for c in _notebook().cells)
+    assert "to_csv" not in source and ".csv" not in source  # the tables are shown in the notebook itself
 
 
 def test_matching_module_needs_no_django():
