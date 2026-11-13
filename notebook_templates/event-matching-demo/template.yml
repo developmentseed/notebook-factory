@@ -1,23 +1,21 @@
-title: 'Demo: one event, every source'
-summary: Pick any Montandon event. The notebook finds the same disaster in the other sources and puts what they
-  say into one fact sheet, one chart and one map.
-description: '**Demo · event matching.** Each Montandon source records a disaster its own way: USGS the magnitude,
-  EM-DAT the losses, IDMC the displacement, CEMS the maps. `monty:corr_id` does not join them, so this notebook
-  searches the other sources around the selected event and asks Jev, a decision model, which records describe the
-  same disaster.
+title: Cross-source event matching
+summary: 'Demonstrates cross-source event pairing: finds the records of other Montandon sources that describe the selected
+  event and compares what they report in a fact sheet, a chart and a map.'
+description: '**Cross-source event matching.** A demonstration of the cross-source event pairing methodology. Montandon
+  sources record a disaster differently: USGS the magnitude, EM-DAT the losses, IDMC the displacement, CEMS the mapping.
+  The notebook searches the other sources around the selected event and uses Jev, a decision model, to score which records
+  describe the same disaster.
 
 
-  What you get: a fact sheet with one column per source (numbers the sources disagree on are highlighted), a chart
-  of deaths, people affected and displaced by source, and a map of every candidate with a slider for the
-  minimum confidence.
+  Output: a fact sheet with one column per source (disagreeing figures highlighted), a chart of deaths, people affected
+  and people displaced by source, and a map of the candidates with a minimum-confidence slider.
 
 
-  > Select **any Montandon event** when starting a run. The Jev scores need the `OPENROUTER_API_KEY` secret,
-  granted to this template; without it the notebook still runs and lists the candidates unscored.
+  > Select any Montandon event when starting a run. Jev scoring needs the `OPENROUTER_API_KEY` secret, granted to this template.
+  Without it the notebook lists the candidates unscored.
 
 
-  The time window and radius per hazard, and the other candidate rules, are parameters: change them to widen or
-  narrow the search.'
+  The time window and radius per hazard, and the other candidate rules, are parameters.'
 filters:
   use_case:
   - other
