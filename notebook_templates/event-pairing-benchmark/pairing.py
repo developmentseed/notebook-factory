@@ -86,6 +86,7 @@ class Record:
     coarse: bool
     magnitude: float | None
     corr_id: str = ""
+    tsunami: bool = False  # the source flags a tsunami (USGS `eq:tsunami`)
 
     @property
     def family(self) -> str:
@@ -179,6 +180,7 @@ def record_from_item(item: dict) -> Record:
         coarse=source in COARSE_SOURCES or point is None,
         magnitude=_magnitude(source, props),
         corr_id=props.get("monty:corr_id") or "",
+        tsunami=str(props.get("eq:tsunami", "")).lower() == "true",
     )
 
 
@@ -354,6 +356,7 @@ def hazard_relation(a: Record, b: Record) -> str:
 # "same" keeps one hazard family only. Records with missing codes always pass.
 HAZARD_FILTERS: dict[str, set[str] | None] = {
     "any": None,
+    "any, quakes M5+": None,  # any hazard, but a small quake is only compared with other quakes (see quake_can_trigger)
     "upstream, 2 steps": None,  # UNDRR-ISC links through at most one hazard in between (see upstream_related)
     "upstream": None,  # UNDRR-ISC links, direct
     "related": {"same", "cluster", "cascade", "unknown"},  # the hand-set CASCADE_GROUPS
@@ -405,7 +408,29 @@ def upstream_related(code_a: str, code_b: str, steps: int = 1) -> bool:
     return bool(near_a & near_b)
 
 
+# A quake below this magnitude, with no tsunami flag, is not compared with records of other hazards: it is too
+# small to have caused a flood, storm or landslide that a register recorded. Quake-to-quake pairs are unaffected.
+MIN_CROSS_HAZARD_MAGNITUDE = 5.0
+
+
+def is_quake(rec: Record) -> bool:
+    return rec.glide == "EQ" or rec.undrr.startswith("GH01")
+
+
+def quake_can_trigger(a: Record, b: Record) -> bool:
+    """False for a cross-hazard pair whose earthquake is below MIN_CROSS_HAZARD_MAGNITUDE and has no tsunami flag.
+    Records without a magnitude (registers) always pass."""
+    if hazard_relation(a, b) in ("same", "cluster", "unknown"):
+        return True
+    return not any(
+        is_quake(r) and r.magnitude is not None and r.magnitude < MIN_CROSS_HAZARD_MAGNITUDE and not r.tsunami
+        for r in (a, b)
+    )
+
+
 def passes_hazard_filter(a: Record, b: Record, name: str) -> bool:
+    if name == "any, quakes M5+":
+        return quake_can_trigger(a, b)
     if name.startswith("upstream"):
         ca = [c for c in a.hazard_codes if UNDRR_RE.match(c)]
         cb = [c for c in b.hazard_codes if UNDRR_RE.match(c)]
@@ -668,6 +693,17 @@ def describe(rec: Record) -> dict:
     return out
 
 
+# Lean requests: only the question used for linking, the guidance stated once. False reproduces the earlier runs.
+LEAN_PROMPTS = True
+LEAN_QUESTIONS = {
+    "same_event": {
+        "type": "noul",
+        "instructions": QUESTIONS["same_event"]["instructions"],
+        "criteria": {"true": "One physical disaster.", "false": "Different disasters."},
+    }
+}
+
+
 def decision_request(model: str, a: Record, b: Record, swap: bool = False) -> dict:
     """The request for one pair. Records go in a fixed order so position carries no meaning; `swap` reverses
     it, to check that the answer does not depend on the order."""
@@ -679,7 +715,7 @@ def decision_request(model: str, a: Record, b: Record, swap: bool = False) -> di
         "days_apart": int(round(gap)),
         "km_apart": "unknown" if km is None else int(round(km)),
     }
-    return {"model": model, "state": state, "questions": QUESTIONS}
+    return {"model": model, "state": state, "questions": LEAN_QUESTIONS if LEAN_PROMPTS else QUESTIONS}
 
 
 def parse_decision(response: dict) -> dict:
@@ -786,6 +822,19 @@ def listwise_request(model: str, anchor: Record, candidates: list[Record]) -> di
             **describe(cand),
             "days_apart": int(round(gap)),
             "km_apart": "unknown" if km is None else int(round(km)),
+        }
+    if LEAN_PROMPTS:  # the guidance once, in the state; one short yes/no per candidate
+        return {
+            "model": model,
+            "state": {"guidance": LISTWISE_NOTE, "anchor": describe(anchor), "candidates": state_candidates},
+            "questions": {
+                f"same_{key}": {
+                    "type": "noul",
+                    "instructions": f"Is `candidates.{key}` the same disaster as `anchor`? Follow `guidance`.",
+                    "criteria": {"true": "Same disaster.", "false": "Different disaster."},
+                }
+                for key in keys
+            },
         }
     questions: dict[str, dict] = {
         f"same_{key}": {

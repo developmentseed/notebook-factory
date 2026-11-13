@@ -143,3 +143,15 @@ parameters:
       type: string
       title: Last day of the cost sample
       default: '2025-09-15'
+    lean_prompts:
+      type: boolean
+      title: Lean model requests
+      description: Ask only what linking needs, with the guidance stated once. Off reproduces the earlier, longer requests.
+      default: true
+    min_cross_hazard_magnitude:
+      type: number
+      title: Smallest quake compared with other hazards
+      description: A smaller earthquake without a tsunami flag is only compared with other earthquakes.
+      default: 5.0
+      minimum: 0
+      maximum: 9

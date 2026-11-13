@@ -204,7 +204,8 @@ DOCUMENTED_RESPONSE = {  # shape from OpenRouter's Decisions API reference, with
 }  # fmt: skip
 
 
-def test_decision_request_carries_words_and_measured_facts_but_no_ids_or_codes():
+def test_decision_request_carries_words_and_measured_facts_but_no_ids_or_codes(monkeypatch):
+    monkeypatch.setattr(P, "LEAN_PROMPTS", False)  # the full prompt's structure
     a = _rec(
         "emdat-event-1",
         "emdat",
@@ -291,7 +292,8 @@ def test_gate_and_margin_scores():
 
 
 # -- the listwise decision call ------------------------------------------------------------------------------------
-def test_listwise_request_names_candidates_and_carries_no_ids():
+def test_listwise_request_names_candidates_and_carries_no_ids(monkeypatch):
+    monkeypatch.setattr(P, "LEAN_PROMPTS", False)  # the full prompt's structure
     anchor = _rec(
         "emdat-event-1", "emdat", start="2023-10-07", country="AFG", title="Ground movement in Afghanistan"
     )
@@ -372,7 +374,8 @@ def test_choose_distractors_takes_the_closest_rivals_of_the_right_source():
 
 
 @responses.activate
-def test_score_listwise_calls_once_per_group_and_reports_failures():
+def test_score_listwise_calls_once_per_group_and_reports_failures(monkeypatch):
+    monkeypatch.setattr(P, "LEAN_PROMPTS", False)  # the full prompt's structure
     recs = {i: _rec(i, s) for i, s in [("a", "emdat"), ("b", "usgs"), ("c", "usgs")]}
     body = {
         "answers": {
@@ -662,3 +665,30 @@ def test_upstream_hazard_filters_follow_the_undrr_profiles():
     )  # ...but quake -> tsunami -> coastal flooding
     assert not P.passes_hazard_filter(quake, wildfire, "upstream")
     assert P.upstream_related("MH0601", "MH0604")  # one chapeau family (MH0600 Flooding)
+
+
+def test_small_quakes_are_only_compared_with_quakes():
+    small = _rec("usgs-s", "usgs", magnitude=4.6)
+    big = _rec("usgs-b", "usgs", magnitude=6.1)
+    flagged = P.Record(**{**small.__dict__, "id": "usgs-t", "tsunami": True})
+    flood = _rec("idmc-f", "idmc-idu", codes=("MH0600", "FL"))
+    register = _rec("emdat-q", "emdat")  # an earthquake register record, no magnitude
+    assert not P.passes_hazard_filter(small, flood, "any, quakes M5+")
+    assert P.passes_hazard_filter(big, flood, "any, quakes M5+")
+    assert P.passes_hazard_filter(flagged, flood, "any, quakes M5+")
+    assert P.passes_hazard_filter(small, register, "any, quakes M5+")  # quake to quake: always compared
+    assert P.passes_hazard_filter(register, flood, "any, quakes M5+")  # no magnitude: never blocked
+
+
+def test_lean_requests_carry_the_guidance_once(monkeypatch):
+    a = _rec("usgs-1", title="M 7.7 - Mandalay")
+    cands = [_rec(f"gdacs-{i}", "gdacs", title=f"Earthquake {i}") for i in range(12)]
+    lean = P.listwise_request("m", a, cands)
+    assert json.dumps(lean).count(P.LISTWISE_NOTE) == 1 and set(lean["questions"]) == {
+        f"same_candidate_{i + 1}" for i in range(12)
+    }
+    assert set(P.decision_request("m", a, cands[0])["questions"]) == {"same_event"}
+    monkeypatch.setattr(P, "LEAN_PROMPTS", False)
+    full = P.listwise_request("m", a, cands)
+    assert len(json.dumps(lean)) < len(json.dumps(full)) / 2
+    assert "relation" in P.decision_request("m", a, cands[0])["questions"]
