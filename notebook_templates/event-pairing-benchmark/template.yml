@@ -146,8 +146,8 @@ parameters:
     lean_prompts:
       type: boolean
       title: Lean model requests
-      description: Ask only what linking needs, with the guidance stated once. Off reproduces the earlier, longer requests.
-      default: true
+      description: Ask only what linking needs, with the guidance stated once. About 2.7 times cheaper; in testing it made a few more wrong links on borderline pairs.
+      default: false
     min_cross_hazard_magnitude:
       type: number
       title: Smallest quake compared with other hazards

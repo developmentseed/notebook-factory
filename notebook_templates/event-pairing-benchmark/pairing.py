@@ -693,8 +693,9 @@ def describe(rec: Record) -> dict:
     return out
 
 
-# Lean requests: only the question used for linking, the guidance stated once. False reproduces the earlier runs.
-LEAN_PROMPTS = True
+# Lean requests: only the question used for linking, the guidance stated once. About 2.7x cheaper, but in testing a
+# few more borderline pairs (long cyclone tracks against floods of the same weeks) were wrongly linked.
+LEAN_PROMPTS = False
 LEAN_QUESTIONS = {
     "same_event": {
         "type": "noul",

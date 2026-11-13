@@ -681,6 +681,7 @@ def test_small_quakes_are_only_compared_with_quakes():
 
 
 def test_lean_requests_carry_the_guidance_once(monkeypatch):
+    monkeypatch.setattr(P, "LEAN_PROMPTS", True)
     a = _rec("usgs-1", title="M 7.7 - Mandalay")
     cands = [_rec(f"gdacs-{i}", "gdacs", title=f"Earthquake {i}") for i in range(12)]
     lean = P.listwise_request("m", a, cands)
