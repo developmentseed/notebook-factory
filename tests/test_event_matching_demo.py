@@ -65,6 +65,11 @@ def _rec(item_id):
     return M.record_from_item(ITEMS[item_id])
 
 
+def _window_searches(bodies):
+    """The searches limited to the time window (by country, by radius), without the direct corr_id lookup."""
+    return [b for b in bodies if "datetime" in b]
+
+
 # -- records ---------------------------------------------------------------------------------------------
 def test_record_from_item_reads_source_place_time_and_magnitude():
     usgs = _rec(MAIN_SHOCK)
@@ -86,8 +91,8 @@ def test_record_keeps_the_related_links_by_role():
 
 
 # -- exact links -------------------------------------------------------------------------------------------
-# An exact link is a `related` link with the role `event` in the catalog, and nothing else: no numbers read
-# out of item ids, no table of which source numbers its events how.
+# An exact link is something the catalog itself says: a `related` link with the role `event`, or the same
+# `monty:corr_id`. No numbers are read out of item ids and there is no table of which source numbers its events how.
 def _event_link(collection, item_id):
     return {"rel": "related", "href": f"{API}/collections/{collection}/items/{item_id}", "roles": ["event"]}
 
@@ -114,13 +119,38 @@ def test_exact_links_work_for_any_collection_the_catalog_links_to():
     assert list(M.exact_links(M.record_from_item(cems), [charter])) == [charter.id]
 
 
-def test_a_number_shared_by_two_ids_is_not_a_link():
-    emdat = _rec("emdat-event-2025-0223-MMR")  # EM-DAT writes one record per country under one number
-    same_number = M.record_from_item(_clone("emdat-event-2025-0223-MMR", "emdat-event-2025-0223-THA"))
-    assert M.exact_links(emdat, [same_number]) == {}
-    idu = _rec("idmc-idu-event-30892")  # IDMC publishes one event under two collections
+def test_exact_links_join_records_with_the_same_corr_id():
+    usgs = _rec(MAIN_SHOCK)  # in the fixture USGS and EM-DAT carry one monty:corr_id for the M 7.7 quake
+    emdat = _rec("emdat-event-2025-0223-MMR")
+    glide = _rec("glide-event-EQ-2025-000043-MMR")  # another corr_id
+    assert usgs.corr_id == emdat.corr_id != glide.corr_id
+    assert M.exact_links(usgs, [emdat, glide]) == {emdat.id: "same Montandon correlation id"}
+    assert M.exact_links(emdat, [usgs]) == {usgs.id: "same Montandon correlation id"}
+
+
+def test_the_two_idmc_collections_link_through_their_corr_id():
+    idu = _rec("idmc-idu-event-30892")
     gidd = M.record_from_item(_clone("idmc-idu-event-30892", "idmc-gidd-event-30892", "idmc-gidd-events"))
-    assert M.exact_links(idu, [gidd]) == {}
+    assert list(M.exact_links(idu, [gidd])) == [gidd.id]
+
+
+def test_records_without_a_corr_id_never_link_on_it():
+    a = M.record_from_item(_item(MAIN_SHOCK, **{"monty:corr_id": None}))
+    b = M.record_from_item(_item("emdat-event-2025-0223-MMR", **{"monty:corr_id": None}))
+    assert a.corr_id == b.corr_id == "" and M.exact_links(a, [b]) == {}
+
+
+def test_a_number_shared_by_two_ids_is_not_a_link():
+    # EM-DAT writes one record per country under one number; with their own corr_ids they are unlinked
+    emdat = _rec("emdat-event-2025-0223-MMR")
+    other_country = M.record_from_item(
+        _clone(
+            "emdat-event-2025-0223-MMR",
+            "emdat-event-2025-0223-THA",
+            **{"monty:corr_id": "20250328-THA-1-GH0101-1-GCDB"},
+        )
+    )
+    assert M.exact_links(emdat, [other_country]) == {}
 
 
 def test_the_module_reads_no_numbers_out_of_ids():
@@ -175,7 +205,7 @@ def test_a_shorter_window_and_a_smaller_radius_find_fewer_candidates():
     tight = M.Rules.from_params("EQ 1 300", 14, 500, 1500, 5.0)
     bodies = _mock_search([two_days_later])
     assert M.find_candidates(API, "tok", seed, max_items=10, rules=tight)[0] == []
-    assert bodies[0]["datetime"].startswith("2025-03-27T")
+    assert _window_searches(bodies)[0]["datetime"].startswith("2025-03-27T")
 
 
 @responses.activate
@@ -209,7 +239,7 @@ def test_candidates_search_by_country_and_by_radius_over_the_event_collections()
     seed = _rec(MAIN_SHOCK)
     bodies = _mock_search([ITEMS["cems-event-EMSR798"]])
     M.find_candidates(API, "tok", seed, max_items=10)
-    country, radius = bodies
+    country, radius = _window_searches(bodies)
     assert set(country["collections"]) == set(M.EVENT_COLLECTIONS) and "emdat-events" in M.EVENT_COLLECTIONS
     assert country["filter"] == {
         "op": "a_overlaps",
@@ -233,7 +263,13 @@ def test_candidates_keep_other_sources_inside_the_window_and_drop_the_rest():
     found, total = M.find_candidates(API, "tok", seed, max_items=100)
     ids = {r.id for r in found}
     assert seed.id not in ids
-    assert not {i for i in ids if i.startswith("usgs-")}, "the seed's own source is not a candidate"
+    # the seed's own source is not a candidate, except the USGS events Montandon gives the seed's corr_id
+    same_corr = {
+        i
+        for i, f in ITEMS.items()
+        if f["collection"] == "usgs-events" and M.record_from_item(f).corr_id == seed.corr_id
+    }
+    assert {i for i in ids if i.startswith("usgs-")} == same_corr - {seed.id} and same_corr - {seed.id}
     assert {"emdat-event-2025-0223-MMR", "cems-event-EMSR798", "ifrcevent-event-7464"} <= ids
     assert "gdacs-event-1-1" not in ids and "gdacs-event-2-1" not in ids
     assert total == len(found)
@@ -245,7 +281,9 @@ def test_candidates_are_capped_and_the_most_plausible_come_first():
     _mock_search(list(ITEMS.values()))
     found, total = M.find_candidates(API, "tok", seed, max_items=5)
     assert len(found) == 5 and total > 5
-    scores = [M.heuristic_score(*M.pair_anchor(seed, r)) for r in found]
+    linked = [r for r in found if M.is_linked(seed, r)]
+    assert found[: len(linked)] == linked and linked  # the catalog's own links come first
+    scores = [M.heuristic_score(*M.pair_anchor(seed, r)) for r in found[len(linked) :]]
     assert scores == sorted(scores, reverse=True)
 
 
@@ -292,18 +330,49 @@ def test_a_small_quake_with_a_tsunami_flag_may_still_match_other_hazards():
 @responses.activate
 def test_candidates_drop_the_seeds_own_collection_unless_the_catalog_links_them():
     seed = _rec("emdat-event-2025-0223-MMR")
-    sibling = _clone("emdat-event-2025-0223-MMR", "emdat-event-2025-0223-THA")  # same number: not a link
-    linked = _clone("emdat-event-2025-0223-MMR", "emdat-event-2025-0777-MMR")
+    sibling = _clone(
+        "emdat-event-2025-0223-MMR",
+        "emdat-event-2025-0223-THA",
+        **{"monty:corr_id": "20250328-THA-1-GH0101-1-GCDB"},
+    )
+    linked = _clone(
+        "emdat-event-2025-0223-MMR",
+        "emdat-event-2025-0777-MMR",
+        **{"monty:corr_id": "20250328-MMR-2-GH0101-1-GCDB"},
+    )
     linked["links"].append(_event_link("emdat-events", seed.id))
-    _mock_search([sibling, linked])
+    same_corr = _clone("emdat-event-2025-0223-MMR", "emdat-event-2025-0888-MMR")  # copies the seed's corr_id
+    _mock_search([sibling, linked, same_corr])
     found, _ = M.find_candidates(API, "tok", seed, max_items=10)
-    assert [r.id for r in found] == ["emdat-event-2025-0777-MMR"]
+    assert sorted(r.id for r in found) == ["emdat-event-2025-0777-MMR", "emdat-event-2025-0888-MMR"]
+
+
+@responses.activate
+def test_the_catalog_is_asked_for_the_seeds_corr_id_without_a_window():
+    seed = _rec(MAIN_SHOCK)
+    bodies = _mock_search([])
+    M.find_candidates(API, "tok", seed, max_items=10)
+    ask = {"op": "=", "args": [{"property": "monty:corr_id"}, seed.corr_id]}
+    body = next(b for b in bodies if b.get("filter") == ask)
+    assert (
+        "datetime" not in body and "bbox" not in body
+    )  # a linked record is never hidden by the window or the cap
+
+
+@responses.activate
+def test_a_seed_without_a_corr_id_is_not_searched_by_it():
+    seed = M.record_from_item(_item(MAIN_SHOCK, **{"monty:corr_id": None}))
+    bodies = _mock_search([])
+    M.find_candidates(API, "tok", seed, max_items=10)
+    assert not any("monty:corr_id" in json.dumps(b.get("filter")) for b in bodies)
 
 
 @responses.activate
 def test_the_two_idmc_collections_are_separate_sources_to_search():
     idu = _rec("idmc-idu-event-30892")
-    gidd = _clone("idmc-idu-event-30892", "idmc-gidd-event-30892", "idmc-gidd-events")
+    gidd = _clone(
+        "idmc-idu-event-30892", "idmc-gidd-event-30892", "idmc-gidd-events", **{"monty:corr_id": "other"}
+    )
     _mock_search([gidd])
     found, _ = M.find_candidates(API, "tok", idu, max_items=10)
     assert [r.id for r in found] == [gidd["id"]]
@@ -697,9 +766,11 @@ def test_the_notebook_reads_the_api_key_only_from_the_environment():
     assert "sk-or-" not in source and "OPENROUTER_API_KEY =" not in source
 
 
-def test_the_notebook_writes_no_csv_files():
+def test_the_notebook_writes_no_files():
     source = "\n".join(c.source for c in _notebook().cells)
-    assert "to_csv" not in source and ".csv" not in source  # the tables are shown in the notebook itself
+    for written in ("to_csv", ".csv", "event.geojson", "write_text", ".mkdir("):
+        assert written not in source  # the tables and the map are the result
+    assert not hasattr(M, "event_geojson")
 
 
 def test_matching_module_needs_no_django():

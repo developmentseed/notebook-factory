@@ -38,8 +38,14 @@ def parse_windows(text: str) -> dict[str, tuple[int, int]]:
         if not line:
             continue
         code, *rest = line.split()
-        if len(rest) != 2 or not re.fullmatch(r"[A-Za-z]{2}", code) or not all(x.isdigit() and int(x) > 0 for x in rest):
-            raise ValueError(f"hazard_windows line {n}: expected 'CODE days km' (for example 'EQ 7 300'), got {line!r}")
+        if (
+            len(rest) != 2
+            or not re.fullmatch(r"[A-Za-z]{2}", code)
+            or not all(x.isdigit() and int(x) > 0 for x in rest)
+        ):
+            raise ValueError(
+                f"hazard_windows line {n}: expected 'CODE days km' (for example 'EQ 7 300'), got {line!r}"
+            )
         out[code.upper()] = (int(rest[0]), int(rest[1]))
     return out
 
@@ -55,7 +61,14 @@ class Rules:
     min_cross_hazard_magnitude: float = 5.0  # a smaller quake (no tsunami flag) is only compared with quakes
 
     @classmethod
-    def from_params(cls, hazard_windows, default_window_days, default_radius_km, coarse_radius_km, min_cross_hazard_magnitude):
+    def from_params(
+        cls,
+        hazard_windows,
+        default_window_days,
+        default_radius_km,
+        coarse_radius_km,
+        min_cross_hazard_magnitude,
+    ):
         for name, value in (("default_window_days", default_window_days), ("default_radius_km", default_radius_km),
                             ("coarse_radius_km", coarse_radius_km)):  # fmt: skip
             if value < 1:
@@ -68,7 +81,10 @@ class Rules:
 
 
 # -- constants -----------------------------------------------------------------------------------------------------
-STRONG, POSSIBLE = 0.7, 0.4  # the app's "joins the disaster" and "possibly" thresholds, used to rank candidates
+STRONG, POSSIBLE = (
+    0.7,
+    0.4,
+)  # the app's "joins the disaster" and "possibly" thresholds, used to rank candidates
 # Sources that only locate an event at country level and date it to the day.
 COARSE_SOURCES = {"glide", "emdat", "ifrcevent", "idmc-idu", "idmc-gidd", "desinventar"}
 FAMILIES = {"idmc-idu": "idmc", "idmc-gidd": "idmc"}  # IDMC publishes one event under both collections
@@ -115,6 +131,7 @@ class Record:
     tsunami: bool = False
     links: tuple[tuple[str, str, str], ...] = ()  # (role, collection, item id) of the item's related links
     src_event_id: str = ""  # monty:src_event_id: the source's own id, shared by the episodes of one event
+    corr_id: str = ""  # monty:corr_id: Montandon's correlation id (date, country, number, hazard, episode)
     episode: object = None  # monty:episode_number
     geometry: dict | None = field(default=None, compare=False)
 
@@ -154,7 +171,9 @@ def _centroid(geom: dict | None) -> tuple[float, float] | None:
                 walk(x)
 
     walk(coords)
-    return (sum(p[0] for p in points) / len(points), sum(p[1] for p in points) / len(points)) if points else None
+    return (
+        (sum(p[0] for p in points) / len(points), sum(p[1] for p in points) / len(points)) if points else None
+    )
 
 
 def _magnitude(source: str, props: dict) -> float | None:
@@ -209,6 +228,7 @@ def record_from_item(item: dict) -> Record:
         tsunami=str(props.get("eq:tsunami", "")).lower() == "true",
         links=_related_links(item),
         src_event_id=str(props.get("monty:src_event_id") or ""),
+        corr_id=str(props.get("monty:corr_id") or ""),
         episode=props.get("monty:episode_number"),
         geometry=item.get("geometry"),
     )
@@ -262,7 +282,9 @@ def _radius(anchor: Record, cand: Record, rules: Rules) -> int:
     return max(radius, rules.coarse_radius_km) if anchor.coarse or cand.coarse else radius
 
 
-def proximity(anchor: Record, cand: Record, rules: Rules = Rules()) -> tuple[float, float, float, float | None]:
+def proximity(
+    anchor: Record, cand: Record, rules: Rules = Rules()
+) -> tuple[float, float, float, float | None]:
     """(time score, distance score, gap in days, km): the two terms the app's heuristic averages."""
     days = rules.window(anchor)[0]
     gap = gap_days(anchor, cand, by_day=anchor.coarse or cand.coarse)
@@ -329,8 +351,8 @@ def find_candidates(
 
     Two searches over every events collection, both limited to the hazard's time window: one by the seed's
     countries (a CQL2 `a_overlaps`), one by a box around its point (a disaster crosses borders, and a register
-    holds one record per country). Records of the seed's own collection are dropped unless Montandon links them
-    to the seed, and the episodes of one source event (same `monty:src_event_id`) count once.
+    holds one record per country), plus the records with the seed's `monty:corr_id`. Records of the seed's own
+    collection are dropped unless Montandon links them to the seed, and the episodes of one source event (same `monty:src_event_id`) count once.
     """
     if not seed.start:
         raise ValueError("the selected event has no date, so there is nothing to search around")
@@ -342,10 +364,18 @@ def find_candidates(
         "datetime": f"{first:%Y-%m-%dT%H:%M:%SZ}/{last:%Y-%m-%dT%H:%M:%SZ}",
     }  # fmt: skip
     found: dict[str, dict] = {}
+    if seed.corr_id:  # the catalog's own link, asked for directly so the window and the caps never hide it
+        same = {"op": "=", "args": [{"property": "monty:corr_id"}, seed.corr_id]}
+        found.update({
+            f["id"]: f
+            for f in _search(api, token, {"collections": EVENT_COLLECTIONS, "limit": 200, "filter-lang": "cql2-json", "filter": same})
+        })  # fmt: skip
     countries = sorted(set(seed.countries) - {UNKNOWN_COUNTRY})
     if countries:
         flt = {"op": "a_overlaps", "args": [{"property": "monty:country_codes"}, countries]}
-        found.update({f["id"]: f for f in _search(api, token, {**base, "filter-lang": "cql2-json", "filter": flt})})
+        found.update(
+            {f["id"]: f for f in _search(api, token, {**base, "filter-lang": "cql2-json", "filter": flt})}
+        )
     if seed.point:
         box = bbox_around(seed.point, max(radius, rules.coarse_radius_km))
         for f in _search(api, token, {**base, "bbox": box}, max_items=800):
@@ -373,23 +403,34 @@ def find_candidates(
 
 
 # -- exact links -----------------------------------------------------------------------------------------------------
-# An exact link is a `related` link with the role `event` that Montandon itself holds between two records
-# (for now a CEMS activation to its GDACS and Charter events). Nothing is inferred from ids or numbers.
-def is_linked(a: Record, b: Record) -> bool:
-    """True when the catalog links one of the two records to the other, in either direction."""
+# An exact link is something Montandon itself says about two records: a `related` link with the role `event`
+# between them, or the same `monty:corr_id`. Nothing is inferred from ids or numbers.
+def link_reason(a: Record, b: Record) -> str | None:
+    """Why the catalog links the two records, or None. A related event link counts in either direction."""
 
     def points_at(src: Record, dst: Record) -> bool:
         # Montandon writes some link targets as the bare source id ("1474477-1630564" for the item
         # "gdacs-event-1474477-1630564"), so a target matches the item id with or without its prefix.
         names = {dst.id, dst.id.removeprefix(f"{dst.source}-event-")}
-        return any(role == "event" and coll == f"{dst.source}-events" and iid in names for role, coll, iid in src.links)
+        return any(
+            role == "event" and coll == f"{dst.source}-events" and iid in names
+            for role, coll, iid in src.links
+        )
 
-    return points_at(a, b) or points_at(b, a)
+    if points_at(a, b) or points_at(b, a):
+        return "linked in Montandon"
+    if a.corr_id and a.corr_id == b.corr_id:
+        return "same Montandon correlation id"
+    return None
+
+
+def is_linked(a: Record, b: Record) -> bool:
+    return link_reason(a, b) is not None
 
 
 def exact_links(seed: Record, records: list[Record]) -> dict[str, str]:
     """{record id: why} for the records Montandon links to the seed. These join without asking Jev."""
-    return {rec.id: "linked in Montandon" for rec in records if rec.id != seed.id and is_linked(seed, rec)}
+    return {rec.id: why for rec in records if rec.id != seed.id and (why := link_reason(seed, rec))}
 
 
 # -- Jev: the decision model ---------------------------------------------------------------------------------------------
@@ -437,7 +478,11 @@ def listwise_request(model: str, anchor: Record, candidates: list[Record], rules
     state = {}
     for key, cand in zip(keys_, candidates, strict=True):
         _, _, gap, km = proximity(*pair_anchor(anchor, cand), rules)
-        state[key] = {**describe(cand), "days_apart": int(round(gap)), "km_apart": "unknown" if km is None else int(round(km))}
+        state[key] = {
+            **describe(cand),
+            "days_apart": int(round(gap)),
+            "km_apart": "unknown" if km is None else int(round(km)),
+        }
     questions: dict[str, dict] = {
         f"same_{key}": {
             "type": "noul",
@@ -465,12 +510,18 @@ def listwise_request(model: str, anchor: Record, candidates: list[Record], rules
             "false": "No candidate is the same disaster as the anchor.",
         },
     }
-    return {"model": model, "state": {"anchor": describe(anchor), "candidates": state}, "questions": questions}
+    return {
+        "model": model,
+        "state": {"anchor": describe(anchor), "candidates": state},
+        "questions": questions,
+    }
 
 
 def call_decisions(payload: dict, api_key: str, retries: int = 3, timeout: int = 60) -> dict:
     for attempt in range(retries + 1):
-        r = requests.post(DECISIONS_URL, json=payload, headers={"Authorization": f"Bearer {api_key}"}, timeout=timeout)
+        r = requests.post(
+            DECISIONS_URL, json=payload, headers={"Authorization": f"Bearer {api_key}"}, timeout=timeout
+        )
         if r.status_code in (429, 500, 502, 503, 524, 529) and attempt < retries:
             time.sleep(2**attempt)
             continue
@@ -505,7 +556,9 @@ def ask_jev(
     def one(group: list[Record]) -> tuple[dict[str, float], float, str]:
         try:
             response = call_decisions(listwise_request(model, seed, group, rules), api_key)
-        except Exception as exc:  # one failed call must not sink the run; never echo the request (it carries the key)
+        except (
+            Exception
+        ) as exc:  # one failed call must not sink the run; never echo the request (it carries the key)
             return {}, 0.0, f"{type(exc).__name__}: {str(exc)[:160]}"
         answers = response.get("answers") or {}
         scores = {}
@@ -528,13 +581,23 @@ def match_table(candidates: list[Record], exact: dict[str, str], scores: dict[st
     """One row per candidate, most confident first: source, title, date, P(same) and why."""
     rows = []
     for rec in candidates:
-        p, why = (1.0, exact[rec.id]) if rec.id in exact else (scores[rec.id], "Jev") if rec.id in scores else (0.0, "not scored")
+        p, why = (
+            (1.0, exact[rec.id])
+            if rec.id in exact
+            else (scores[rec.id], "Jev")
+            if rec.id in scores
+            else (0.0, "not scored")
+        )
         rows.append({
             "id": rec.id, "source": SOURCE_LABELS.get(rec.source, rec.source), "title": rec.title,
             "date": rec.start.date().isoformat() if rec.start else "", "p_same": p, "why": why,
         })  # fmt: skip
     cols = ["id", "source", "title", "date", "p_same", "why"]
-    return pd.DataFrame(rows, columns=cols).sort_values("p_same", ascending=False, kind="stable").reset_index(drop=True)
+    return (
+        pd.DataFrame(rows, columns=cols)
+        .sort_values("p_same", ascending=False, kind="stable")
+        .reset_index(drop=True)
+    )
 
 
 # -- details: what each matched source says -------------------------------------------------------------------------------
@@ -588,7 +651,10 @@ def fetch_details(api: str, token: str, events: list[Record], batch: int = 50) -
                         rows.append({"source": source, "field": "severity", "value": float(d["severity_value"]),
                                      "unit": d.get("severity_unit"), "estimate_type": d.get("estimate_type"), "event": event})  # fmt: skip
                     # a register's or an alert's polygon is a country outline, not a footprint
-                    if source not in COARSE_SOURCES and (item.get("geometry") or {}).get("type") in ("Polygon", "MultiPolygon"):
+                    if source not in COARSE_SOURCES and (item.get("geometry") or {}).get("type") in (
+                        "Polygon",
+                        "MultiPolygon",
+                    ):
                         footprints.append({"type": "Feature", "geometry": item["geometry"],
                                            "properties": {"source": source, "title": props.get("title", ""), "event": event}})  # fmt: skip
     return Details(rows, footprints)
@@ -596,7 +662,9 @@ def fetch_details(api: str, token: str, events: list[Record], batch: int = 50) -
 
 # -- the fact sheet -------------------------------------------------------------------------------------------------------
 DISAGREE_RATIO = 1.5  # sources disagree when the largest value is at least this many times the smallest
-SUM_SOURCES = {"cems"}  # Copernicus reports one figure per area of interest: they add up. Others: the largest value.
+SUM_SOURCES = {
+    "cems"
+}  # Copernicus reports one figure per area of interest: they add up. Others: the largest value.
 MAGNITUDE = "Magnitude / severity"
 NUMERIC_ROWS = {
     "deaths": "Deaths", "injured": "Injured", "affected": "People affected", "displaced": "People displaced",
@@ -625,7 +693,11 @@ def _aggregate(source: str, items: list[dict], countries_of: dict[str, frozenset
         by_event.setdefault(row["event"], []).append(row)
     for event, rows in by_event.items():
         if source in SUM_SOURCES:
-            figure = (sum(r["value"] for r in rows), rows[0], any(r["estimate_type"] == "modelled" for r in rows))
+            figure = (
+                sum(r["value"] for r in rows),
+                rows[0],
+                any(r["estimate_type"] == "modelled" for r in rows),
+            )
         else:
             top = max(rows, key=lambda r: r["value"])
             figure = (top["value"], top, top["estimate_type"] == "modelled")
@@ -704,14 +776,20 @@ def fact_sheet(records: list[Record], rows: list[dict]) -> pd.DataFrame:
             continue
         flag, span = False, ""
         if label in NUMERIC_ROWS.values():
-            unit_key = (lambda s, label=label: units[(label, s)]) if label == "Economic loss" else (lambda s: "")
+            unit_key = (
+                (lambda s, label=label: units[(label, s)]) if label == "Economic loss" else (lambda s: "")
+            )
             flag, span = _disagree({s: (v, unit_key(s)) for s, v in present.items()})
         elif label == MAGNITUDE:
-            _, span = _disagree({s: (v, _magnitude_unit(units[(label, s)])) for s, v in present.items()}, decimals=1)
+            _, span = _disagree(
+                {s: (v, _magnitude_unit(units[(label, s)])) for s, v in present.items()}, decimals=1
+            )
         table_rows.append([present.get(s) for s in sources] + [span, flag])
         index.append(label)
     column_labels = [SOURCE_LABELS.get(s, s) for s in sources]
-    table = pd.DataFrame(table_rows, index=index, columns=[*column_labels, "Range", "Sources disagree"], dtype=object)
+    table = pd.DataFrame(
+        table_rows, index=index, columns=[*column_labels, "Range", "Sources disagree"], dtype=object
+    )
     name_of = dict(zip(sources, column_labels, strict=True))
     table.attrs["modelled"] = {(label, name_of[s]) for label, s in modelled}
     table.attrs["units"] = {(label, name_of[s]): u for (label, s), u in units.items()}
@@ -732,13 +810,20 @@ def display_table(facts: pd.DataFrame):
             return value
         unit = units.get((label, col), "")
         out = f"{value:,.1f}" if label == MAGNITUDE else f"{value:,.0f}"
-        if label == MAGNITUDE and unit and "magnitude" not in unit.lower() and unit.lower() not in MAGNITUDE_UNITS:
+        if (
+            label == MAGNITUDE
+            and unit
+            and "magnitude" not in unit.lower()
+            and unit.lower() not in MAGNITUDE_UNITS
+        ):
             out += f" {unit}"  # a severity in km/h or an alert score keeps its unit; a magnitude is just a number
         elif label == "Economic loss" and unit:
             out += f" {unit}"
         return out + ("*" if (label, col) in modelled else "")
 
-    shown = pd.DataFrame({c: [text(r, c, facts.loc[r, c]) for r in facts.index] for c in sources}, index=facts.index)
+    shown = pd.DataFrame(
+        {c: [text(r, c, facts.loc[r, c]) for r in facts.index] for c in sources}, index=facts.index
+    )
     shown["Range"] = facts["Range"]
     disagree = [bool(v) for v in facts["Sources disagree"]]
 
@@ -776,15 +861,3 @@ def footprints(events: list[Record], details: Details) -> list[dict]:
         if not r.coarse and (r.geometry or {}).get("type") in ("Polygon", "MultiPolygon")
     ]  # fmt: skip
     return own + details.footprints
-
-
-def event_geojson(matched: list[tuple[Record, float]], shapes: list[dict]) -> dict:
-    """A FeatureCollection of the matched events (with their P(same)) and the footprints."""
-    features = [
-        {"type": "Feature",
-         "geometry": rec.geometry or ({"type": "Point", "coordinates": list(rec.point)} if rec.point else None),
-         "properties": {"id": rec.id, "source": SOURCE_LABELS.get(rec.source, rec.source), "title": rec.title,
-                        "start": rec.start.isoformat() if rec.start else None, "p_same": p}}
-        for rec, p in matched
-    ]  # fmt: skip
-    return {"type": "FeatureCollection", "features": features + shapes}
