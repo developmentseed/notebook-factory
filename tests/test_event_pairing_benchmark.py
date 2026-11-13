@@ -646,3 +646,19 @@ def test_hazard_filters():
         quake, flood, "same"
     )
     assert all(P.passes_hazard_filter(quake, blank, f) for f in P.HAZARD_FILTERS)
+
+
+def test_upstream_hazard_filters_follow_the_undrr_profiles():
+    quake = _rec("q", "usgs", codes=("GH0101", "EQ"))
+    tsunami = _rec("t", "emdat", codes=("MH0705", "TS"))
+    flood = _rec("f", "gdacs", codes=("MH0600", "FL"))
+    cyclone = _rec("c", "ibtracs", codes=("MH0309", "TC"))
+    wildfire = _rec("w", "emdat", codes=("EN0205", "WF"))
+    assert P.passes_hazard_filter(quake, tsunami, "upstream")  # the earthquake profile: triggers tsunami
+    assert P.passes_hazard_filter(cyclone, flood, "upstream")  # tropical cyclone triggers flooding
+    assert not P.passes_hazard_filter(quake, flood, "upstream")  # no direct link...
+    assert P.passes_hazard_filter(
+        quake, flood, "upstream, 2 steps"
+    )  # ...but quake -> tsunami -> coastal flooding
+    assert not P.passes_hazard_filter(quake, wildfire, "upstream")
+    assert P.upstream_related("MH0601", "MH0604")  # one chapeau family (MH0600 Flooding)

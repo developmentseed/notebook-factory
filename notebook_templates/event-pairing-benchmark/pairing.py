@@ -11,6 +11,7 @@ in step: change one and that test tells you to change the other.
 
 from __future__ import annotations
 
+import functools
 import html
 import math
 import re
@@ -353,12 +354,65 @@ def hazard_relation(a: Record, b: Record) -> str:
 # "same" keeps one hazard family only. Records with missing codes always pass.
 HAZARD_FILTERS: dict[str, set[str] | None] = {
     "any": None,
-    "related": {"same", "cluster", "cascade", "unknown"},
+    "upstream, 2 steps": None,  # UNDRR-ISC links through at most one hazard in between (see upstream_related)
+    "upstream": None,  # UNDRR-ISC links, direct
+    "related": {"same", "cluster", "cascade", "unknown"},  # the hand-set CASCADE_GROUPS
     "same": {"same", "cluster", "unknown"},
 }
 
 
+# -- related hazards from the UNDRR-ISC 2025 profiles (hazard_links.csv, built by build_hazard_links.py) -------
+def _load_hazard_links(path=None) -> dict[str, set[str]]:
+    """{code: codes it triggers or is triggered by}: the profiles' multi-hazard links, both directions."""
+    import csv
+    from pathlib import Path
+
+    path = Path(path or Path(__file__).resolve().parent / "hazard_links.csv")
+    links: dict[str, set[str]] = {}
+    if not path.exists():
+        return links
+    with path.open() as f:
+        for row in csv.DictReader(line for line in f if not line.startswith("#")):
+            links.setdefault(row["source"], set()).add(row["target"])
+            links.setdefault(row["target"], set()).add(row["source"])
+    return links
+
+
+HAZARD_LINKS = _load_hazard_links()
+
+
+def _family(code: str) -> set[str]:
+    """A code with its chapeau (the cluster's XX..00 profile, e.g. MH0600 Flooding); a chapeau with every code of its
+    cluster. A record coded with the chapeau may be any of its specific hazards."""
+    chapeau = code[:4] + "00"
+    if code == chapeau:
+        return {c for c in HAZARD_LINKS if c.startswith(code[:4])} | {code}
+    return {code, chapeau}
+
+
+@functools.cache
+def upstream_related(code_a: str, code_b: str, steps: int = 1) -> bool:
+    """Same cluster, or linked by the profiles directly (steps=1) or through one hazard in between (steps=2)."""
+    if code_a[:4] == code_b[:4]:
+        return True
+    fa, fb = _family(code_a), _family(code_b)
+    near_a = set().union(*(HAZARD_LINKS.get(c, set()) for c in fa))
+    if near_a & fb:
+        return True
+    if steps < 2:
+        return False
+    near_b = set().union(*(HAZARD_LINKS.get(c, set()) for c in fb))
+    return bool(near_a & near_b)
+
+
 def passes_hazard_filter(a: Record, b: Record, name: str) -> bool:
+    if name.startswith("upstream"):
+        ca = [c for c in a.hazard_codes if UNDRR_RE.match(c)]
+        cb = [c for c in b.hazard_codes if UNDRR_RE.match(c)]
+        if not (ca and cb):
+            return True  # missing codes never block
+        steps = 2 if "2 steps" in name else 1
+        return any(upstream_related(x, z, steps) for x in ca for z in cb)
     allowed = HAZARD_FILTERS[name]
     return allowed is None or hazard_relation(a, b) in allowed
 
