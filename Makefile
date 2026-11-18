@@ -3,7 +3,8 @@
 
 setup:            ## create venv, install deps, install mystmd
 	uv sync
-	@command -v myst >/dev/null 2>&1 || npm i -g mystmd@1.10.1
+	@v=$$(myst --version 2>/dev/null | tr -d v); \
+	if [ -z "$$v" ] || [ "$$(printf '%s\n' 1.12.0 "$$v" | sort -V | head -1)" != 1.12.0 ]; then npm i -g mystmd@1.12.0; fi
 	@test -f .env || cp .env.example .env
 	@echo "Now create the database (see README) and run: make migrate seed run"
 

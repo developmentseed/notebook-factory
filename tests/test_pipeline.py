@@ -188,7 +188,7 @@ def test_prepare_notebook_collapses_code_cells(tmp_path):
 
 def test_concurrent_first_builds_share_the_theme_download(tmp_path):
     """Two builds on an empty theme cache: one downloads, the other must not read it half-written."""
-    from factory.notebooks.pipeline.renderer import _run_myst
+    from factory.notebooks.pipeline.renderer import _run_myst, _template_cache
 
     # Stand-in for `myst build`: downloads the theme in two steps unless it is complete,
     # and fails like MyST does when it finds a half-written theme.
@@ -203,13 +203,12 @@ def test_concurrent_first_builds_share_the_theme_download(tmp_path):
         "    time.sleep(0.5)\n"
         "    open(done, 'w').close()\n"
     )
-    cache = tmp_path / "cache"
-    cache.mkdir()
+    cache = _template_cache(tmp_path / "cache", "book-theme")
     env = {**os.environ, "CACHE": str(cache)}
     codes = []
 
     def build():
-        proc = _run_myst([sys.executable, str(fake_myst)], tmp_path, env, cache, "book-theme", 30)
+        proc = _run_myst([sys.executable, str(fake_myst)], tmp_path, env, cache, 30)
         codes.append(proc.returncode)
 
     threads = [threading.Thread(target=build) for _ in range(2)]
@@ -218,4 +217,31 @@ def test_concurrent_first_builds_share_the_theme_download(tmp_path):
     for t in threads:
         t.join()
     assert codes == [0, 0]
-    assert (cache / ".book-theme.ready").exists()
+    assert (cache / ".ready").exists()
+
+
+def test_template_cache_per_template(tmp_path):
+    """A release-zip URL template gets its own flat cache directory, separate from other templates."""
+    from factory.notebooks.pipeline.renderer import _run_myst, _template_cache
+
+    root = tmp_path / "cache"
+    url = "https://github.com/jupyter-book/myst-theme/releases/download/myst-to-react%401.4.1/book-theme.zip"
+    cache = _template_cache(root, url)
+    assert cache.parent == root and cache.is_dir()
+    assert cache.name == "myst-to-react-1.4.1-book-theme.zip-75c301e84bb3"
+    assert _template_cache(root, url) == cache
+    assert _template_cache(root, url.replace("1.4.1", "1.4.2")) != cache
+    assert _template_cache(root, "book-theme") != cache
+
+    proc = _run_myst([sys.executable, "-c", ""], tmp_path, dict(os.environ), cache, 30)
+    assert proc.returncode == 0
+    assert (cache / ".ready").exists()
+
+
+def test_missing_myst_cli_is_reported(tmp_path):
+    from factory.notebooks.pipeline.renderer import RenderError, _run_myst, _template_cache
+
+    cache = _template_cache(tmp_path, "book-theme")
+    with pytest.raises(RenderError, match="MyST CLI not found"):
+        _run_myst([str(tmp_path / "no-such-myst")], tmp_path, dict(os.environ), cache, 30)
+    assert not (cache / ".ready").exists()

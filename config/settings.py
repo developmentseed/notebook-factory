@@ -278,7 +278,12 @@ NOTEBOOK_FACTORY = {
     "CELL_TIMEOUT": env.int("NOTEBOOK_CELL_TIMEOUT", default=60 * 20),
     # MyST rendering
     "MYST_COMMAND": env("MYST_COMMAND", default=shutil.which("myst") or "myst"),
-    "MYST_TEMPLATE": env("MYST_TEMPLATE", default="book-theme"),
+    # A pinned theme release; a bare name like "book-theme" fetches the latest one. Theme 2.x pages
+    # fail to load when opened at .../index.html (the run's output_url) and show a route error.
+    "MYST_TEMPLATE": env(
+        "MYST_TEMPLATE",
+        default="https://github.com/jupyter-book/myst-theme/releases/download/myst-to-react%401.4.1/book-theme.zip",
+    ),
     "MYST_TEMPLATE_CACHE_DIR": Path(
         env("MYST_TEMPLATE_CACHE_DIR", default=str(BASE_DIR / "data" / "myst-templates"))
     ),

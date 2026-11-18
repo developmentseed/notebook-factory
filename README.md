@@ -35,11 +35,11 @@ Only light metadata lives in Postgres. Notebook content never touches the databa
 ## Quick start (no docker)
 
 Requirements: Python 3.12+, [uv](https://docs.astral.sh/uv/), PostgreSQL with PostGIS,
-GDAL/GEOS (`brew install gdal geos` — Homebrew paths are auto-detected), Node 18+ for MyST.
+GDAL/GEOS (`brew install gdal geos` — Homebrew paths are auto-detected), Node 22+ for MyST.
 
 ```sh
 uv sync                                   # python deps
-npm i -g mystmd                           # MyST >= 1.10 (widgets need it); or set MYST_COMMAND="npx -y mystmd@1.10.1"
+npm i -g mystmd@1.12.0                    # tested with mystmd 1.12.0; or set MYST_COMMAND="npx -y mystmd@1.12.0"
 cp .env.example .env                      # edit DATABASE_URL etc.
 
 # database (Postgres.app on macOS ships PostGIS; on Linux install postgresql-postgis)

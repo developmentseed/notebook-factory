@@ -401,11 +401,11 @@ Requirements:
 * Python 3.12+ and [uv](https://docs.astral.sh/uv/)
 * PostgreSQL with **PostGIS**
 * GDAL and GEOS (`brew install gdal geos` on macOS)
-* Node 18+ with **mystmd ≥ 1.10** (`npm i -g mystmd`)
+* Node 22+ with **mystmd** (tested with 1.12.0: `npm i -g mystmd@1.12.0`)
 
 ```sh
 uv sync
-npm i -g mystmd
+npm i -g mystmd@1.12.0
 cp .env.example .env    # then edit it
 ```
 
@@ -424,7 +424,7 @@ The settings that matter most (all are in `.env.example`):
 | `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_REGION`, `S3_ENDPOINT_URL`, `S3_ADDRESSING_STYLE` | `s3` backend (AWS, MinIO, …). |
 | `AZURE_ACCOUNT_NAME`, `AZURE_ACCOUNT_KEY` or `AZURE_CONNECTION_STRING`, `AZURE_CONTAINER` | `azure` backend. Without a key, the app signs in with `DefaultAzureCredential`. |
 | `PUBLISHED_PUBLIC_BASE_URL` | Optional CDN or separate domain for published files. Recommended, especially if uploads are used. |
-| `MYST_COMMAND`, `MYST_TEMPLATE`, `MYST_HIDE_CODE` | How mystmd is invoked (e.g. `npx -y mystmd@1.10.1`), the site theme, and whether code is collapsed. |
+| `MYST_COMMAND`, `MYST_TEMPLATE`, `MYST_HIDE_CODE` | How mystmd is invoked (e.g. `npx -y mystmd@1.12.0`), the site theme, and whether code is collapsed. |
 | `NOTEBOOK_TEMPLATES_DIR`, `NOTEBOOK_WORK_DIR` | Example templates for `sync_templates`, and where runs execute. |
 | `NOTEBOOK_KERNEL_ENV_PASSTHROUGH`, `NOTEBOOK_KERNEL_ENV_INHERIT` | Extra worker variables kernels may see (names or `PREFIX_*`), or pass the whole worker environment (not recommended). See [Secrets](#secrets). |
 | `NOTEBOOK_TEMPLATE_MAX_BYTES`, `NOTEBOOK_TEMPLATE_CACHE_DIR` | Size limit for uploaded templates, and where workers unpack them. Template bundles are kept in the published storage under `templates/`, so don't put secrets in them. |
@@ -540,7 +540,7 @@ python manage.py ingest_item --catalog montandon --file item.json --no-fire   # 
 | Map picker is empty / "No areas loaded" | Boundaries not imported for that country or level. See [Importing countries and admin boundaries](#importing-countries-and-admin-boundaries). |
 | Runs stay *queued* | A broker is configured, but no Celery worker is running. |
 | Runs stuck mid-way after a restart | `python manage.py stale_runs` lists them. Add `--requeue` to re-run them or `--fail` to mark them failed (`--older-than 0.5` hours by default). |
-| Rendering fails with "myst not found" | Install mystmd ≥ 1.10, or set `MYST_COMMAND="npx -y mystmd@1.10.1"`. |
+| Rendering fails with "myst not found" | Install mystmd 1.12.0 (`npm i -g mystmd@1.12.0`), or set `MYST_COMMAND="npx -y mystmd@1.12.0"`. |
 | Catalog test or picker fails with 401/403 | Missing or wrong API key on the catalog page. |
 | Write-back skipped | The catalog doesn't have *Write-back enabled*, or its key lacks write rights. The run log says which. |
 | Upload rejected as too large behind a proxy | Raise the proxy's body size limit (e.g. ingress-nginx `proxy-body-size`) as well as `NOTEBOOK_UPLOAD_MAX_BYTES`. |
