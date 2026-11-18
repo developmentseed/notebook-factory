@@ -489,6 +489,76 @@ def test_candidate_table_says_how_far_apart_and_why_each_is_a_candidate():
     assert (table["Days apart"] >= 0).all() and table["Km apart"].notna().all()
 
 
+# -- distance to a track or an area, and the candidate caps -------------------------------------------------
+def test_nearest_km_measures_to_the_nearest_point_of_a_track():
+    track = {"type": "LineString", "coordinates": [[0.0, 0.0], [10.0, 0.0]]}
+    assert M.nearest_km((5.0, 1.0), track) == pytest.approx(
+        111.2, abs=1.0
+    )  # a degree of latitude from the middle
+    assert M.nearest_km((5.0, 0.0), track) == pytest.approx(
+        0.0, abs=0.5
+    )  # on the track, between two vertices
+    assert M.nearest_km((-1.0, 0.0), track) == pytest.approx(111.2, abs=1.0)  # beyond the first vertex
+    assert M.nearest_km((5.0, 1.0), {"type": "Point", "coordinates": [5.0, 2.0]}) == pytest.approx(
+        111.2, abs=1.0
+    )
+
+
+def test_nearest_km_is_zero_inside_an_area_and_measures_to_its_edge_outside():
+    assert M.nearest_km((95.5, 21.5), SQUARE) == 0.0
+    assert M.nearest_km((96.5, 21.5), SQUARE) == pytest.approx(
+        51.8, abs=2.0
+    )  # half a degree east of the edge
+
+
+def _track(item_id, coordinates, **props):
+    item = _clone(MAIN_SHOCK, item_id, "ibtracs-events", **props)
+    item["geometry"] = {"type": "LineString", "coordinates": coordinates}
+    return item
+
+
+def test_a_precise_track_is_measured_by_its_nearest_point_not_its_centre():
+    seed = _rec(MAIN_SHOCK)  # a point near 96E 21N
+    lon, lat = seed.point
+    track = M.record_from_item(_track("ibtracs-x", [[lon + 60, lat], [lon + 0.5, lat], [lon + 90, lat + 5]]))
+    assert M.haversine_km(seed.point, track.point) > 1000  # the centre of the track is far away
+    _, _, _, km = M.proximity(seed, track)
+    assert km < 80  # but the track passes within about 50 km of the seed
+
+
+def test_a_coarse_record_keeps_its_centre_point_distance():
+    seed = _rec(MAIN_SHOCK)
+    outline = _clone("emdat-event-2025-0223-MMR", "emdat-event-2025-0999-MMR")
+    outline["geometry"] = (
+        SQUARE  # a country outline: the seed is nowhere near its edge, but the centre is what counts
+    )
+    rec = M.record_from_item(outline)
+    assert rec.coarse
+    _, _, _, km = M.proximity(seed, rec)
+    assert km == pytest.approx(M.haversine_km(seed.point, rec.point))
+
+
+@responses.activate
+def test_a_track_that_reaches_the_event_ranks_ahead_of_points_that_are_further_away():
+    seed = _rec(MAIN_SHOCK)
+    lon, lat = seed.point
+    track = _track("ibtracs-x", [[lon + 60, lat], [lon + 0.3, lat], [lon + 90, lat + 5]],
+                   **{"monty:country_codes": ["MMR"], "monty:hazard_codes": ["MH0309", "TC"], "monty:corr_id": "other-track"})  # fmt: skip
+    near = _clone("gdacs-event-1474489-1630585", "gdacs-event-30-1", **{"monty:country_codes": ["MMR"]})
+    near["geometry"] = {"type": "Point", "coordinates": [lon + 1.5, lat]}  # about 150 km away
+    _mock_search([near, track])
+    found, _ = M.find_candidates(API, "tok", seed, max_items=1)
+    assert [r.id for r in found] == ["ibtracs-x"]
+
+
+def test_the_default_and_maximum_number_of_candidates_are_larger():
+    import inspect
+
+    assert inspect.signature(M.find_candidates).parameters["max_items"].default == 100
+    prop = _meta()["parameters"]["properties"]["max_candidates"]
+    assert (prop["default"], prop["maximum"]) == (100, 400)
+
+
 # -- Jev ---------------------------------------------------------------------------------------------------
 DECISIONS = "https://openrouter.ai/api/alpha/decisions"
 
@@ -1137,7 +1207,7 @@ def test_notebook_user_parameters_match_template_yml():
     props = _meta()["parameters"]["properties"]
     assert set(user) == set(props) == {"confidence_threshold", "max_candidates", *M.RULE_PARAMETERS}
     assert {k: props[k]["default"] for k in props} == user
-    assert user["confidence_threshold"] == 0.6 and user["max_candidates"] == 60
+    assert user["confidence_threshold"] == 0.6 and user["max_candidates"] == 100
 
 
 def test_template_yml_settings():

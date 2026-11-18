@@ -266,6 +266,64 @@ def haversine_km(a: tuple[float, float], b: tuple[float, float]) -> float:
     return 2 * 6371 * math.asin(math.sqrt(h))
 
 
+def _segment_km(x: tuple[float, float], p: list, q: list) -> float:
+    """km from x to the segment p-q (lon, lat), on a flat projection around x (accurate for segments of a few hundred km)."""
+    km_per_degree = 111.195
+    cos = math.cos(math.radians(x[1]))
+
+    def flat(pt):
+        return ((pt[0] - x[0] + 180) % 360 - 180) * cos * km_per_degree, (pt[1] - x[1]) * km_per_degree
+
+    (px, py), (qx, qy) = flat(p), flat(q)
+    dx, dy = qx - px, qy - py
+    length = dx * dx + dy * dy
+    t = 0.0 if length == 0 else max(0.0, min(1.0, -(px * dx + py * dy) / length))
+    return math.hypot(px + t * dx, py + t * dy)
+
+
+def _inside(x: tuple[float, float], ring: list) -> bool:
+    inside = False
+    for i in range(len(ring) - 1):
+        (x1, y1), (x2, y2) = ring[i][:2], ring[i + 1][:2]
+        if (y1 > x[1]) != (y2 > x[1]) and x[0] < (x2 - x1) * (x[1] - y1) / (y2 - y1) + x1:
+            inside = not inside
+    return inside
+
+
+def nearest_km(point: tuple[float, float], geometry: dict) -> float:
+    """km from a point to the nearest point of a GeoJSON geometry: 0 inside an area, to the closest edge or track outside."""
+    kind, coords = geometry.get("type"), geometry.get("coordinates")
+    if kind == "GeometryCollection":
+        return min(nearest_km(point, g) for g in geometry["geometries"])
+    if kind == "Point":
+        return haversine_km(point, tuple(coords[:2]))
+    if kind == "MultiPoint":
+        return min(haversine_km(point, tuple(c[:2])) for c in coords)
+    polygons = [coords] if kind == "Polygon" else coords if kind == "MultiPolygon" else []
+    if any(_inside(point, poly[0]) for poly in polygons):
+        return 0.0
+    lines = [coords] if kind == "LineString" else coords if kind == "MultiLineString" else [r for poly in polygons for r in poly]
+    return min(
+        (_segment_km(point, line[i], line[i + 1]) for line in lines for i in range(len(line) - 1)),
+        default=haversine_km(point, tuple(lines[0][0][:2])) if lines and lines[0] else float("inf"),
+    )
+
+
+def _extended(geometry: dict | None) -> bool:
+    return bool(geometry) and geometry.get("type") in ("LineString", "MultiLineString", "Polygon", "MultiPolygon")
+
+
+def distance_km(a: Record, b: Record) -> float | None:
+    """km between two records. A precisely located track or area (a cyclone track) counts by its nearest point, not by
+    its centre; a coarse record (a country outline) and a point stay at their one point."""
+    if not (a.point and b.point):
+        return None
+    for track, other in ((a, b), (b, a)):
+        if not track.coarse and _extended(track.geometry):
+            return nearest_km(other.point, track.geometry)
+    return haversine_km(a.point, b.point)
+
+
 def gap_days(a: Record, b: Record, by_day: bool) -> float:
     """Days between the two records' date ranges (0 when they overlap); by calendar day for coarse records."""
     if not (a.start and b.start):
@@ -297,8 +355,8 @@ def proximity(
     days = rules.window(anchor)[0]
     gap = gap_days(anchor, cand, by_day=anchor.coarse or cand.coarse)
     t = max(0.0, 1 - gap / days)
-    if anchor.point and cand.point:
-        km = haversine_km(anchor.point, cand.point)
+    km = distance_km(anchor, cand)
+    if km is not None:
         return t, max(0.0, 1 - km / _radius(anchor, cand, rules)), gap, km
     return t, 0.5, gap, None
 
@@ -392,7 +450,7 @@ def circle_polygon(centre: tuple[float, float], km: float, n: int = 72) -> dict:
 
 
 def find_candidates(
-    api: str, token: str, seed: Record, max_items: int = 60, rules: Rules = Rules()
+    api: str, token: str, seed: Record, max_items: int = 100, rules: Rules = Rules()
 ) -> tuple[list[Record], int]:
     """(candidates, how many passed the rules before the cap): other sources' records of the seed's time and place.
 

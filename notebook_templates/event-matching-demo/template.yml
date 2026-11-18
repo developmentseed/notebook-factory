@@ -47,9 +47,9 @@ parameters:
       title: Most candidates to judge
       description: The search keeps the most plausible candidates by time and distance and asks Jev about these
         only. Each batch of up to 25 costs a fraction of a cent.
-      default: 60
+      default: 100
       minimum: 5
-      maximum: 200
+      maximum: 400
     hazard_windows:
       type: string
       title: Time window and radius per hazard
