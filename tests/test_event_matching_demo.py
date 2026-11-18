@@ -722,7 +722,7 @@ def _bundle():
             _impact("usgs-impact-1", "death", "people", 1665, "people", "modelled"),
             _impact("usgs-impact-2", "cost", "buildings", 2496081634, "usd", "modelled"),
         ],  # fmt: skip
-        "cems-hazards": [_hazard("cems-hazard-1", 24.5, "km2", SQUARE, codes=["GH0101"])],
+        "cems-hazards": [_hazard("cems-hazard-1", 24.5, "kph", SQUARE, codes=["GH0101"])],
         "cems-impacts": [_impact("cems-impact-1", "affected_total", "buildings", 52, "count")],
         "cems-response": [
             _response("cems-response-0", "eo-dat"),
@@ -776,7 +776,7 @@ def test_details_only_keeps_the_given_events_and_merge_joins_two_sets():
 @responses.activate
 def test_add_severity_sets_the_highest_severity_per_unit_on_each_record():
     usgs, cems, stock = _bundle()
-    stock["cems-hazards"] += [_hazard("cems-hazard-2", 30.0, "km2"), _hazard("cems-hazard-3", -1, "km2"),
+    stock["cems-hazards"] += [_hazard("cems-hazard-2", 30.0, "kph"), _hazard("cems-hazard-3", -1, "kph"),
                               _hazard("cems-hazard-4", 80.0, "knots")]  # fmt: skip
     cems = _linked(cems, *cems.links, *(("hazard", "cems-hazards", f"cems-hazard-{i}") for i in (2, 3, 4)))
     _serve(stock)
@@ -785,7 +785,7 @@ def test_add_severity_sets_the_highest_severity_per_unit_on_each_record():
     first, second, third = M.add_severity([usgs, cems, plain], details)
     assert first.severity == ((7.7, "mww"),) and third.severity == ()
     assert sorted(second.severity) == [
-        (30.0, "km2"),
+        (30.0, "kph"),
         (80.0, "knots"),
     ]  # the highest per unit; -1 means unknown
     assert (first.id, second.id, third.id) == (usgs.id, cems.id, plain.id)
@@ -813,7 +813,7 @@ def test_jev_is_sent_no_impact_figures_and_no_responses():
 @responses.activate
 def test_overview_table_lists_events_hazards_impacts_and_counts_responses():
     usgs, cems, stock = _bundle()
-    stock["cems-hazards"] += [_hazard(f"cems-hazard-{i}", 10.0 * i, "km2") for i in (2, 3)]
+    stock["cems-hazards"] += [_hazard(f"cems-hazard-{i}", 10.0 * i, "kph") for i in (2, 3)]
     cems = _linked(cems, *cems.links, *(("hazard", "cems-hazards", f"cems-hazard-{i}") for i in (2, 3)))
     _serve(stock)
     details = M.fetch_details(API, "tok", [usgs, cems])
@@ -831,7 +831,7 @@ def test_overview_table_lists_events_hazards_impacts_and_counts_responses():
     }
     assert "2,496,081,634" in set(impacts.Value) and "1,665" in set(impacts.Value)
     cems_hazard = table[(table.Source == "CEMS") & (table["Item type"] == "Hazard")]
-    top = cems_hazard[cems_hazard.Unit == "km2"].iloc[0]
+    top = cems_hazard[cems_hazard.Unit == "kph"].iloc[0]
     assert top.Measure == "Severity (highest of 3 items)" and top.Value == "30"  # many items: one summary row
     counts = table[(table.Source == "CEMS") & (table["Item type"] == "Response")]
     assert dict(zip(counts.Measure, counts.Value, strict=True)) == {
@@ -851,7 +851,7 @@ def test_display_overview_returns_a_table_to_show():
 
 
 @responses.activate
-def test_fetch_details_drops_alert_scores_but_keeps_measurements_and_footprints():
+def test_fetch_details_drops_alert_scores_and_extents_but_keeps_measurements_and_footprints():
     gdacs = _linked(
         _rec("gdacs-event-1474477-1630564"),
         ("hazard", "gdacs-hazards", "gdacs-hazard-1"), ("hazard", "gdacs-hazards", "gdacs-hazard-2"),
@@ -860,18 +860,28 @@ def test_fetch_details_drops_alert_scores_but_keeps_measurements_and_footprints(
         _rec(MAIN_SHOCK), ("hazard", "gfd-hazards", "gfd-hazard-1"), ("hazard", "gfd-hazards", "gfd-hazard-2")
     )
     ibtracs = _linked(_rec(MAIN_SHOCK), ("hazard", "ibtracs-hazards", "ibtracs-hazard-1"))
+    cems = _linked(
+        _rec("cems-event-EMSR798"), *(("hazard", "cems-hazards", f"cems-hazard-{i}") for i in range(1, 5))
+    )
+    charter = _linked(_rec(MAIN_SHOCK), ("hazard", "charter-hazards", "charter-hazard-1"))
     _serve({
         "gdacs-hazards": [_hazard("gdacs-hazard-1", 1.68, "GDACS Severity Score", SQUARE),
                           _hazard("gdacs-hazard-2", 2.0, "GDACS Flood Severity Score")],  # fmt: skip
         "gfd-hazards": [_hazard("gfd-hazard-1", 3.0, "GFD Flood Severity Score"), _hazard("gfd-hazard-2", 2.0, "glide")],
         "ibtracs-hazards": [_hazard("ibtracs-hazard-1", 165.0, "knots")],
+        "cems-hazards": [_hazard("cems-hazard-1", 8552.7, "km2", SQUARE), _hazard("cems-hazard-2", 1364.4, "ha"),
+                         _hazard("cems-hazard-3", 1.0, "count"), _hazard("cems-hazard-4", 240.0, "Kph")],  # fmt: skip
+        "charter-hazards": [_hazard("charter-hazard-1", 6505.0, "km2", SQUARE), _hazard("charter-hazard-2", 12.0, "km")],
     })  # fmt: skip
-    details = M.fetch_details(API, "tok", [gdacs, gfd, ibtracs], roles=("hazard",))
-    assert [(i["source"], i["unit"]) for i in details.items] == [("ibtracs", "knots")]
-    assert [(r["source"], r["unit"]) for r in details.rows] == [("ibtracs", "knots")]
-    assert [f["properties"]["source"] for f in details.footprints] == [
-        "gdacs"
-    ]  # the alert area is still a footprint
+    details = M.fetch_details(API, "tok", [gdacs, gfd, ibtracs, cems, charter], roles=("hazard",))
+    kept = sorted((i["source"], i["unit"]) for i in details.items)
+    assert kept == [("cems", "Kph"), ("ibtracs", "knots")]  # only measurements of the hazard itself
+    assert sorted((r["source"], r["unit"]) for r in details.rows) == kept
+    assert sorted(f["properties"]["source"] for f in details.footprints) == [
+        "cems",
+        "charter",
+        "gdacs",
+    ]  # areas stay
 
 
 # -- the source's own event id, and the fact sheet with everything linked -----------------------------------
@@ -919,14 +929,14 @@ def test_fact_sheet_adds_the_other_impacts_hazard_measures_and_responses():
         _linked_item("usgs", usgs.id, "impact", "potentially_affected", "people", 268302, "people", "modelled"),
         _linked_item("cems", cems.id, "impact", "affected_total", "buildings", 30, "count", "primary"),
         _linked_item("cems", cems.id, "impact", "affected_total", "buildings", 22, "count", "primary"),  # areas add up
-        _linked_item("cems", cems.id, "hazard", "GH0101", "", 24.5, "km2", "primary", field="severity"),
-        _linked_item("cems", cems.id, "hazard", "GH0101", "", 1364.4, "ha", "primary", field="severity"),
+        _linked_item("cems", cems.id, "hazard", "GH0101", "", 24.5, "kph", "primary", field="severity"),
+        _linked_item("cems", cems.id, "hazard", "GH0101", "", 1364.4, "knots", "primary", field="severity"),
         *[_linked_item("cems", cems.id, "response", "eo-gra", status="published") for _ in range(2)],
         _linked_item("cems", cems.id, "response", "eo-dat"),
     ]  # fmt: skip
     rows = [_row("usgs", "deaths", 1665, "people", "modelled") | {"event": usgs.id},
-            _row("cems", "severity", 24.5, "km2") | {"event": cems.id},
-            _row("cems", "severity", 1364.4, "ha") | {"event": cems.id}]  # fmt: skip
+            _row("cems", "severity", 24.5, "kph") | {"event": cems.id},
+            _row("cems", "severity", 1364.4, "knots") | {"event": cems.id}]  # fmt: skip
     table = M.fact_sheet([usgs, cems], rows, items)
     labels = list(table.index)
     assert labels.count("Deaths") == 1 and "death · people" not in labels  # nothing twice
@@ -935,8 +945,8 @@ def test_fact_sheet_adds_the_other_impacts_hazard_measures_and_responses():
     assert table.loc["affected_total · buildings", "CEMS"] == 52
     assert table.attrs["units"][("affected_total · buildings", "CEMS")] == "count"
     assert table.loc["Magnitude / severity", "CEMS"] == 1364.4  # as before: the highest value
-    assert table.loc["Severity · km2", "CEMS"] == 24.5  # the other unit is no longer lost
-    assert "Severity · ha" not in labels
+    assert table.loc["Severity · kph", "CEMS"] == 24.5  # the other unit is no longer lost
+    assert "Severity · knots" not in labels
     assert (
         table.loc["Responses · eo-gra (published)", "CEMS"] == 2
         and table.loc["Responses · eo-dat", "CEMS"] == 1

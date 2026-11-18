@@ -682,11 +682,16 @@ def match_table(candidates: list[Record], exact: dict[str, str], scores: dict[st
 # -- details: what each matched source says -------------------------------------------------------------------------------
 # monty:impact_detail `type` -> fact-sheet field, for people only. PDC's age bands and CEMS's ancillary counts carry
 # other categories, so they never inflate the people totals; "potentially_affected" is an exposure, not an impact.
-# Severity units that are an alert score or level, not a measurement of the hazard: GDACS and GFD publish a score
-# for the alert (with a Green/Orange/Red label) and GLIDE a level. They are left out of everything.
-def is_alert_score(unit: str | None) -> bool:
-    unit = (unit or "").lower()
-    return "severity score" in unit or unit == "glide"
+# Hazard "severity" the catalog holds that is not a measurement of the hazard itself, so it is left out of
+# everything (Jev, fact sheet, overview): an alert score or level (GDACS, GFD, GLIDE rate the alert) and an extent
+# or a count (CEMS and the Charter give the area or radius of the activation). A magnitude, a wind speed and the
+# like are kept.
+NON_MEASURE_UNITS = {"km", "km2", "ha", "count"}
+
+
+def is_hazard_measure(unit: str | None) -> bool:
+    unit = (unit or "").strip().lower()
+    return not ("severity score" in unit or unit == "glide" or unit in NON_MEASURE_UNITS)
 
 
 PEOPLE_FIELDS = {
@@ -772,7 +777,7 @@ def fetch_details(
                     if (
                         d.get("severity_value") is not None
                         and float(d["severity_value"]) >= 0
-                        and not is_alert_score(d.get("severity_unit"))
+                        and is_hazard_measure(d.get("severity_unit"))
                     ):
                         value = float(d["severity_value"])
                         items.append({**base, "type": ", ".join(props.get("monty:hazard_codes") or []), "category": "",
