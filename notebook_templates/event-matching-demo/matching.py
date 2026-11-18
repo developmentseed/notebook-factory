@@ -139,6 +139,11 @@ class Record:
     geometry: dict | None = field(default=None, compare=False)
 
     @property
+    def source_id(self) -> str:
+        """The source's own event id (`monty:src_event_id`); the item id when the item carries none."""
+        return self.src_event_id or self.id
+
+    @property
     def family(self) -> str:
         return FAMILIES.get(self.source, self.source)
 
@@ -488,14 +493,13 @@ def candidate_table(
             else "inside the time window and radius"
         )
         rows.append({
-            "Source": SOURCE_LABELS.get(rec.source, rec.source), "Title": rec.title,
+            "Source": SOURCE_LABELS.get(rec.source, rec.source), "Source event ID": rec.source_id, "Title": rec.title,
             "Date": rec.start.date().isoformat() if rec.start else "",
             "Days apart": int(round(gap)), "Km apart": None if km is None else int(round(km)),
             "Why it is a candidate": why,
         })  # fmt: skip
-    return pd.DataFrame(
-        rows, columns=["Source", "Title", "Date", "Days apart", "Km apart", "Why it is a candidate"]
-    )
+    columns = ["Source", "Source event ID", "Title", "Date", "Days apart", "Km apart", "Why it is a candidate"]
+    return pd.DataFrame(rows, columns=columns)
 
 
 # -- Jev: the decision model ---------------------------------------------------------------------------------------------
@@ -664,10 +668,10 @@ def match_table(candidates: list[Record], exact: dict[str, str], scores: dict[st
             else (0.0, "not scored")
         )
         rows.append({
-            "id": rec.id, "source": SOURCE_LABELS.get(rec.source, rec.source), "title": rec.title,
+            "id": rec.id, "source_id": rec.source_id, "source": SOURCE_LABELS.get(rec.source, rec.source), "title": rec.title,
             "date": rec.start.date().isoformat() if rec.start else "", "p_same": p, "why": why,
         })  # fmt: skip
-    cols = ["id", "source", "title", "date", "p_same", "why"]
+    cols = ["id", "source_id", "source", "title", "date", "p_same", "why"]
     return (
         pd.DataFrame(rows, columns=cols)
         .sort_values("p_same", ascending=False, kind="stable")
@@ -678,6 +682,13 @@ def match_table(candidates: list[Record], exact: dict[str, str], scores: dict[st
 # -- details: what each matched source says -------------------------------------------------------------------------------
 # monty:impact_detail `type` -> fact-sheet field, for people only. PDC's age bands and CEMS's ancillary counts carry
 # other categories, so they never inflate the people totals; "potentially_affected" is an exposure, not an impact.
+# Severity units that are an alert score or level, not a measurement of the hazard: GDACS and GFD publish a score
+# for the alert (with a Green/Orange/Red label) and GLIDE a level. They are left out of everything.
+def is_alert_score(unit: str | None) -> bool:
+    unit = (unit or "").lower()
+    return "severity score" in unit or unit == "glide"
+
+
 PEOPLE_FIELDS = {
     "death": "deaths", "injured": "injured", "affected_total": "affected",
     "displaced_internal": "displaced", "displaced_total": "displaced",
@@ -751,17 +762,23 @@ def fetch_details(
                         continue
                     items.append({**base, "type": d.get("type") or "", "category": d.get("category") or "",
                                   "value": float(d["value"]), "unit": d.get("unit"),
-                                  "estimate": d.get("estimate_type") or "", "status": ""})  # fmt: skip
+                                  "estimate": d.get("estimate_type") or "", "status": "",
+                                  "field": impact_field(d)})  # fmt: skip
                     if name := impact_field(d):
                         rows.append({"source": source, "field": name, "value": float(d["value"]), "unit": d.get("unit"),
                                      "estimate_type": d.get("estimate_type"), "event": event})  # fmt: skip
                 elif kind == "hazard":
                     d = props.get("monty:hazard_detail") or {}
-                    if d.get("severity_value") is not None and float(d["severity_value"]) >= 0:
+                    if (
+                        d.get("severity_value") is not None
+                        and float(d["severity_value"]) >= 0
+                        and not is_alert_score(d.get("severity_unit"))
+                    ):
                         value = float(d["severity_value"])
                         items.append({**base, "type": ", ".join(props.get("monty:hazard_codes") or []), "category": "",
                                       "value": value, "unit": d.get("severity_unit"),
-                                      "estimate": d.get("estimate_type") or "", "status": ""})  # fmt: skip
+                                      "estimate": d.get("estimate_type") or "", "status": "",
+                                      "field": "severity"})  # fmt: skip
                         rows.append({"source": source, "field": "severity", "value": value, "unit": d.get("severity_unit"),
                                      "estimate_type": d.get("estimate_type"), "event": event})  # fmt: skip
                     # a register's or an alert's polygon is a country outline, not a footprint
@@ -774,7 +791,7 @@ def fetch_details(
                 elif kind == "response":
                     d = props.get("monty:response_detail") or {}
                     items.append({**base, "type": d.get("type") or "", "category": "", "value": None, "unit": None,
-                                  "estimate": "", "status": d.get("status") or ""})  # fmt: skip
+                                  "estimate": "", "status": d.get("status") or "", "field": None})  # fmt: skip
     return Details(rows, footprints, items)
 
 
@@ -860,11 +877,14 @@ def _disagree(values: dict[str, tuple[float, str]], decimals: int = 0) -> tuple[
     return flag, _fmt(lo, decimals) if lo == hi else f"{_fmt(lo, decimals)} – {_fmt(hi, decimals)}"
 
 
-def fact_sheet(records: list[Record], rows: list[dict]) -> pd.DataFrame:
+def fact_sheet(records: list[Record], rows: list[dict], linked_items: list[dict] | tuple = ()) -> pd.DataFrame:
     """One row per field, one column per source, then the range and whether the sources disagree.
 
-    `records` are the matched events, `rows` the tidy details. `attrs["modelled"]` holds the (row, column) cells
-    that are model estimates (USGS PAGER), `attrs["units"]` the unit each cell was published in.
+    `records` are the matched events, `rows` the tidy figures. `linked_items` are all the linked items (`Details.items`):
+    they add the source event ids, the impacts the figure rows do not hold, the hazard measures in other units
+    and the responses (counted). `attrs["modelled"]` holds the (row, column) cells that are model estimates
+    (USGS PAGER), `attrs["units"]` the unit each cell was published in, `attrs["extra_rows"]` the rows made from
+    `linked_items` and `attrs["unit_rows"]` the rows that show their unit.
     """
     countries_of = {r.id: frozenset(c for c in r.countries if c != UNKNOWN_COUNTRY) for r in records}
     cells: dict[tuple[str, str], object] = {}  # (row label, source) -> value
@@ -874,6 +894,7 @@ def fact_sheet(records: list[Record], rows: list[dict]) -> pd.DataFrame:
     for rec in records:
         by_source.setdefault(rec.source, []).append(rec)
     for source, recs in by_source.items():
+        cells[("Source event ID", source)] = ", ".join(sorted({r.source_id for r in recs}))
         dated = [r.start for r in recs if r.start]
         if dated:
             cells[("Starts", source)] = min(dated).date().isoformat()
@@ -898,9 +919,45 @@ def fact_sheet(records: list[Record], rows: list[dict]) -> pd.DataFrame:
         if is_modelled:
             modelled.add((label, source))
 
+    # what the figure rows do not hold, from the linked items
+    impact_rows: dict[tuple[str, str], list[dict]] = {}
+    severities: dict[tuple[str, str], list[float]] = {}
+    counts: dict[tuple[str, str], int] = {}
+    for item in linked_items:
+        source = item["source"]
+        if item["kind"] == "impact" and item.get("field") is None and item["value"] is not None:
+            label = f"{item['type']} · {item['category']}" if item["category"] else item["type"]
+            impact_rows.setdefault((label, source), []).append({
+                "source": source, "field": label, "value": item["value"], "unit": item["unit"],
+                "estimate_type": item["estimate"], "event": item["event"],
+            })  # fmt: skip
+        elif item["kind"] == "hazard" and item["value"] is not None:
+            shown = units.get((MAGNITUDE, source))
+            unit = item["unit"] or ""
+            if shown is None or _magnitude_unit(shown) != _magnitude_unit(unit):  # the magnitude row has this one
+                severities.setdefault((f"Severity · {unit}" if unit else "Severity", source), []).append(item["value"])
+        elif item["kind"] == "response":
+            label = f"Responses · {item['type']} ({item['status']})" if item["status"] else f"Responses · {item['type']}"
+            counts[(label, source)] = counts.get((label, source), 0) + 1
+    for (label, source), group in impact_rows.items():
+        value, unit, is_modelled = _aggregate(source, group, countries_of)
+        cells[(label, source)], units[(label, source)] = _whole(value), unit
+        if is_modelled:
+            modelled.add((label, source))
+    for (label, source), values in severities.items():
+        cells[(label, source)], units[(label, source)] = _whole(max(values)), label.partition(" · ")[2]
+    for (label, source), count in counts.items():
+        cells[(label, source)], units[(label, source)] = count, ""
+    impact_labels = sorted({label for label, _ in impact_rows})
+    severity_labels = sorted({label for label, _ in severities})
+    response_labels = sorted({label for label, _ in counts})
+
     order = list(SOURCE_LABELS)
     sources = sorted({s for _, s in cells}, key=lambda s: order.index(s) if s in order else len(order))
-    labels = ["Starts", "Ends", "Countries", MAGNITUDE, *NUMERIC_ROWS.values()]
+    labels = [
+        "Source event ID", "Starts", "Ends", "Countries", MAGNITUDE, *NUMERIC_ROWS.values(),
+        *severity_labels, *impact_labels, *response_labels,
+    ]  # fmt: skip
     table_rows, index = [], []
     for label in labels:
         present = {s: cells[(label, s)] for s in sources if (label, s) in cells}
@@ -916,6 +973,8 @@ def fact_sheet(records: list[Record], rows: list[dict]) -> pd.DataFrame:
             _, span = _disagree(
                 {s: (v, _magnitude_unit(units[(label, s)])) for s, v in present.items()}, decimals=1
             )
+        elif label in impact_labels or label in severity_labels:  # compared in one unit only
+            flag, span = _disagree({s: (v, units[(label, s)]) for s, v in present.items()})
         table_rows.append([present.get(s) for s in sources] + [span, flag])
         index.append(label)
     column_labels = [SOURCE_LABELS.get(s, s) for s in sources]
@@ -925,6 +984,8 @@ def fact_sheet(records: list[Record], rows: list[dict]) -> pd.DataFrame:
     name_of = dict(zip(sources, column_labels, strict=True))
     table.attrs["modelled"] = {(label, name_of[s]) for label, s in modelled}
     table.attrs["units"] = {(label, name_of[s]): u for (label, s), u in units.items()}
+    table.attrs["extra_rows"] = {*severity_labels, *impact_labels, *response_labels}
+    table.attrs["unit_rows"] = {"Economic loss", *severity_labels, *impact_labels}
     return table
 
 
@@ -1004,6 +1065,7 @@ def display_overview(table: pd.DataFrame):
 def display_table(facts: pd.DataFrame):
     """The fact sheet as a pandas Styler: formatted numbers, modelled ones marked with *, disagreeing rows highlighted."""
     modelled, units = facts.attrs.get("modelled", set()), facts.attrs.get("units", {})
+    extra_rows, unit_rows = facts.attrs.get("extra_rows", set()), facts.attrs.get("unit_rows", {"Economic loss"})
     sources = [c for c in facts.columns if c not in ("Range", "Sources disagree")]
 
     def text(label: str, col: str, value) -> str:
@@ -1014,7 +1076,7 @@ def display_table(facts: pd.DataFrame):
         if isinstance(value, str):
             return value
         unit = units.get((label, col), "")
-        out = f"{value:,.1f}" if label == MAGNITUDE else f"{value:,.0f}"
+        out = _num(value) if label in extra_rows else f"{value:,.1f}" if label == MAGNITUDE else f"{value:,.0f}"
         if (
             label == MAGNITUDE
             and unit
@@ -1022,7 +1084,7 @@ def display_table(facts: pd.DataFrame):
             and unit.lower() not in MAGNITUDE_UNITS
         ):
             out += f" {unit}"  # a severity in km/h or an alert score keeps its unit; a magnitude is just a number
-        elif label == "Economic loss" and unit:
+        elif label in unit_rows and unit:
             out += f" {unit}"
         return out + ("*" if (label, col) in modelled else "")
 

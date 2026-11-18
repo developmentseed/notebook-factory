@@ -475,6 +475,7 @@ def test_candidate_table_says_how_far_apart_and_why_each_is_a_candidate():
     table = M.candidate_table(seed, [emdat, ifrc, linked], {linked.id: "linked in Montandon"})
     assert list(table.columns) == [
         "Source",
+        "Source event ID",
         "Title",
         "Date",
         "Days apart",
@@ -849,6 +850,147 @@ def test_display_overview_returns_a_table_to_show():
     assert "Title" in html and "USGS" in html
 
 
+@responses.activate
+def test_fetch_details_drops_alert_scores_but_keeps_measurements_and_footprints():
+    gdacs = _linked(
+        _rec("gdacs-event-1474477-1630564"),
+        ("hazard", "gdacs-hazards", "gdacs-hazard-1"), ("hazard", "gdacs-hazards", "gdacs-hazard-2"),
+    )  # fmt: skip
+    gfd = _linked(
+        _rec(MAIN_SHOCK), ("hazard", "gfd-hazards", "gfd-hazard-1"), ("hazard", "gfd-hazards", "gfd-hazard-2")
+    )
+    ibtracs = _linked(_rec(MAIN_SHOCK), ("hazard", "ibtracs-hazards", "ibtracs-hazard-1"))
+    _serve({
+        "gdacs-hazards": [_hazard("gdacs-hazard-1", 1.68, "GDACS Severity Score", SQUARE),
+                          _hazard("gdacs-hazard-2", 2.0, "GDACS Flood Severity Score")],  # fmt: skip
+        "gfd-hazards": [_hazard("gfd-hazard-1", 3.0, "GFD Flood Severity Score"), _hazard("gfd-hazard-2", 2.0, "glide")],
+        "ibtracs-hazards": [_hazard("ibtracs-hazard-1", 165.0, "knots")],
+    })  # fmt: skip
+    details = M.fetch_details(API, "tok", [gdacs, gfd, ibtracs], roles=("hazard",))
+    assert [(i["source"], i["unit"]) for i in details.items] == [("ibtracs", "knots")]
+    assert [(r["source"], r["unit"]) for r in details.rows] == [("ibtracs", "knots")]
+    assert [f["properties"]["source"] for f in details.footprints] == [
+        "gdacs"
+    ]  # the alert area is still a footprint
+
+
+# -- the source's own event id, and the fact sheet with everything linked -----------------------------------
+def test_source_id_is_the_catalogs_source_event_id_or_else_the_item_id():
+    assert _rec(MAIN_SHOCK).source_id == "us7000pn9s"
+    assert _rec("emdat-event-2025-0223-MMR").source_id == "2025-0223-MMR"
+    assert (
+        _rec("cems-event-EMSR798").source_id == "cems-event-EMSR798"
+    )  # CEMS items carry none: the item id stands in
+
+
+def test_candidate_and_match_tables_show_the_source_event_id_next_to_the_title():
+    seed = _rec(MAIN_SHOCK)
+    emdat = _rec("emdat-event-2025-0223-MMR")
+    table = M.candidate_table(seed, [emdat], {})
+    assert list(table.columns)[:3] == ["Source", "Source event ID", "Title"]
+    assert table.loc[0, "Source event ID"] == "2025-0223-MMR"
+    matches = M.match_table([emdat], {}, {emdat.id: 0.9})
+    assert matches.loc[0, "source_id"] == "2025-0223-MMR"
+
+
+def test_fact_sheet_starts_with_the_source_event_ids_of_each_source():
+    a = M.record_from_item(_clone(MAIN_SHOCK, "usgs-event-x2", **{"monty:src_event_id": "x2"}))
+    table = M.fact_sheet([_rec(MAIN_SHOCK), a, _rec("emdat-event-2025-0223-MMR")], [])
+    assert list(table.index)[0] == "Source event ID"
+    assert table.loc["Source event ID", "USGS"] == "us7000pn9s, x2"
+    assert table.loc["Source event ID", "EM-DAT"] == "2025-0223-MMR"
+    assert (
+        table.loc["Source event ID", "Range"] == "" and not table.loc["Source event ID", "Sources disagree"]
+    )
+
+
+def _linked_item(
+    source, event, kind, type_="", category="", value=None, unit=None, estimate="", status="", field=None
+):
+    return {"event": event, "source": source, "kind": kind, "item": f"{source}-{kind}-{type_}-{category}-{value}",
+            "type": type_, "category": category, "value": value, "unit": unit, "estimate": estimate,
+            "status": status, "field": field}  # fmt: skip
+
+
+def test_fact_sheet_adds_the_other_impacts_hazard_measures_and_responses():
+    usgs, cems = _rec(MAIN_SHOCK), _rec("cems-event-EMSR798")
+    items = [
+        _linked_item("usgs", usgs.id, "impact", "death", "people", 1665, "people", "modelled", field="deaths"),  # curated row
+        _linked_item("usgs", usgs.id, "impact", "potentially_affected", "people", 268302, "people", "modelled"),
+        _linked_item("cems", cems.id, "impact", "affected_total", "buildings", 30, "count", "primary"),
+        _linked_item("cems", cems.id, "impact", "affected_total", "buildings", 22, "count", "primary"),  # areas add up
+        _linked_item("cems", cems.id, "hazard", "GH0101", "", 24.5, "km2", "primary", field="severity"),
+        _linked_item("cems", cems.id, "hazard", "GH0101", "", 1364.4, "ha", "primary", field="severity"),
+        *[_linked_item("cems", cems.id, "response", "eo-gra", status="published") for _ in range(2)],
+        _linked_item("cems", cems.id, "response", "eo-dat"),
+    ]  # fmt: skip
+    rows = [_row("usgs", "deaths", 1665, "people", "modelled") | {"event": usgs.id},
+            _row("cems", "severity", 24.5, "km2") | {"event": cems.id},
+            _row("cems", "severity", 1364.4, "ha") | {"event": cems.id}]  # fmt: skip
+    table = M.fact_sheet([usgs, cems], rows, items)
+    labels = list(table.index)
+    assert labels.count("Deaths") == 1 and "death · people" not in labels  # nothing twice
+    assert table.loc["potentially_affected · people", "USGS"] == 268302
+    assert ("potentially_affected · people", "USGS") in table.attrs["modelled"]
+    assert table.loc["affected_total · buildings", "CEMS"] == 52
+    assert table.attrs["units"][("affected_total · buildings", "CEMS")] == "count"
+    assert table.loc["Magnitude / severity", "CEMS"] == 1364.4  # as before: the highest value
+    assert table.loc["Severity · km2", "CEMS"] == 24.5  # the other unit is no longer lost
+    assert "Severity · ha" not in labels
+    assert (
+        table.loc["Responses · eo-gra (published)", "CEMS"] == 2
+        and table.loc["Responses · eo-dat", "CEMS"] == 1
+    )
+    assert (
+        labels.index("Responses · eo-dat")
+        > labels.index("affected_total · buildings")
+        > labels.index("Deaths")
+    )
+
+
+def test_fact_sheet_does_not_repeat_the_magnitude_as_a_severity_row():
+    usgs = _rec(MAIN_SHOCK)  # its magnitude is on the event; the hazard item says the same in 'mww'
+    items = [_linked_item("usgs", usgs.id, "hazard", "GH0101", "", 7.7, "mww", "primary", field="severity")]
+    table = M.fact_sheet([usgs], [], items)
+    assert not [label for label in table.index if label.startswith("Severity")]
+
+
+def test_fact_sheet_compares_the_extra_impacts_in_one_unit_only():
+    usgs, pdc = _rec(MAIN_SHOCK), _rec("pdc-event-670db46e-234a-4bba-8123-1124f6b6e312-393198-1769565197008")
+    items = [_linked_item("usgs", usgs.id, "impact", "potentially_affected", "people", 1000, "people"),
+             _linked_item("pdc", pdc.id, "impact", "potentially_affected", "people", 5000, "people")]  # fmt: skip
+    table = M.fact_sheet([usgs, pdc], [], items)
+    assert (
+        table.loc["potentially_affected · people", "Sources disagree"]
+        and table.loc["potentially_affected · people", "Range"] == "1,000 – 5,000"
+    )
+    items[1] = _linked_item("pdc", pdc.id, "impact", "potentially_affected", "people", 5000, "other unit")
+    assert not M.fact_sheet([usgs, pdc], [], items).loc["potentially_affected · people", "Sources disagree"]
+
+
+def test_display_table_shows_the_extra_rows_with_units_and_the_ids():
+    usgs = _rec(MAIN_SHOCK)
+    items = [_linked_item("usgs", usgs.id, "impact", "potentially_affected", "people", 268302, "people", "modelled"),
+             _linked_item("usgs", usgs.id, "response", "eo-dat")]  # fmt: skip
+    html = M.display_table(M.fact_sheet([usgs], [], items)).to_html()
+    assert "us7000pn9s" in html and "268,302 people*" in html and "Responses · eo-dat" in html
+
+
+@responses.activate
+def test_fetch_details_marks_which_items_the_fact_sheet_already_has():
+    usgs, cems, stock = _bundle()
+    _serve(stock)
+    details = M.fetch_details(API, "tok", [usgs, cems])
+    by = {i["item"]: i["field"] for i in details.items}
+    assert by["usgs-impact-1"] == "deaths" and by["usgs-impact-2"] == "loss"
+    assert by["cems-impact-1"] is None and by["usgs-hazard-1"] == "severity" and by["cems-response-0"] is None
+
+
+def test_the_notebook_shows_the_source_event_id_and_gives_the_fact_sheet_the_linked_items():
+    source = "\n".join(c.source for c in _notebook().cells if c.cell_type == "code")
+    assert 'label="Source event ID"' in source and "Source event ID" in source and "details.items" in source
+
+
 # -- fact sheet -------------------------------------------------------------------------------------------------
 def _row(source, field, value, unit="count", estimate="primary"):
     return {
@@ -889,7 +1031,7 @@ def test_fact_sheet_flags_the_rows_where_sources_disagree():
     assert ("Deaths", "USGS") in table.attrs["modelled"] and ("Deaths", "EM-DAT") not in table.attrs[
         "modelled"
     ]
-    assert list(table.index)[:3] == ["Starts", "Ends", "Countries"]
+    assert list(table.index)[:4] == ["Source event ID", "Starts", "Ends", "Countries"]
     assert table.loc["Countries", "EM-DAT"] == "MMR" and table.loc["Starts", "EM-DAT"] == "2025-03-28"
     assert "Economic loss" not in table.index  # no source gave one
 
