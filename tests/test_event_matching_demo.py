@@ -91,6 +91,16 @@ def test_record_keeps_the_related_links_by_role():
     assert ("event", "gdacs-events", "1474477-1630564") in cems.links
 
 
+def test_record_keeps_response_links_with_their_role():
+    item = _item("cems-event-EMSR798")
+    item["links"].append({
+        "rel": "related", "roles": ["response"],
+        "href": f"{API}/collections/cems-response/items/cems-response-EMSR798-aoi01-gra",
+    })  # fmt: skip
+    rec = M.record_from_item(item)
+    assert ("response", "cems-response", "cems-response-EMSR798-aoi01-gra") in rec.links
+
+
 # -- exact links -------------------------------------------------------------------------------------------
 # An exact link is a `related` link with the role `event` that the catalog holds. No numbers are read out of item ids and there is no table of which source numbers its events how.
 def _event_link(collection, item_id):
@@ -568,9 +578,21 @@ def _impact(item_id, type_, category, value, unit="count", estimate="primary"):
         "type": type_, "category": category, "value": value, "unit": unit, "estimate_type": estimate}}}  # fmt: skip
 
 
-def _hazard(item_id, value, unit, geometry=None):
-    return {"id": item_id, "geometry": geometry, "properties": {"title": item_id, "monty:hazard_detail": {
-        "severity_value": value, "severity_unit": unit, "estimate_type": "primary"}}}  # fmt: skip
+def _hazard(item_id, value, unit, geometry=None, codes=None):
+    props = {"title": item_id, "monty:hazard_detail": {
+        "severity_value": value, "severity_unit": unit, "estimate_type": "primary"}}  # fmt: skip
+    if codes:
+        props["monty:hazard_codes"] = codes
+    return {"id": item_id, "geometry": geometry, "properties": props}
+
+
+def _response(item_id, type_, status=None):
+    detail = {"type": type_, "producer": "Copernicus EMS"} | ({"status": status} if status else {})
+    return {
+        "id": item_id,
+        "geometry": None,
+        "properties": {"title": item_id, "monty:response_detail": detail},
+    }
 
 
 SQUARE = {"type": "Polygon", "coordinates": [[[95, 21], [96, 21], [96, 22], [95, 22], [95, 21]]]}
@@ -680,6 +702,151 @@ def test_fetch_details_batches_ids_per_collection():
     M.fetch_details(API, "tok", [rec])
     assert [len(b["ids"]) for b in bodies] == [50, 50, 20]
     assert all(b["collections"] == ["pdc-impacts"] for b in bodies)
+
+
+# -- everything linked to an event: hazards for Jev, impacts and responses for the overview ---------------------
+def _bundle():
+    """A USGS event with its hazard and impacts, and a CEMS event with a hazard, an impact and responses."""
+    usgs = _linked(_rec(MAIN_SHOCK),
+                   ("hazard", "usgs-hazards", "usgs-hazard-1"),
+                   ("impact", "usgs-impacts", "usgs-impact-1"),
+                   ("impact", "usgs-impacts", "usgs-impact-2"))  # fmt: skip
+    cems = _linked(_rec("cems-event-EMSR798"),
+                   ("hazard", "cems-hazards", "cems-hazard-1"),
+                   ("impact", "cems-impacts", "cems-impact-1"),
+                   *(("response", "cems-response", f"cems-response-{i}") for i in range(4)))  # fmt: skip
+    stock = {
+        "usgs-hazards": [_hazard("usgs-hazard-1", 7.7, "mww", codes=["GH0101", "EQ"])],
+        "usgs-impacts": [
+            _impact("usgs-impact-1", "death", "people", 1665, "people", "modelled"),
+            _impact("usgs-impact-2", "cost", "buildings", 2496081634, "usd", "modelled"),
+        ],  # fmt: skip
+        "cems-hazards": [_hazard("cems-hazard-1", 24.5, "km2", SQUARE, codes=["GH0101"])],
+        "cems-impacts": [_impact("cems-impact-1", "affected_total", "buildings", 52, "count")],
+        "cems-response": [
+            _response("cems-response-0", "eo-dat"),
+            _response("cems-response-1", "eo-dat"),
+            _response("cems-response-2", "eo-gra", "published"),
+            _response("cems-response-3", "eo-gra", "withdrawn"),
+        ],  # fmt: skip
+    }
+    return usgs, cems, stock
+
+
+@responses.activate
+def test_fetch_details_keeps_every_linked_item_with_its_kind():
+    usgs, cems, stock = _bundle()
+    _serve(stock)
+    details = M.fetch_details(API, "tok", [usgs, cems])
+    kinds = sorted((i["source"], i["kind"]) for i in details.items)
+    assert kinds == sorted([("usgs", "hazard"), ("usgs", "impact"), ("usgs", "impact"), ("cems", "hazard"),
+                            ("cems", "impact"), *[("cems", "response")] * 4])  # fmt: skip
+    impact = next(i for i in details.items if i["item"] == "usgs-impact-2")  # not a people figure: still kept
+    assert (impact["type"], impact["category"], impact["value"], impact["unit"], impact["estimate"], impact["event"]) == (
+        "cost", "buildings", 2496081634, "usd", "modelled", usgs.id)  # fmt: skip
+    hazard = next(i for i in details.items if i["item"] == "usgs-hazard-1")
+    assert (hazard["type"], hazard["value"], hazard["unit"]) == ("GH0101, EQ", 7.7, "mww")
+    response = next(i for i in details.items if i["item"] == "cems-response-2")
+    assert (response["type"], response["status"], response["event"]) == ("eo-gra", "published", cems.id)
+
+
+@responses.activate
+def test_fetch_details_can_follow_only_some_roles():
+    usgs, cems, stock = _bundle()
+    wanted = _serve(stock)
+    details = M.fetch_details(API, "tok", [usgs, cems], roles=("hazard",))
+    assert {c for cs, _ in wanted for c in cs} == {"usgs-hazards", "cems-hazards"}
+    assert {i["kind"] for i in details.items} == {"hazard"}
+
+
+@responses.activate
+def test_details_only_keeps_the_given_events_and_merge_joins_two_sets():
+    usgs, cems, stock = _bundle()
+    _serve(stock)
+    details = M.fetch_details(API, "tok", [usgs, cems])
+    mine = details.only({usgs.id})
+    assert {i["event"] for i in mine.items} == {usgs.id} and {r["event"] for r in mine.rows} == {usgs.id}
+    assert mine.footprints == [] and len(details.only({cems.id}).footprints) == 1
+    both = M.merge_details(details.only({usgs.id}), details.only({cems.id}))
+    assert len(both.items) == len(details.items) and len(both.rows) == len(details.rows)
+    assert len(both.footprints) == 1
+
+
+@responses.activate
+def test_add_severity_sets_the_highest_severity_per_unit_on_each_record():
+    usgs, cems, stock = _bundle()
+    stock["cems-hazards"] += [_hazard("cems-hazard-2", 30.0, "km2"), _hazard("cems-hazard-3", -1, "km2"),
+                              _hazard("cems-hazard-4", 80.0, "knots")]  # fmt: skip
+    cems = _linked(cems, *cems.links, *(("hazard", "cems-hazards", f"cems-hazard-{i}") for i in (2, 3, 4)))
+    _serve(stock)
+    details = M.fetch_details(API, "tok", [usgs, cems], roles=("hazard",))
+    plain = _rec("ifrcevent-event-7464")
+    first, second, third = M.add_severity([usgs, cems, plain], details)
+    assert first.severity == ((7.7, "mww"),) and third.severity == ()
+    assert sorted(second.severity) == [
+        (30.0, "km2"),
+        (80.0, "knots"),
+    ]  # the highest per unit; -1 means unknown
+    assert (first.id, second.id, third.id) == (usgs.id, cems.id, plain.id)
+
+
+def test_jev_reads_hazard_severity_only_when_the_record_has_no_magnitude():
+    emdat = M.Record(
+        **{**_rec("emdat-event-2025-0223-MMR").__dict__, "severity": ((7.7, "Moment Magnitude"),)}
+    )
+    assert M.describe(emdat)["severity"] == ["7.7 Moment Magnitude"]
+    usgs = M.Record(**{**_rec(MAIN_SHOCK).__dict__, "severity": ((7.7, "mww"),)})
+    described = M.describe(usgs)
+    assert described["magnitude"] == 7.7 and "severity" not in described  # not said twice
+    assert "severity" not in M.describe(_rec("ifrcevent-event-7464"))
+
+
+def test_jev_is_sent_no_impact_figures_and_no_responses():
+    seed = _rec("emdat-event-2025-0223-MMR")
+    request = M.listwise_request("some/model", seed, [_rec(MAIN_SHOCK)])
+    text = json.dumps(request).lower()
+    for word in ("death", "affected", "displaced", "impact", "response", "injured"):
+        assert word not in text.replace("`candidates.", "").replace("candidates.", ""), word
+
+
+@responses.activate
+def test_overview_table_lists_events_hazards_impacts_and_counts_responses():
+    usgs, cems, stock = _bundle()
+    stock["cems-hazards"] += [_hazard(f"cems-hazard-{i}", 10.0 * i, "km2") for i in (2, 3)]
+    cems = _linked(cems, *cems.links, *(("hazard", "cems-hazards", f"cems-hazard-{i}") for i in (2, 3)))
+    _serve(stock)
+    details = M.fetch_details(API, "tok", [usgs, cems])
+    table = M.overview_table([usgs, cems], details)
+    assert list(table.columns) == ["Source", "Item type", "Measure", "Value", "Unit", "Estimate", "Event"]
+    assert list(table["Item type"].unique()) == ["Event", "Hazard", "Impact", "Response"]
+    assert list(table["Source"].unique()) == ["USGS", "CEMS"]  # the order of the fact sheet's columns
+    usgs_rows = table[table.Source == "USGS"]
+    assert {"Title", "Dates", "Countries"} <= set(usgs_rows[usgs_rows["Item type"] == "Event"].Measure)
+    hazard = usgs_rows[usgs_rows["Item type"] == "Hazard"].iloc[0]
+    assert (hazard.Measure, hazard.Value, hazard.Unit) == ("Severity", "7.7", "mww")
+    impacts = usgs_rows[usgs_rows["Item type"] == "Impact"]
+    assert set(impacts.Measure) == {"death · people", "cost · buildings"} and set(impacts.Estimate) == {
+        "modelled"
+    }
+    assert "2,496,081,634" in set(impacts.Value) and "1,665" in set(impacts.Value)
+    cems_hazard = table[(table.Source == "CEMS") & (table["Item type"] == "Hazard")]
+    top = cems_hazard[cems_hazard.Unit == "km2"].iloc[0]
+    assert top.Measure == "Severity (highest of 3 items)" and top.Value == "30"  # many items: one summary row
+    counts = table[(table.Source == "CEMS") & (table["Item type"] == "Response")]
+    assert dict(zip(counts.Measure, counts.Value, strict=True)) == {
+        "eo-dat": "2", "eo-gra (published)": "1", "eo-gra (withdrawn)": "1",
+    }  # fmt: skip
+    assert set(counts.Unit) == {"items"}
+
+
+def test_overview_table_with_nothing_linked_still_describes_the_events():
+    table = M.overview_table([_rec(MAIN_SHOCK)], M.Details([], [], []))
+    assert set(table["Item type"]) == {"Event"}
+
+
+def test_display_overview_returns_a_table_to_show():
+    html = M.display_overview(M.overview_table([_rec(MAIN_SHOCK)], M.Details([], [], []))).to_html()
+    assert "Title" in html and "USGS" in html
 
 
 # -- fact sheet -------------------------------------------------------------------------------------------------
@@ -849,6 +1016,15 @@ def test_every_code_cell_is_introduced_by_a_markdown_cell():
     for i, c in enumerate(cells):
         if c.cell_type == "code" and "parameters" not in c.metadata.get("tags", []):
             assert cells[i - 1].cell_type == "markdown", f"cell {i} has no explanation before it"
+
+
+def test_hazards_are_read_before_jev_and_impacts_and_responses_after_it():
+    code = [c.source for c in _notebook().cells if c.cell_type == "code"]
+    hazard_cell = next(i for i, c in enumerate(code) if 'roles=("hazard",)' in c)
+    jev_cell = next(i for i, c in enumerate(code) if "M.ask_jev" in c)
+    later_cell = next(i for i, c in enumerate(code) if 'roles=("impact", "response")' in c)
+    assert hazard_cell < jev_cell < later_cell
+    assert "M.overview_table" in "\n".join(code[later_cell:])
 
 
 def test_the_notebook_writes_no_files():

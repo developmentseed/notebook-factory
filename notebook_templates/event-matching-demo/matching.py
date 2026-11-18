@@ -11,7 +11,7 @@ import math
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 
 import pandas as pd
@@ -132,6 +132,9 @@ class Record:
     links: tuple[tuple[str, str, str], ...] = ()  # (role, collection, item id) of the item's related links
     src_event_id: str = ""  # monty:src_event_id: the source's own id, shared by the episodes of one event
     corr_id: str = ""  # monty:corr_id: Montandon's correlation id (date, country, number, hazard, episode)
+    severity: tuple[
+        tuple[float, str], ...
+    ] = ()  # (value, unit) of the linked hazard items, the highest per unit
     episode: object = None  # monty:episode_number
     geometry: dict | None = field(default=None, compare=False)
 
@@ -201,7 +204,7 @@ def _related_links(item: dict) -> tuple[tuple[str, str, str], ...]:
     for link in item.get("links") or []:
         target = re.search(r"/collections/([^/]+)/items/([^/?#]+)", link.get("href") or "")
         if link.get("rel") == "related" and target:
-            role = next((r for r in link.get("roles") or [] if r in ("event", "hazard", "impact")), "")
+            role = next((r for r in link.get("roles") or [] if r in ("event", "hazard", "impact", "response")), "")
             out.append((role, target.group(1), target.group(2)))
     return tuple(out)
 
@@ -401,7 +404,9 @@ def find_candidates(
         "datetime": f"{window.first:%Y-%m-%dT%H:%M:%SZ}/{window.last:%Y-%m-%dT%H:%M:%SZ}",
     }  # fmt: skip
     found: dict[str, dict] = {}
-    if seed.corr_id:  # asked for directly, so the window and the search caps never hide these records from Jev
+    if (
+        seed.corr_id
+    ):  # asked for directly, so the window and the search caps never hide these records from Jev
         same = {"op": "=", "args": [{"property": "monty:corr_id"}, seed.corr_id]}
         found.update({
             f["id"]: f
@@ -423,8 +428,14 @@ def find_candidates(
         same_corr = bool(seed.corr_id) and rec.corr_id == seed.corr_id
         if rec.id == seed.id or (rec.source == seed.source and not exact):
             continue
-        if exact or same_corr or (passes_place_and_time(seed, rec, rules) and quake_can_trigger(seed, rec, rules)):
-            kept.append((not exact, not same_corr, -heuristic_score(*pair_anchor(seed, rec), rules), rec.id, rec))
+        if (
+            exact
+            or same_corr
+            or (passes_place_and_time(seed, rec, rules) and quake_can_trigger(seed, rec, rules))
+        ):
+            kept.append(
+                (not exact, not same_corr, -heuristic_score(*pair_anchor(seed, rec), rules), rec.id, rec)
+            )
     kept.sort(key=lambda x: x[:4])
     first_episode: dict[tuple[str, str], object] = {}
     unique = []
@@ -482,7 +493,9 @@ def candidate_table(
             "Days apart": int(round(gap)), "Km apart": None if km is None else int(round(km)),
             "Why it is a candidate": why,
         })  # fmt: skip
-    return pd.DataFrame(rows, columns=["Source", "Title", "Date", "Days apart", "Km apart", "Why it is a candidate"])
+    return pd.DataFrame(
+        rows, columns=["Source", "Title", "Date", "Days apart", "Km apart", "Why it is a candidate"]
+    )
 
 
 # -- Jev: the decision model ---------------------------------------------------------------------------------------------
@@ -520,6 +533,8 @@ def describe(rec: Record) -> dict:
     }
     if rec.magnitude is not None:
         out["magnitude"] = rec.magnitude
+    elif rec.severity:  # the hazard item's measure, for records that carry no magnitude of their own
+        out["severity"] = [f"{value:g} {unit}".strip() for value, unit in rec.severity]
     out["countries"] = [c for c in rec.countries if c != UNKNOWN_COUNTRY] or ["unknown"]
     return out
 
@@ -678,20 +693,49 @@ def impact_field(detail: dict) -> str | None:
 
 @dataclass
 class Details:
-    rows: list[dict]  # source, field, value, unit, estimate_type, event
+    """What the items linked to some events say."""
+
+    rows: list[dict]  # source, field, value, unit, estimate_type, event: the figures the fact sheet uses
     footprints: list[dict]  # GeoJSON features: hazard footprints that are polygons
+    items: list[dict] = field(default_factory=list)  # every linked item: event, source, kind, item, type, ...
+
+    def only(self, event_ids: set[str]) -> Details:
+        """The same details, for these events only."""
+        keep = lambda d: d["event"] in event_ids  # noqa: E731
+        return Details(
+            [r for r in self.rows if keep(r)], [f for f in self.footprints if keep(f["properties"])],
+            [i for i in self.items if keep(i)],
+        )  # fmt: skip
 
 
-def fetch_details(api: str, token: str, events: list[Record], batch: int = 50) -> Details:
-    """Follow each event's `related` links to its hazard and impact items and read the numbers off them."""
+def merge_details(*parts: Details) -> Details:
+    return Details(
+        [r for d in parts for r in d.rows],
+        [f for d in parts for f in d.footprints],
+        [i for d in parts for i in d.items],
+    )
+
+
+ITEM_KINDS = {"-hazards": "hazard", "-impacts": "impact", "-response": "response", "-responses": "response"}
+
+
+def fetch_details(
+    api: str, token: str, events: list[Record], batch: int = 50, roles: tuple[str, ...] = ("hazard", "impact", "response")
+) -> Details:  # fmt: skip
+    """Follow each event's `related` links (the ones the ETL wrote within a source) and read the linked items.
+
+    `rows` and `footprints` feed the fact sheet and the map, `items` keeps every linked item for the overview.
+    `roles` picks which links to follow, so hazards can be read for all candidates and the rest only for the matches.
+    """
     wanted: dict[str, dict[str, str]] = {}  # collection -> {item id: event id}
     for event in events:
         for role, collection, item_id in event.links:
-            if role in ("hazard", "impact"):
+            if role in roles:
                 wanted.setdefault(collection, {})[item_id] = event.id
-    rows, footprints = [], []
+    rows, footprints, items = [], [], []
     for collection, by_id in wanted.items():
         source = collection.rsplit("-", 1)[0]
+        kind = next((k for suffix, k in ITEM_KINDS.items() if collection.endswith(suffix)), None)
         ids = list(by_id)
         for i in range(0, len(ids), batch):
             chunk = ids[i : i + batch]
@@ -700,16 +744,26 @@ def fetch_details(api: str, token: str, events: list[Record], batch: int = 50) -
                     continue
                 props = item.get("properties") or {}
                 event = by_id[item["id"]]
-                if collection.endswith("-impacts"):
+                base = {"event": event, "source": source, "kind": kind, "item": item["id"]}
+                if kind == "impact":
                     d = props.get("monty:impact_detail") or {}
-                    if (name := impact_field(d)) and d.get("value") is not None:
+                    if d.get("value") is None:
+                        continue
+                    items.append({**base, "type": d.get("type") or "", "category": d.get("category") or "",
+                                  "value": float(d["value"]), "unit": d.get("unit"),
+                                  "estimate": d.get("estimate_type") or "", "status": ""})  # fmt: skip
+                    if name := impact_field(d):
                         rows.append({"source": source, "field": name, "value": float(d["value"]), "unit": d.get("unit"),
                                      "estimate_type": d.get("estimate_type"), "event": event})  # fmt: skip
-                elif collection.endswith("-hazards"):
+                elif kind == "hazard":
                     d = props.get("monty:hazard_detail") or {}
                     if d.get("severity_value") is not None and float(d["severity_value"]) >= 0:
-                        rows.append({"source": source, "field": "severity", "value": float(d["severity_value"]),
-                                     "unit": d.get("severity_unit"), "estimate_type": d.get("estimate_type"), "event": event})  # fmt: skip
+                        value = float(d["severity_value"])
+                        items.append({**base, "type": ", ".join(props.get("monty:hazard_codes") or []), "category": "",
+                                      "value": value, "unit": d.get("severity_unit"),
+                                      "estimate": d.get("estimate_type") or "", "status": ""})  # fmt: skip
+                        rows.append({"source": source, "field": "severity", "value": value, "unit": d.get("severity_unit"),
+                                     "estimate_type": d.get("estimate_type"), "event": event})  # fmt: skip
                     # a register's or an alert's polygon is a country outline, not a footprint
                     if source not in COARSE_SOURCES and (item.get("geometry") or {}).get("type") in (
                         "Polygon",
@@ -717,7 +771,25 @@ def fetch_details(api: str, token: str, events: list[Record], batch: int = 50) -
                     ):
                         footprints.append({"type": "Feature", "geometry": item["geometry"],
                                            "properties": {"source": source, "title": props.get("title", ""), "event": event}})  # fmt: skip
-    return Details(rows, footprints)
+                elif kind == "response":
+                    d = props.get("monty:response_detail") or {}
+                    items.append({**base, "type": d.get("type") or "", "category": "", "value": None, "unit": None,
+                                  "estimate": "", "status": d.get("status") or ""})  # fmt: skip
+    return Details(rows, footprints, items)
+
+
+def add_severity(records: list[Record], details: Details) -> list[Record]:
+    """The records with `severity` filled in from their linked hazard items: the highest value for each unit."""
+    best: dict[str, dict[str, float]] = {}
+    for item in details.items:
+        if item["kind"] == "hazard" and item["value"] is not None:
+            units = best.setdefault(item["event"], {})
+            unit = item["unit"] or ""
+            units[unit] = max(item["value"], units.get(unit, float("-inf")))
+    return [
+        replace(rec, severity=tuple((v, u) for u, v in sorted(best.get(rec.id, {}).items()))[:3])
+        for rec in records
+    ]
 
 
 # -- the fact sheet -------------------------------------------------------------------------------------------------------
@@ -854,6 +926,79 @@ def fact_sheet(records: list[Record], rows: list[dict]) -> pd.DataFrame:
     table.attrs["modelled"] = {(label, name_of[s]) for label, s in modelled}
     table.attrs["units"] = {(label, name_of[s]): u for (label, s), u in units.items()}
     return table
+
+
+def _num(v: float) -> str:
+    return f"{v:,.0f}" if float(v).is_integer() else f"{v:,.2f}".rstrip("0").rstrip(".")
+
+
+OVERVIEW_COLUMNS = ["Source", "Item type", "Measure", "Value", "Unit", "Estimate", "Event"]
+
+
+def overview_table(events: list[Record], details: Details) -> pd.DataFrame:
+    """Everything linked to the matched events, one row per value: event, hazard, impact and response.
+
+    Many items of one kind are summarised: a hazard with several items by its highest value, responses by count.
+    """
+    order = list(SOURCE_LABELS)
+    rank = lambda source: order.index(source) if source in order else len(order)  # noqa: E731
+    kinds = ["Event", "Hazard", "Impact", "Response"]
+    rows = []
+
+    def add(source, event, kind, measure, value, unit="", estimate=""):
+        rows.append((rank(source), event, kinds.index(kind), measure, {
+            "Source": SOURCE_LABELS.get(source, source), "Item type": kind, "Measure": measure, "Value": value,
+            "Unit": unit or "", "Estimate": estimate or "", "Event": event,
+        }))  # fmt: skip
+
+    for rec in events:
+        add(rec.source, rec.id, "Event", "Title", rec.title)
+        if rec.start:
+            first, last = rec.start.date().isoformat(), (rec.end or rec.start).date().isoformat()
+            add(rec.source, rec.id, "Event", "Dates", first if first == last else f"{first} to {last}")
+        if rec.countries:
+            add(rec.source, rec.id, "Event", "Countries", ", ".join(rec.countries))
+        if rec.hazard_codes:
+            add(rec.source, rec.id, "Event", "Hazard codes", ", ".join(rec.hazard_codes))
+
+    hazards: dict[tuple[str, str, str], list[dict]] = {}
+    responses: dict[tuple[str, str, str, str], int] = {}
+    for item in details.items:
+        if item["kind"] == "hazard":
+            hazards.setdefault((item["source"], item["event"], item["unit"] or ""), []).append(item)
+        elif item["kind"] == "impact":
+            measure = f"{item['type']} · {item['category']}" if item["category"] else item["type"]
+            add(
+                item["source"],
+                item["event"],
+                "Impact",
+                measure,
+                _num(item["value"]),
+                item["unit"],
+                item["estimate"],
+            )
+        elif item["kind"] == "response":
+            key = (item["source"], item["event"], item["type"], item["status"])
+            responses[key] = responses.get(key, 0) + 1
+    for (source, event, unit), group in hazards.items():
+        top = max(group, key=lambda i: i["value"])
+        measure = "Severity" if len(group) == 1 else f"Severity (highest of {len(group)} items)"
+        add(source, event, "Hazard", measure, _num(top["value"]), unit, top["estimate"])
+    for (source, event, type_, status), count in responses.items():
+        add(source, event, "Response", f"{type_} ({status})" if status else type_, str(count), "items")
+
+    rows.sort(key=lambda r: r[:4])
+    return pd.DataFrame([r[4] for r in rows], columns=OVERVIEW_COLUMNS)
+
+
+def display_overview(table: pd.DataFrame):
+    """The overview as a left-aligned table without the index."""
+    return (
+        table.style.set_properties(**{"text-align": "left"})
+        .set_properties(subset=["Source", "Item type", "Value"], **{"white-space": "nowrap"})
+        .set_table_styles([{"selector": "th", "props": "text-align: left;"}])
+        .hide(axis="index")
+    )
 
 
 def display_table(facts: pd.DataFrame):
