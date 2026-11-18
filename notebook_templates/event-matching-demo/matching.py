@@ -344,6 +344,45 @@ def bbox_around(point: tuple[float, float], km: float) -> list[float]:
     return [max(-180.0, lon - dlon), max(-90.0, lat - dlat), min(180.0, lon + dlon), min(90.0, lat + dlat)]
 
 
+@dataclass(frozen=True)
+class SearchWindow:
+    """When and where the search looks for the selected event's other records."""
+
+    first: datetime  # earliest start the search accepts
+    last: datetime  # latest start the search accepts
+    days: int  # the hazard's window, either side of the event
+    radius_km: int  # the hazard's radius for precisely located records
+    box_km: int  # half-width of the box asked of the catalogue: the radius, or more for country-level records
+    bbox: list[float] | None  # [west, south, east, north], None when the event has no place
+    countries: tuple[str, ...]  # the countries the search also asks for, wherever the records are placed
+
+
+def search_window(seed: Record, rules: Rules = Rules()) -> SearchWindow:
+    if not seed.start:
+        raise ValueError("the selected event has no date, so there is nothing to search around")
+    days, radius = rules.window(seed)
+    box_km = max(radius, rules.coarse_radius_km)
+    return SearchWindow(
+        first=(seed.start - timedelta(days=days)).astimezone(UTC),
+        last=((seed.end or seed.start) + timedelta(days=days)).astimezone(UTC),
+        days=days, radius_km=radius, box_km=box_km,
+        bbox=bbox_around(seed.point, box_km) if seed.point else None,
+        countries=tuple(sorted(set(seed.countries) - {UNKNOWN_COUNTRY})),
+    )  # fmt: skip
+
+
+def circle_polygon(centre: tuple[float, float], km: float, n: int = 72) -> dict:
+    """A GeoJSON polygon: the circle of `km` kilometres around (lon, lat)."""
+    lon, lat = centre
+    ring = []
+    for i in range(n):
+        a = 2 * math.pi * i / n
+        dlat = km / 111.0 * math.cos(a)
+        dlon = km / (111.0 * max(math.cos(math.radians(lat)), 0.1)) * math.sin(a)
+        ring.append([lon + dlon, lat + dlat])
+    return {"type": "Polygon", "coordinates": [[*ring, ring[0]]]}
+
+
 def find_candidates(
     api: str, token: str, seed: Record, max_items: int = 60, rules: Rules = Rules()
 ) -> tuple[list[Record], int]:
@@ -356,14 +395,10 @@ def find_candidates(
     Records of the seed's own collection are dropped unless Montandon links them to the seed, and the episodes of
     one source event (same `monty:src_event_id`) count once.
     """
-    if not seed.start:
-        raise ValueError("the selected event has no date, so there is nothing to search around")
-    days, radius = rules.window(seed)
-    first = (seed.start - timedelta(days=days)).astimezone(UTC)
-    last = ((seed.end or seed.start) + timedelta(days=days)).astimezone(UTC)
+    window = search_window(seed, rules)
     base = {
         "collections": EVENT_COLLECTIONS, "limit": 200,
-        "datetime": f"{first:%Y-%m-%dT%H:%M:%SZ}/{last:%Y-%m-%dT%H:%M:%SZ}",
+        "datetime": f"{window.first:%Y-%m-%dT%H:%M:%SZ}/{window.last:%Y-%m-%dT%H:%M:%SZ}",
     }  # fmt: skip
     found: dict[str, dict] = {}
     if seed.corr_id:  # asked for directly, so the window and the search caps never hide these records from Jev
@@ -372,15 +407,13 @@ def find_candidates(
             f["id"]: f
             for f in _search(api, token, {"collections": EVENT_COLLECTIONS, "limit": 200, "filter-lang": "cql2-json", "filter": same})
         })  # fmt: skip
-    countries = sorted(set(seed.countries) - {UNKNOWN_COUNTRY})
-    if countries:
-        flt = {"op": "a_overlaps", "args": [{"property": "monty:country_codes"}, countries]}
+    if window.countries:
+        flt = {"op": "a_overlaps", "args": [{"property": "monty:country_codes"}, list(window.countries)]}
         found.update(
             {f["id"]: f for f in _search(api, token, {**base, "filter-lang": "cql2-json", "filter": flt})}
         )
-    if seed.point:
-        box = bbox_around(seed.point, max(radius, rules.coarse_radius_km))
-        for f in _search(api, token, {**base, "bbox": box}, max_items=800):
+    if window.bbox:
+        for f in _search(api, token, {**base, "bbox": window.bbox}, max_items=800):
             found.setdefault(f["id"], f)
 
     kept = []
@@ -427,6 +460,29 @@ def is_linked(a: Record, b: Record) -> bool:
 def exact_links(seed: Record, records: list[Record]) -> dict[str, str]:
     """{record id: why} for the records Montandon links to the seed. These join without asking Jev."""
     return {rec.id: "linked in Montandon" for rec in records if rec.id != seed.id and is_linked(seed, rec)}
+
+
+def candidate_table(
+    seed: Record, candidates: list[Record], exact: dict[str, str], rules: Rules = Rules()
+) -> pd.DataFrame:
+    """One row per candidate, in the order given: what it is, how far from the selected event, and why it was kept."""
+    rows = []
+    for rec in candidates:
+        _, _, gap, km = proximity(*pair_anchor(seed, rec), rules)
+        why = (
+            exact[rec.id]
+            if rec.id in exact
+            else "same Montandon correlation id"
+            if seed.corr_id and rec.corr_id == seed.corr_id
+            else "inside the time window and radius"
+        )
+        rows.append({
+            "Source": SOURCE_LABELS.get(rec.source, rec.source), "Title": rec.title,
+            "Date": rec.start.date().isoformat() if rec.start else "",
+            "Days apart": int(round(gap)), "Km apart": None if km is None else int(round(km)),
+            "Why it is a candidate": why,
+        })  # fmt: skip
+    return pd.DataFrame(rows, columns=["Source", "Title", "Date", "Days apart", "Km apart", "Why it is a candidate"])
 
 
 # -- Jev: the decision model ---------------------------------------------------------------------------------------------
@@ -533,6 +589,17 @@ class JevAnswer:
     errors: list[str] = field(default_factory=list)  # calls that failed (their candidates have no score)
 
 
+def jev_groups(candidates: list[Record], chunk: int = 25) -> list[list[Record]]:
+    """The candidates as Jev is asked about them: one call per source, at most `chunk` records each.
+
+    A source's records are sorted by id, so their order says nothing about the answer.
+    """
+    by_family: dict[str, list[Record]] = {}
+    for cand in sorted(candidates, key=lambda r: r.id):
+        by_family.setdefault(cand.family, []).append(cand)
+    return [recs[i : i + chunk] for recs in by_family.values() for i in range(0, len(recs), chunk)]
+
+
 def ask_jev(
     seed: Record, candidates: list[Record], api_key: str, model: str = DEFAULT_MODEL, chunk: int = 25,
     rules: Rules = Rules(),
@@ -544,10 +611,7 @@ def ask_jev(
     """
     if not api_key or not candidates:
         return JevAnswer({})
-    by_family: dict[str, list[Record]] = {}
-    for cand in sorted(candidates, key=lambda r: r.id):
-        by_family.setdefault(cand.family, []).append(cand)
-    groups = [recs[i : i + chunk] for recs in by_family.values() for i in range(0, len(recs), chunk)]
+    groups = jev_groups(candidates, chunk)
 
     def one(group: list[Record]) -> tuple[dict[str, float], float, str]:
         try:

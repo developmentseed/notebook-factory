@@ -9,6 +9,7 @@ import importlib.util
 import json
 import re
 import sys
+from datetime import timedelta
 from pathlib import Path
 
 import nbformat
@@ -414,6 +415,69 @@ def test_a_seed_without_a_date_cannot_be_searched():
         M.find_candidates(API, "tok", seed, max_items=5)
 
 
+# -- what the search looked at (shown in the notebook) -----------------------------------------------------
+def test_search_window_is_the_hazards_days_and_radius_around_the_event():
+    seed = _rec(MAIN_SHOCK)  # an earthquake: 7 days and 300 km in the default table
+    w = M.search_window(seed)
+    assert (w.days, w.radius_km) == (7, 300) and w.countries == ("MMR",)
+    assert w.first == seed.start - timedelta(days=7) and w.last == (seed.end or seed.start) + timedelta(
+        days=7
+    )
+    assert w.box_km == 1500  # country-level records are looked for at least this far away
+    west, south, east, north = w.bbox
+    assert west < seed.point[0] < east and south < seed.point[1] < north
+
+
+def test_search_window_follows_the_rules():
+    w = M.search_window(_rec(MAIN_SHOCK), M.Rules.from_params("EQ 2 100", 14, 500, 50, 5.0))
+    assert (w.days, w.radius_km, w.box_km) == (2, 100, 100)
+
+
+def test_search_window_of_an_event_without_a_place_has_no_box():
+    seed = M.record_from_item({**_item(MAIN_SHOCK), "geometry": None})
+    w = M.search_window(seed)
+    assert w.bbox is None and w.countries == ("MMR",)
+
+
+@responses.activate
+def test_find_candidates_asks_for_exactly_the_window_it_reports():
+    seed = _rec(MAIN_SHOCK)
+    w = M.search_window(seed)
+    bodies = _mock_search([])
+    M.find_candidates(API, "tok", seed, max_items=5)
+    searches = _window_searches(bodies)
+    assert {b["datetime"] for b in searches} == {f"{w.first:%Y-%m-%dT%H:%M:%SZ}/{w.last:%Y-%m-%dT%H:%M:%SZ}"}
+    assert [b["bbox"] for b in searches if "bbox" in b] == [w.bbox]
+
+
+def test_circle_polygon_is_a_closed_ring_at_the_given_distance():
+    centre = (96.0, 21.0)
+    ring = M.circle_polygon(centre, 300)["coordinates"][0]
+    assert ring[0] == ring[-1] and len(ring) > 30
+    assert all(abs(M.haversine_km(centre, p) - 300) < 3 for p in ring)
+
+
+def test_candidate_table_says_how_far_apart_and_why_each_is_a_candidate():
+    seed = _rec(MAIN_SHOCK)
+    emdat = _rec("emdat-event-2025-0223-MMR")  # carries the seed's corr_id
+    ifrc = _rec("ifrcevent-event-7464")
+    linked = _rec("cems-event-EMSR798")
+    table = M.candidate_table(seed, [emdat, ifrc, linked], {linked.id: "linked in Montandon"})
+    assert list(table.columns) == [
+        "Source",
+        "Title",
+        "Date",
+        "Days apart",
+        "Km apart",
+        "Why it is a candidate",
+    ]
+    assert list(table["Source"]) == ["EM-DAT", "IFRC", "CEMS"]
+    assert list(table["Why it is a candidate"]) == [
+        "same Montandon correlation id", "inside the time window and radius", "linked in Montandon",
+    ]  # fmt: skip
+    assert (table["Days apart"] >= 0).all() and table["Km apart"].notna().all()
+
+
 # -- Jev ---------------------------------------------------------------------------------------------------
 DECISIONS = "https://openrouter.ai/api/alpha/decisions"
 
@@ -461,6 +525,16 @@ def test_ask_jev_splits_a_source_into_chunks_of_25():
     answer = M.ask_jev(seed, cands, "key", "m")
     sizes = sorted(len(json.loads(c.request.body)["state"]["candidates"]) for c in responses.calls)
     assert sizes == [5, 25] and len(answer.scores) == 30
+
+
+def test_jev_groups_hold_one_source_each_and_split_at_the_chunk():
+    usgs = [M.record_from_item(_clone(MAIN_SHOCK, f"usgs-event-x{n}")) for n in (3, 1, 2)]
+    idu = _rec("idmc-idu-event-30892")
+    gidd = M.record_from_item(_clone("idmc-idu-event-30892", "idmc-gidd-event-30892", "idmc-gidd-events"))
+    groups = M.jev_groups([*usgs, idu, gidd], chunk=2)
+    assert [[r.id for r in g] for g in groups] == [
+        ["idmc-gidd-event-30892", "idmc-idu-event-30892"], ["usgs-event-x1", "usgs-event-x2"], ["usgs-event-x3"],
+    ]  # fmt: skip
 
 
 @responses.activate
@@ -760,6 +834,21 @@ def test_the_notebook_reads_the_api_key_only_from_the_environment():
     source = "\n".join(c.source for c in nb.cells if c.cell_type == "code")
     assert 'os.environ.get("OPENROUTER_API_KEY"' in source or 'os.environ["OPENROUTER_API_KEY"]' in source
     assert "sk-or-" not in source and "OPENROUTER_API_KEY =" not in source
+
+
+def test_the_notebook_runs_jev_in_its_own_cell():
+    code = [c.source for c in _notebook().cells if c.cell_type == "code"]
+    asking = [c for c in code if "M.ask_jev" in c]
+    assert len(asking) == 1 and "find_candidates" not in asking[0]
+    finding = [c for c in code if "M.find_candidates" in c]
+    assert len(finding) == 1 and "ask_jev" not in finding[0]
+
+
+def test_every_code_cell_is_introduced_by_a_markdown_cell():
+    cells = _notebook().cells
+    for i, c in enumerate(cells):
+        if c.cell_type == "code" and "parameters" not in c.metadata.get("tags", []):
+            assert cells[i - 1].cell_type == "markdown", f"cell {i} has no explanation before it"
 
 
 def test_the_notebook_writes_no_files():
