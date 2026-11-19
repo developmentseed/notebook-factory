@@ -188,7 +188,7 @@ def test_prepare_notebook_collapses_code_cells(tmp_path):
 
 def test_concurrent_first_builds_share_the_theme_download(tmp_path):
     """Two builds on an empty theme cache: one downloads, the other must not read it half-written."""
-    from factory.notebooks.pipeline.renderer import _run_myst
+    from factory.notebooks.pipeline.renderer import _run_myst, _template_cache
 
     # Stand-in for `myst build`: downloads the theme in two steps unless it is complete,
     # and fails like MyST does when it finds a half-written theme.
@@ -203,13 +203,12 @@ def test_concurrent_first_builds_share_the_theme_download(tmp_path):
         "    time.sleep(0.5)\n"
         "    open(done, 'w').close()\n"
     )
-    cache = tmp_path / "cache"
-    cache.mkdir()
+    cache = _template_cache(tmp_path / "cache", "book-theme")
     env = {**os.environ, "CACHE": str(cache)}
     codes = []
 
     def build():
-        proc = _run_myst([sys.executable, str(fake_myst)], tmp_path, env, cache, "book-theme", 30)
+        proc = _run_myst([sys.executable, str(fake_myst)], tmp_path, env, cache, 30)
         codes.append(proc.returncode)
 
     threads = [threading.Thread(target=build) for _ in range(2)]
@@ -218,4 +217,140 @@ def test_concurrent_first_builds_share_the_theme_download(tmp_path):
     for t in threads:
         t.join()
     assert codes == [0, 0]
-    assert (cache / ".book-theme.ready").exists()
+    assert (cache / ".ready").exists()
+
+
+def test_template_cache_per_template(tmp_path):
+    """A release-zip URL template gets its own flat cache directory, separate from other templates."""
+    from factory.notebooks.pipeline.renderer import _run_myst, _template_cache
+
+    root = tmp_path / "cache"
+    url = "https://github.com/jupyter-book/myst-theme/releases/download/myst-to-react%401.4.1/book-theme.zip"
+    cache = _template_cache(root, url)
+    assert cache.parent == root and cache.is_dir()
+    assert cache.name == "myst-to-react-1.4.1-book-theme.zip-75c301e84bb3"
+    assert _template_cache(root, url) == cache
+    assert _template_cache(root, url.replace("1.4.1", "1.4.2")) != cache
+    assert _template_cache(root, "book-theme") != cache
+
+    proc = _run_myst([sys.executable, "-c", ""], tmp_path, dict(os.environ), cache, 30)
+    assert proc.returncode == 0
+    assert (cache / ".ready").exists()
+
+
+def test_missing_myst_cli_is_reported(tmp_path):
+    from factory.notebooks.pipeline.renderer import RenderError, _run_myst, _template_cache
+
+    cache = _template_cache(tmp_path, "book-theme")
+    with pytest.raises(RenderError, match="MyST CLI not found"):
+        _run_myst([str(tmp_path / "no-such-myst")], tmp_path, dict(os.environ), cache, 30)
+    assert not (cache / ".ready").exists()
+
+
+def test_render_links_the_template_cache_and_sets_the_theme(template, nepal, settings, tmp_path, monkeypatch):
+    """render() points `_build/templates` at the per-template cache and writes the theme into myst.yml."""
+    import yaml
+
+    from factory.notebooks.pipeline.renderer import _template_cache, render
+
+    # Stand-in for `myst build`: writes the theme through `_build/templates` and a one-file site.
+    fake_myst = tmp_path / "fake_myst.py"
+    fake_myst.write_text(
+        "import os\n"
+        "open(os.path.join('_build', 'templates', 'template.yml'), 'w').close()\n"
+        "os.makedirs(os.path.join('_build', 'html'))\n"
+        "open(os.path.join('_build', 'html', 'index.html'), 'w').write('<h1>ok</h1>')\n"
+        "print('Built 1 page')\n"
+    )
+    root = tmp_path / "theme-cache"
+    monkeypatch.setitem(settings.NOTEBOOK_FACTORY, "WORK_DIR", tmp_path / "work")
+    monkeypatch.setitem(settings.NOTEBOOK_FACTORY, "MYST_TEMPLATE_CACHE_DIR", root)
+    monkeypatch.setitem(settings.NOTEBOOK_FACTORY, "MYST_COMMAND", [sys.executable, str(fake_myst)])
+    template_url = settings.NOTEBOOK_FACTORY["MYST_TEMPLATE"]
+    run = create_run(template, {"hazard": "flood"}, area=nepal["a1"])
+    ctx = RunContext.create(str(run.id))
+    ctx.executed_path = ctx.workdir / "executed.ipynb"
+    nbformat.write(nbformat.v4.new_notebook(cells=[nbformat.v4.new_markdown_cell("# hi")]), ctx.executed_path)
+
+    html = render(run, ctx, f"/published/runs/{run.id}")
+
+    cache = _template_cache(root, template_url)
+    link = ctx.build_dir / "_build" / "templates"
+    assert link.is_symlink() and link.resolve() == cache.resolve()
+    assert (cache / "template.yml").exists() and (cache / ".ready").exists()
+    assert yaml.safe_load((ctx.build_dir / "myst.yml").read_text())["site"]["template"] == template_url
+    assert (html / "index.html").exists()
+
+
+# Stand-in for a first `myst build` that leaves a partial theme behind (as an interrupted download
+# or a failed `npm ci` does) and then fails, optionally after hanging.
+PARTIAL_THEME_MYST = (
+    "import os, sys, time\n"
+    "cache = os.environ['CACHE']\n"
+    "open(os.path.join(cache, 'template.yml'), 'w').close()\n"
+    "os.makedirs(os.path.join(cache, 'node_modules', 'pkg'))\n"
+    "if sys.argv[1:] == ['hang']: time.sleep(30)\n"
+    "sys.exit('npm ci failed')\n"
+)
+
+
+def test_failed_first_build_empties_the_template_cache(tmp_path):
+    from factory.notebooks.pipeline.renderer import _run_myst, _template_cache
+
+    fake_myst = tmp_path / "fake_myst.py"
+    fake_myst.write_text(PARTIAL_THEME_MYST)
+    cache = _template_cache(tmp_path / "cache", "book-theme")
+    env = {**os.environ, "CACHE": str(cache)}
+
+    proc = _run_myst([sys.executable, str(fake_myst)], tmp_path, env, cache, 30)
+
+    assert proc.returncode == 1 and "npm ci failed" in proc.stderr
+    assert [p.name for p in cache.iterdir()] == [".lock"]
+
+
+def test_timed_out_first_build_empties_the_template_cache(tmp_path):
+    import subprocess
+
+    from factory.notebooks.pipeline.renderer import _run_myst, _template_cache
+
+    fake_myst = tmp_path / "fake_myst.py"
+    fake_myst.write_text(PARTIAL_THEME_MYST)
+    cache = _template_cache(tmp_path / "cache", "book-theme")
+    env = {**os.environ, "CACHE": str(cache)}
+
+    with pytest.raises(subprocess.TimeoutExpired):
+        _run_myst([sys.executable, str(fake_myst), "hang"], tmp_path, env, cache, 2)
+
+    assert [p.name for p in cache.iterdir()] == [".lock"]
+
+
+def test_build_that_waited_for_a_finished_theme_runs_without_the_lock(tmp_path, monkeypatch):
+    """Another build finishes the theme while this one waits for the lock; this one must not hold it."""
+    import fcntl
+
+    from factory.notebooks.pipeline import renderer
+
+    cache = renderer._template_cache(tmp_path / "cache", "book-theme")
+    real_flock = fcntl.flock
+
+    def flock_after_other_build(fd, op):
+        (cache / ".ready").touch()
+        return real_flock(fd, op)
+
+    monkeypatch.setattr(renderer.fcntl, "flock", flock_after_other_build)
+    # Stand-in for `myst build`: reports whether the theme lock is free while it runs.
+    fake_myst = tmp_path / "fake_myst.py"
+    fake_myst.write_text(
+        "import fcntl, os\n"
+        "with open(os.path.join(os.environ['CACHE'], '.lock'), 'w') as lock:\n"
+        "    try:\n"
+        "        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)\n"
+        "        print('free')\n"
+        "    except BlockingIOError:\n"
+        "        print('held')\n"
+    )
+    env = {**os.environ, "CACHE": str(cache)}
+
+    proc = renderer._run_myst([sys.executable, str(fake_myst)], tmp_path, env, cache, 30)
+
+    assert proc.returncode == 0 and proc.stdout.strip() == "free"

@@ -6,9 +6,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 UV_COMPILE_BYTECODE=1 UV_LINK_M
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         gdal-bin libgdal-dev libgeos-dev libproj-dev binutils git curl ca-certificates gnupg procps \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
-    && npm install -g mystmd@1.10.1 \
+    && npm install -g mystmd@1.12.0 \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ghcr.io/astral-sh/uv:0.5 /uv /uvx /bin/

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import fcntl
+import hashlib
 import logging
 import os
 import re
 import shutil
 import subprocess
 from pathlib import Path
+from urllib.parse import unquote
 
 import nbformat
 import yaml
@@ -24,24 +26,67 @@ class RenderError(RuntimeError):
     pass
 
 
+def _template_cache(root: Path, template: str) -> Path:
+    """Theme cache directory for one `site.template` value (a theme name or a release-zip URL).
+
+    Each template gets its own directory, so changing the template never reuses a theme
+    downloaded for another one."""
+    digest = hashlib.sha256(template.encode()).hexdigest()[:12]
+    tail = "-".join(unquote(template).rstrip("/").split("/")[-2:])
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", tail).strip("-.")[:48]
+    path = root / f"{slug}-{digest}"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def _run_myst(
-    cmd: list[str], build: Path, env: dict, cache: Path, template: str, timeout: int
+    cmd: list[str], build: Path, env: dict, cache: Path, timeout: int
 ) -> subprocess.CompletedProcess:
     """Run a MyST build. The first build into an empty theme cache downloads the theme into it;
     a concurrent build would read it half-written, so builds wait on a lock until one succeeds."""
 
     def run():
-        return subprocess.run(cmd, cwd=build, env=env, capture_output=True, text=True, timeout=timeout)
+        try:
+            return subprocess.run(cmd, cwd=build, env=env, capture_output=True, text=True, timeout=timeout)
+        except FileNotFoundError as exc:
+            raise RenderError(
+                f"MyST CLI not found ({cmd[0]}). Install with `npm i -g mystmd@1.12.0` or set MYST_COMMAND."
+            ) from exc
 
-    ready = cache / f".{template}.ready"
+    ready = cache / ".ready"
     if ready.exists():
         return run()
     with open(cache / ".lock", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        proc = run()
-        if proc.returncode == 0:
-            ready.touch()
-        return proc
+        if not ready.exists():
+            ok = False
+            try:
+                proc = run()
+                ok = proc.returncode == 0
+                return proc
+            finally:
+                if ok:
+                    ready.touch()
+                else:
+                    _clear_template_cache(cache)
+    # Another build finished the theme while this one waited for the lock.
+    return run()
+
+
+def _clear_template_cache(cache: Path) -> None:
+    """Empty a theme cache after a failed first build, keeping the lock file.
+
+    MyST reuses a theme whose `template.yml` exists and skips `npm ci` when `node_modules`
+    exists, so a half-downloaded theme would otherwise break every later build. On a timeout
+    only `myst` is killed; an `npm` child it started may still write here until it exits."""
+    log.warning("MyST build failed before the theme cache was ready; clearing %s", cache)
+    for child in cache.iterdir():
+        if child.name == ".lock":
+            continue
+        if child.is_dir() and not child.is_symlink():
+            shutil.rmtree(child, ignore_errors=True)
+        else:
+            child.unlink(missing_ok=True)
 
 
 def _myst_cmd() -> list[str]:
@@ -120,8 +165,7 @@ def render(run: NotebookRun, ctx: RunContext, base_url: str) -> Path:
     (build / "myst.yml").write_text(yaml.safe_dump(project, sort_keys=False))
 
     # Share the downloaded theme between runs instead of re-fetching it every time.
-    cache = Path(cfg["MYST_TEMPLATE_CACHE_DIR"])
-    cache.mkdir(parents=True, exist_ok=True)
+    cache = _template_cache(Path(cfg["MYST_TEMPLATE_CACHE_DIR"]), cfg["MYST_TEMPLATE"])
     (build / "_build").mkdir(exist_ok=True)
     os.symlink(cache.resolve(), build / "_build" / "templates", target_is_directory=True)
 
@@ -135,11 +179,7 @@ def render(run: NotebookRun, ctx: RunContext, base_url: str) -> Path:
     }
     cmd = [*_myst_cmd(), "build", "--html"]
     try:
-        proc = _run_myst(cmd, build, env, cache, cfg["MYST_TEMPLATE"], cfg["MYST_BUILD_TIMEOUT"])
-    except FileNotFoundError as exc:
-        raise RenderError(
-            f"MyST CLI not found ({cmd[0]}). Install with `npm i -g mystmd` or set MYST_COMMAND."
-        ) from exc
+        proc = _run_myst(cmd, build, env, cache, cfg["MYST_BUILD_TIMEOUT"])
     except subprocess.TimeoutExpired as exc:
         raise RenderError("MyST build timed out") from exc
     tail = "\n".join((proc.stdout + "\n" + proc.stderr).strip().splitlines()[-15:])
