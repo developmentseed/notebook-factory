@@ -58,10 +58,35 @@ def _run_myst(
         return run()
     with open(cache / ".lock", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        proc = run()
-        if proc.returncode == 0:
-            ready.touch()
-        return proc
+        if not ready.exists():
+            ok = False
+            try:
+                proc = run()
+                ok = proc.returncode == 0
+                return proc
+            finally:
+                if ok:
+                    ready.touch()
+                else:
+                    _clear_template_cache(cache)
+    # Another build finished the theme while this one waited for the lock.
+    return run()
+
+
+def _clear_template_cache(cache: Path) -> None:
+    """Empty a theme cache after a failed first build, keeping the lock file.
+
+    MyST reuses a theme whose `template.yml` exists and skips `npm ci` when `node_modules`
+    exists, so a half-downloaded theme would otherwise break every later build. On a timeout
+    only `myst` is killed; an `npm` child it started may still write here until it exits."""
+    log.warning("MyST build failed before the theme cache was ready; clearing %s", cache)
+    for child in cache.iterdir():
+        if child.name == ".lock":
+            continue
+        if child.is_dir() and not child.is_symlink():
+            shutil.rmtree(child, ignore_errors=True)
+        else:
+            child.unlink(missing_ok=True)
 
 
 def _myst_cmd() -> list[str]:
