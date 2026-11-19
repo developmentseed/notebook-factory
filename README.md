@@ -54,64 +54,6 @@ uv run python manage.py runserver
 Open <http://localhost:8000>. Log in, pick **Templates → Demo: area map → Run this analysis**,
 choose an area on the map and hit *Run*.
 
-### React frontend (Explore and Build)
-
-The public `/explore` and `/build` pages use React, TypeScript, React Router and Radix Themes.
-Django serves their HTML shell, existing REST APIs, sessions and static assets. The Django admin,
-management pages and published notebook viewer keep their existing routes.
-
-Use Node **22.22.2** (pinned in `frontend/.nvmrc` and the Docker frontend stage), or a supported
-alternative matching `^22.22.2 || >=24.15.0`. Build the frontend once before opening these pages:
-
-```sh
-npm ci --prefix frontend
-npm run build --prefix frontend
-uv run python manage.py runserver
-```
-
-Open <http://127.0.0.1:8000/explore> or <http://127.0.0.1:8000/build>. The bootstrap shows published
-analyses and available templates from the database. Template details and run forms still link to
-Django. The Explore map, event grouping and filters are separate follow-up work (#40 and #41).
-
-For hot reload, run Vite in one terminal and Django in another:
-
-```sh
-npm run dev --prefix frontend
-# In another terminal (DEBUG=true):
-FRONTEND_DEV_SERVER_URL=http://127.0.0.1:5173 uv run python manage.py runserver
-```
-
-Keep browsing the Django URL on port 8000; Vite only supplies frontend assets. API calls use the
-same origin and Django session, with no separate login or CORS configuration. New API writes must
-send `X-CSRFToken` from the shell's `frontend-config` alongside the session cookie.
-
-Frontend code lives in `frontend/src/`: `app.tsx` owns routes, `components/layout.tsx` owns the reduced
-topbar, `pages/` owns screens, and `lib/` contains API types and the request helper. Django's shell and
-Vite manifest loader live in `factory/web/frontend.py` and `factory/web/templatetags/frontend.py`.
-Only the `/explore` and `/build` URL namespaces fall back to React, including on refresh; unknown
-nested paths show its not-found page. API/admin URLs are never caught by the frontend router.
-
-`npm run typecheck --prefix frontend` checks types; `npm run build --prefix frontend` also checks
-types and emits hashed assets plus a manifest under `factory/web/static/frontend/`. Generated files
-are ignored by Git. Docker builds them in a Node stage before Django's `collectstatic` serves them
-through WhiteNoise. Other deployments should build them before running `collectstatic` too.
-
-Frontend conventions are recorded in [AGENTS.md](AGENTS.md). Named functions, components, hooks and
-exported contracts have clear JSDoc; ESLint checks those comments alongside TypeScript and React
-rules. Use these commands from the repository root:
-
-```sh
-npm run check --prefix frontend       # Prettier, ESLint/JSDoc, TypeScript and lint-policy tests
-npm run format --prefix frontend      # apply Prettier formatting
-npm run lint:fix --prefix frontend    # apply safe ESLint fixes
-```
-
-`npm ci --prefix frontend` installs Lefthook automatically when a Git checkout is present. Its
-pre-commit hook follows the Earth Information Explorer setup: format matching staged frontend files
-with Prettier, re-stage those fixes, then run ESLint and TypeScript. A failed check blocks the commit.
-Generated assets and lockfiles are excluded from formatting. Run `npm run hooks:install --prefix
-frontend` to reinstall hooks if needed. Hook installation is skipped in Docker's source-only build.
-
 The top bar also links to:
 
 * **STAC items** (`/items/`): items picked for runs or ingested by the poller.
@@ -148,6 +90,23 @@ uv run python manage.py runserver
 uv run celery -A config worker -l info --concurrency 2
 uv run celery -A config beat -l info          # STAC poller + housekeeping
 ```
+
+### Frontend
+
+`/explore` and `/build` use React, TypeScript, React Router and Radix. Use the Node version in
+`frontend/.nvmrc`, then build the assets served by Django:
+
+```sh
+npm ci --prefix frontend
+npm run build --prefix frontend
+```
+
+For hot reload, run `npm run dev --prefix frontend` in a separate terminal and start Django with
+`FRONTEND_DEV_SERVER_URL=http://127.0.0.1:5173 uv run python manage.py runserver`.
+Open <http://127.0.0.1:8000/explore> or <http://127.0.0.1:8000/build>.
+
+Run `npm run check --prefix frontend` for formatting, lint and type checks. Contributor conventions
+are in [AGENTS.md](AGENTS.md). Docker builds the frontend assets automatically.
 
 ## Docker
 
