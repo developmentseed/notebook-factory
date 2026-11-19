@@ -1,5 +1,12 @@
 # Local development without docker. Requires: uv, PostGIS, Node (for mystmd).
-.PHONY: setup db migrate seed run worker beat poll test lint fmt shell check
+.PHONY: setup db migrate seed run worker beat poll test lint fmt shell check frontend frontend-dev
+
+frontend:         ## build the React assets served by Django
+	npm ci --prefix frontend
+	npm run build --prefix frontend
+
+frontend-dev:     ## Vite HMR (set FRONTEND_DEV_SERVER_URL in the Django environment)
+	npm run dev --prefix frontend
 
 setup:            ## create venv, install deps, install mystmd
 	uv sync

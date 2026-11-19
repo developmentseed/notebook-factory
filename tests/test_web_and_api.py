@@ -168,8 +168,10 @@ def test_published_files_are_embeddable(client, settings, tmp_path):
     (tmp_path / "runs" / "abc").mkdir(parents=True)
     (tmp_path / "runs" / "abc" / "index.html").write_text("<h1>hi</h1>")
     for url in ("/published/runs/abc/index.html", "/published/runs/abc/", "/published/runs/abc"):
-        r = client.get(url)
+        r = client.get(url, follow=True)
         assert r.status_code == 200 and "X-Frame-Options" not in r, url
+        if url.endswith("/index.html"):
+            assert r.redirect_chain == [("/published/runs/abc/", 302)]
     r = client.get("/published/runs/abc/missing.js")
     assert r.status_code == 404 and "X-Frame-Options" not in r
     assert client.get("/published/../manage.py").status_code == 404

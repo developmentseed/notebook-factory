@@ -1,3 +1,12 @@
+# Build frontend assets once; Django/WhiteNoise serves them in the runtime image.
+FROM node:22.22.2-bookworm-slim AS frontend
+WORKDIR /frontend
+COPY frontend/package.json frontend/package-lock.json ./
+COPY frontend/scripts/ ./scripts/
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
 # Web + worker image. GDAL/GEOS for GeoDjango, Node + mystmd for rendering.
 FROM python:3.12-slim-bookworm AS base
 
@@ -20,6 +29,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 # Copy the code already owned by the runtime user; a `chown -R` afterwards would duplicate the layer.
 RUN useradd -m app && mkdir -p /app/data /app/staticfiles && chown app:app /app/data /app/staticfiles
 COPY --chown=app:app . .
+COPY --from=frontend --chown=app:app /factory/web/static/frontend ./factory/web/static/frontend
 RUN uv sync --frozen --no-dev
 USER app
 

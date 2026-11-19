@@ -1,10 +1,12 @@
 from django.contrib.auth import views as auth_views
-from django.urls import path
+from django.urls import path, re_path
 
 from . import views
+from .frontend import frontend
 
 app_name = "web"
 urlpatterns = [
+    re_path(r"^(?:explore|build)(?:/.*)?$", frontend, name="frontend"),
     path("", views.browse, name="browse"),
     path("templates/", views.template_list, name="template-list"),
     path("templates/-/new/", views.template_new, name="template-new"),

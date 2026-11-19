@@ -1,0 +1,15 @@
+{% if dev_url %}
+<script type="module">
+  import RefreshRuntime from "{{ dev_url|escapejs }}/@react-refresh";
+  RefreshRuntime.injectIntoGlobalHook(window);
+  window.$RefreshReg$ = () => {};
+  window.$RefreshSig$ = () => (type) => type;
+  window.__vite_plugin_react_preamble_installed__ = true;
+</script>
+<script type="module" src="{{ dev_url }}/@vite/client"></script>
+<script type="module" src="{{ dev_url }}/src/main.tsx"></script>
+{% else %}
+{% for style in styles %}<link rel="stylesheet" href="{{ style }}">{% endfor %}
+{% for imported in imports %}<link rel="modulepreload" href="{{ imported }}">{% endfor %}
+<script type="module" src="{{ script }}"></script>
+{% endif %}
