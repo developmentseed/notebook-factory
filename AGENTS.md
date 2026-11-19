@@ -34,10 +34,7 @@
 - Use Ruff and focused pytest checks when changing the Django integration.
 - Lefthook formats and re-stages matching staged frontend files before lint and type checks on commit.
   Do not bypass hooks to make failing checks disappear.
-- Do not commit or push unless the user explicitly requests it.
 
 ## Writing and GitHub
 
-- Use clear, short descriptions and avoid the middle dot character in authored UI copy and documents.
-- Use the GitHub CLI account saved in macOS Keychain:
-  `env -u GITHUB_TOKEN -u GH_TOKEN gh ...`. Never print or persist authentication tokens.
+- Use clear, short descriptions
