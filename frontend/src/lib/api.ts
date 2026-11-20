@@ -24,6 +24,31 @@ export interface NotebookRun {
   created_at: string;
 }
 
+/** A published analysis belonging to a filtered Montandon event card. */
+export interface EventAnalysis {
+  id: string;
+  title: string;
+  purpose: string;
+  created_at: string;
+  viewer_url: string;
+}
+
+/** Catalog-scoped event identity, metadata, and all matching published analyses. */
+export interface ExploreEvent {
+  id: string;
+  title: string;
+  catalog: string;
+  date: string | null;
+  purposes: string[];
+  analysis_count: number;
+  analyses: EventAnalysis[];
+}
+
+/** An event page plus the total number of matching analyses across every page. */
+export interface ExploreEventsPage extends Paginated<ExploreEvent> {
+  analysis_count: number;
+}
+
 /**
  * Read JSON from a Django endpoint using the current browser session.
  *
