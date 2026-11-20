@@ -66,3 +66,27 @@ export async function getJson<T>(url: string, signal: AbortSignal): Promise<T> {
   if (!response.ok) throw new Error(`Could not load data (${response.status}).`);
   return response.json() as Promise<T>;
 }
+
+/** Registered filter options and the single Montandon source used by Explore. */
+export interface ExploreOptions {
+  catalog: { slug: string; name: string } | null;
+  countries: { iso3: string; name: string }[];
+  hazards: { key: string; label: string }[];
+  templates: { slug: string; title: string }[];
+}
+
+/** A matching event's optional map position and its sidebar page. */
+export interface MapEvent {
+  id: string;
+  title: string;
+  position: [number, number] | null;
+  analysis_count: number;
+  page: number;
+}
+
+/** All matching events across sidebar pages, including events without stored locations. */
+export interface ExploreMapData {
+  count: number;
+  analysis_count: number;
+  results: MapEvent[];
+}
