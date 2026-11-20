@@ -140,6 +140,9 @@ USE_TZ = True
 # ---------------------------------------------------------------------------
 STATIC_URL = "/static/"
 STATIC_ROOT = env("STATIC_ROOT", default=str(BASE_DIR / "staticfiles"))
+# The frontend is served by Django; Vite is optional and supplies assets/HMR in development.
+FRONTEND_DIST_DIR = BASE_DIR / "factory" / "web" / "static" / "frontend"
+FRONTEND_DEV_SERVER_URL = env("FRONTEND_DEV_SERVER_URL", default="").rstrip("/") if DEBUG else ""
 MEDIA_URL = "/media/"
 MEDIA_ROOT = env("MEDIA_ROOT", default=str(BASE_DIR / "data" / "media"))
 

@@ -1,0 +1,14 @@
+{% load frontend %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ frontend_title }} | {{ SITE_NAME }}</title>
+  {% frontend_assets %}
+</head>
+<body>
+  <div id="react-root"></div>
+  {{ frontend_config|json_script:"frontend-config" }}
+  <noscript><p>Explore and Build require JavaScript. You can <a href="/">browse analyses</a> or <a href="/templates/">choose a template</a> using the existing pages.</p></noscript>
+</body>
+</html>

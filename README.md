@@ -91,6 +91,23 @@ uv run celery -A config worker -l info --concurrency 2
 uv run celery -A config beat -l info          # STAC poller + housekeeping
 ```
 
+### Frontend
+
+`/explore` and `/build` use React, TypeScript, React Router and Radix. Use the Node version in
+`frontend/.nvmrc`, then build the assets served by Django:
+
+```sh
+npm ci --prefix frontend
+npm run build --prefix frontend
+```
+
+For hot reload, run `npm run dev --prefix frontend` in a separate terminal and start Django with
+`FRONTEND_DEV_SERVER_URL=http://127.0.0.1:5173 uv run python manage.py runserver`.
+Open <http://127.0.0.1:8000/explore> or <http://127.0.0.1:8000/build>.
+
+Run `npm run check --prefix frontend` for formatting, lint and type checks. Contributor conventions
+are in [AGENTS.md](AGENTS.md). Docker builds the frontend assets automatically.
+
 ## Docker
 
 ```sh

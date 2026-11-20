@@ -1,0 +1,18 @@
+pre-commit:
+  jobs:
+    - name: prettier
+      root: frontend/
+      glob: 'frontend/*.{js,mjs,ts,tsx,json,css,md}'
+      exclude: 'frontend/package-lock.json'
+      run: npx --no-install prettier --write {staged_files}
+      stage_fixed: true
+
+    - name: eslint
+      root: frontend/
+      glob: 'frontend/*.{js,mjs,ts,tsx}'
+      run: npx --no-install eslint {staged_files}
+
+    - name: typescript
+      root: frontend/
+      glob: 'frontend/*.{ts,tsx}'
+      run: npm run typecheck

@@ -1272,4 +1272,8 @@ def published_file(request, path):
         target = target / "index.html"
     if not target.is_file():
         return HttpResponseNotFound("Not found")
+    # MyST's client router recognizes the directory URL, not /index.html.
+    # Redirect existing published links before the page hydrates into an error.
+    if path.endswith("/index.html"):
+        return redirect(request.path.removesuffix("index.html"))
     return serve(request, str(target.relative_to(root)), document_root=str(root))

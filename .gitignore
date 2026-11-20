@@ -8,6 +8,8 @@ staticfiles/
 .ruff_cache/
 *.egg-info/
 .DS_Store
+frontend/node_modules/
+factory/web/static/frontend/
 .ipynb_checkpoints/
 notebook_templates/**/_build/
 notebook_templates/**/outputs/

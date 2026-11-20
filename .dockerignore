@@ -1,0 +1,10 @@
+.git
+.venv
+.env
+data
+staticfiles
+frontend/node_modules
+factory/web/static/frontend
+**/__pycache__
+.pytest_cache
+.ruff_cache
