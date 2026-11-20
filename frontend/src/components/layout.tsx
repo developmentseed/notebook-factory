@@ -27,9 +27,6 @@ export function Layout() {
       </a>
       <header className='app-header'>
         <NavLink className='brand' to='/explore'>
-          <span className='brand-mark' aria-hidden='true'>
-            M
-          </span>
           {config.siteName}
         </NavLink>
         <nav aria-label='Primary'>
@@ -80,7 +77,12 @@ export function Layout() {
           </form>
         ) : null}
       </header>
-      <main id='main-content' tabIndex={-1} ref={main} className='page'>
+      <main
+        id='main-content'
+        tabIndex={-1}
+        ref={main}
+        className={/^\/explore\/?$/.test(pathname) ? 'page explore-page' : 'page'}
+      >
         <Outlet />
       </main>
     </>
