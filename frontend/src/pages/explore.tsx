@@ -1,30 +1,95 @@
-import { Heading } from '@radix-ui/themes';
+import { Heading, Text } from '@radix-ui/themes';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import type { ExploreEventsPage } from '../lib/api';
+import type { ExploreEventsPage, ExploreMapData, ExploreOptions, MapEvent } from '../lib/api';
 import { useApi } from '../lib/use-api';
-import { exploreEventsUrl } from '../lib/explore';
+import {
+  changeExploreFilter,
+  eventCardId,
+  exploreEventsUrl,
+  exploreMapUrl,
+  selectMapEvent,
+} from '../lib/explore';
 import { Loading, LoadError } from '../components/data-state';
 import { EventSidebar } from '../components/event-sidebar';
+import { ExploreFilters } from '../components/explore-filters';
 import './explore.css';
 
+const ExploreMap = lazy(() =>
+  import('../components/explore-map').then((module) => ({ default: module.ExploreMap })),
+);
+
 /**
- * Display the Explore workspace and its independently scrollable event sidebar.
- * Filters come from the URL so future map controls and the sidebar use the same query.
- * Expanded cards are URL state but do not change the API request or matching counts.
+ * Load registered filter choices and select one Montandon source before requesting map and cards.
  *
- * @returns The event-discovery layout with published analyses grouped by Montandon event.
+ * @returns The Explore workspace or a useful configuration/loading error.
  */
 export function Explore() {
+  const [params] = useSearchParams();
+  const catalog = params.get('catalog');
+  const options = useApi<ExploreOptions>(
+    `/api/runs/explore-options/${catalog ? `?catalog=${encodeURIComponent(catalog)}` : ''}`,
+  );
+  if (options.status === 'loading')
+    return (
+      <div className='event-state'>
+        <Loading />
+      </div>
+    );
+  if (options.status === 'error')
+    return (
+      <div className='event-state'>
+        <LoadError message={options.message} />
+      </div>
+    );
+  if (!options.data.catalog)
+    return (
+      <div className='event-state'>
+        <Heading as='h1' size='5'>
+          Explore analyses
+        </Heading>
+        <Text as='p'>No active Montandon catalog is available.</Text>
+        <a href='/explore'>Reset Explore</a>
+      </div>
+    );
+  return <ExploreWorkspace options={options.data} />;
+}
+
+/**
+ * Keep map markers, filters, search, card expansion and pagination on the same route state.
+ *
+ * @param props - Registered controls and the resolved single-catalog configuration.
+ * @param props.options - Django-provided choices, including the selected Montandon source.
+ * @returns A filtered map and independently scrollable event sidebar.
+ */
+function ExploreWorkspace({ options }: { options: ExploreOptions }) {
   const [params, setParams] = useSearchParams();
-  const result = useApi<ExploreEventsPage>(exploreEventsUrl(params));
+  const effective = new URLSearchParams(params);
+  effective.set('catalog', options.catalog!.slug);
+  const cards = useApi<ExploreEventsPage>(exploreEventsUrl(effective), true);
+  const markers = useApi<ExploreMapData>(exploreMapUrl(effective), true);
+  const selected = params.get('selected');
+  const [hovered, setHovered] = useState<string | null>(null);
+  const cardData = cards.status !== 'error' ? cards.data : undefined;
+  const markerData = markers.status !== 'error' ? markers.data : undefined;
+
+  useEffect(() => {
+    if (cards.status !== 'success' || !selected) return;
+    const card = document.getElementById(eventCardId(selected));
+    card?.focus({ preventScroll: true });
+    card?.scrollIntoView({
+      block: 'nearest',
+      behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+    });
+  }, [cards, selected]);
 
   /**
-   * Change one card's expansion state while preserving filters and the current event page.
+   * Change one card's expansion without changing matching data or losing the current page.
    *
-   * @param id - Catalog-scoped event identifier from the API.
-   * @param open - Whether the event's published analyses should be visible.
+   * @param id - Catalog-scoped event identifier.
+   * @param open - Whether its analysis links should be visible.
    */
-  function toggleEvent(id: string, open: boolean): void {
+  function toggleEvent(id: string, open: boolean) {
     setParams(
       (current) => {
         const next = new URLSearchParams(current);
@@ -39,28 +104,89 @@ export function Explore() {
     );
   }
 
+  /**
+   * Apply a registered filter to both map and sidebar while resetting pagination.
+   *
+   * @param key - Country, hazard, purpose, or event-search field.
+   * @param value - Selected option or search text; empty clears it.
+   */
+  function changeFilter(key: string, value: string) {
+    setParams(changeExploreFilter(effective, key, value), { preventScrollReset: true });
+  }
+
+  /** Reset filters and selection while retaining the current Montandon source. */
+  function clearFilters() {
+    setParams(new URLSearchParams({ catalog: options.catalog!.slug }), {
+      preventScrollReset: true,
+    });
+  }
+
+  /**
+   * Open a picked event, switching sidebar pages first when necessary.
+   *
+   * @param event - Matching marker and the sidebar page returned by Django.
+   */
+  function selectEvent(event: MapEvent) {
+    if (markers.status !== 'success') return;
+    setParams(selectMapEvent(effective, event), { replace: true, preventScrollReset: true });
+  }
+
   return (
     <div className='explore-layout'>
       <Heading as='h1' className='explore-sr-only'>
         Explore analyses
       </Heading>
-      <div className='explore-workspace' aria-hidden='true' />
+      <div className='explore-workspace'>
+        <ExploreFilters
+          options={options}
+          params={params}
+          onChange={changeFilter}
+          onClear={clearFilters}
+        />
+        <Suspense
+          fallback={
+            <div className='event-state'>
+              <Loading />
+            </div>
+          }
+        >
+          <ExploreMap
+            events={markerData?.results ?? []}
+            selected={selected}
+            hovered={hovered}
+            loading={markers.status === 'loading'}
+            onSelect={selectEvent}
+          />
+        </Suspense>
+        {markers.status === 'error' ? (
+          <div className='map-data-error'>
+            <LoadError message={markers.message} />
+          </div>
+        ) : null}
+      </div>
       <aside
         className='event-sidebar'
-        aria-labelledby={result.status === 'success' ? 'events-heading' : undefined}
-        aria-label={result.status !== 'success' ? 'Event analyses' : undefined}
+        aria-labelledby={cardData ? 'events-heading' : undefined}
+        aria-label={!cardData ? 'Event analyses' : undefined}
+        aria-busy={cards.status === 'loading'}
       >
-        {result.status === 'loading' ? (
+        {cards.status === 'loading' && !cardData ? (
           <div className='event-state'>
             <Loading />
           </div>
-        ) : result.status === 'error' ? (
+        ) : cards.status === 'error' ? (
           <div className='event-state'>
-            <LoadError message={result.message} />
+            <LoadError message={cards.message} />
           </div>
-        ) : (
-          <EventSidebar data={result.data} params={params} onToggle={toggleEvent} />
-        )}
+        ) : cardData ? (
+          <EventSidebar
+            data={cardData}
+            params={params}
+            onToggle={toggleEvent}
+            onHover={setHovered}
+            loading={cards.status === 'loading'}
+          />
+        ) : null}
       </aside>
     </div>
   );
