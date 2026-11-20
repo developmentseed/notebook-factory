@@ -11,6 +11,8 @@ body {
 }
 .radix-themes {
   --default-font-family: system-ui, sans-serif;
+}
+.app-theme {
   min-block-size: 100dvh;
   background: #fafafa;
 }
@@ -50,15 +52,6 @@ a {
   font-weight: 700;
   text-decoration: none;
   white-space: nowrap;
-}
-.brand-mark {
-  display: grid;
-  place-items: center;
-  inline-size: 1.9rem;
-  block-size: 1.9rem;
-  color: white;
-  background: #bf532d;
-  border-radius: 0.4rem;
 }
 .app-header nav {
   display: flex;
@@ -177,11 +170,21 @@ a {
 }
 @media (width < 45rem) {
   .app-header {
-    padding: 1rem;
-    gap: 0.75rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 0.75rem 1rem 0;
+    gap: 0.5rem;
+  }
+  .brand {
+    font-size: 0.875rem;
+    white-space: normal;
+  }
+  .account {
+    min-inline-size: 0;
   }
   .app-header nav {
-    order: 3;
+    grid-column: 1 / -1;
+    grid-row: 2;
     inline-size: 100%;
   }
   .app-header nav a {

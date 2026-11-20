@@ -12,7 +12,13 @@ if (!root) throw new Error('React root is missing.');
 
 createRoot(root).render(
   <StrictMode>
-    <Theme accentColor='orange' grayColor='slate' radius='medium' appearance='light'>
+    <Theme
+      className='app-theme'
+      accentColor='orange'
+      grayColor='slate'
+      radius='medium'
+      appearance='light'
+    >
       <BrowserRouter>
         <App />
       </BrowserRouter>
