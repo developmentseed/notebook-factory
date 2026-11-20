@@ -80,7 +80,12 @@ export function Layout() {
           </form>
         ) : null}
       </header>
-      <main id='main-content' tabIndex={-1} ref={main} className='page'>
+      <main
+        id='main-content'
+        tabIndex={-1}
+        ref={main}
+        className={/^\/explore\/?$/.test(pathname) ? 'page explore-page' : 'page'}
+      >
         <Outlet />
       </main>
     </>

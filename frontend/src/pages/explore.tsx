@@ -1,83 +1,67 @@
-import { Badge, Button, Card, Heading, Text } from '@radix-ui/themes';
-import type { NotebookRun, Paginated } from '../lib/api';
+import { Heading } from '@radix-ui/themes';
+import { useSearchParams } from 'react-router';
+import type { ExploreEventsPage } from '../lib/api';
 import { useApi } from '../lib/use-api';
+import { exploreEventsUrl } from '../lib/explore';
 import { Loading, LoadError } from '../components/data-state';
+import { EventSidebar } from '../components/event-sidebar';
+import './explore.css';
 
 /**
- * Show published analyses from the existing API and link to their Django viewers.
- * Event grouping, shared map filters, and markers will be added in the Explore tickets.
+ * Display the Explore workspace and its independently scrollable event sidebar.
+ * Filters come from the URL so future map controls and the sidebar use the same query.
+ * Expanded cards are URL state but do not change the API request or matching counts.
  *
- * @returns Published result cards or the corresponding loading, error, or empty state.
+ * @returns The event-discovery layout with published analyses grouped by Montandon event.
  */
 export function Explore() {
-  const result = useApi<Paginated<NotebookRun>>('/api/runs/?status=published&ordering=-created_at');
+  const [params, setParams] = useSearchParams();
+  const result = useApi<ExploreEventsPage>(exploreEventsUrl(params));
+
+  /**
+   * Change one card's expansion state while preserving filters and the current event page.
+   *
+   * @param id - Catalog-scoped event identifier from the API.
+   * @param open - Whether the event's published analyses should be visible.
+   */
+  function toggleEvent(id: string, open: boolean): void {
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        const expanded = new Set(next.getAll('expanded'));
+        if (open) expanded.add(id);
+        else expanded.delete(id);
+        next.delete('expanded');
+        for (const value of expanded) next.append('expanded', value);
+        return next;
+      },
+      { replace: true, preventScrollReset: true },
+    );
+  }
 
   return (
-    <>
-      <div className='page-heading'>
-        <div>
-          <Text className='eyebrow'>Montandon Notebooks</Text>
-          <Heading size='8'>Explore analyses</Heading>
-        </div>
-        <Text color='gray' size='3'>
-          Discover published notebook analyses and open their results.
-        </Text>
-      </div>
-      {result.status === 'loading' ? (
-        <Loading />
-      ) : result.status === 'error' ? (
-        <LoadError message={result.message} />
-      ) : (
-        <>
-          <Text as='p' color='gray' className='results-count'>
-            {result.data.count} published {result.data.count === 1 ? 'analysis' : 'analyses'}
-          </Text>
-          {result.data.results.length === 0 ? (
-            <Card className='empty-state'>
-              <Heading size='4'>No published analyses yet</Heading>
-              <Text as='p' color='gray'>
-                Choose a template in Build to start an analysis.
-              </Text>
-            </Card>
-          ) : (
-            <div className='card-grid'>
-              {result.data.results.map((run) => (
-                <Card key={run.id} className='analysis-card'>
-                  <Badge color='green' variant='soft'>
-                    Published
-                  </Badge>
-                  <Heading as='h2' size='5'>
-                    {run.title}
-                  </Heading>
-                  <Text as='p' color='gray'>
-                    {run.summary || run.subtitle}
-                  </Text>
-                  <div className='card-footer'>
-                    <Text size='2' color='gray'>
-                      <time dateTime={run.created_at}>
-                        {new Date(run.created_at).toLocaleDateString()}
-                      </time>
-                    </Text>
-                    <Button asChild variant='soft'>
-                      <a
-                        href={`/runs/${run.id}/view/`}
-                        aria-label={`Open analysis: ${run.title}, ${new Date(run.created_at).toLocaleString()}`}
-                      >
-                        Open analysis
-                      </a>
-                    </Button>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          )}
-          {result.data.next ? (
-            <Button asChild variant='soft'>
-              <a href='/'>Browse all analyses</a>
-            </Button>
-          ) : null}
-        </>
-      )}
-    </>
+    <div className='explore-layout'>
+      <Heading as='h1' className='explore-sr-only'>
+        Explore analyses
+      </Heading>
+      <div className='explore-workspace' aria-hidden='true' />
+      <aside
+        className='event-sidebar'
+        aria-labelledby={result.status === 'success' ? 'events-heading' : undefined}
+        aria-label={result.status !== 'success' ? 'Event analyses' : undefined}
+      >
+        {result.status === 'loading' ? (
+          <div className='event-state'>
+            <Loading />
+          </div>
+        ) : result.status === 'error' ? (
+          <div className='event-state'>
+            <LoadError message={result.message} />
+          </div>
+        ) : (
+          <EventSidebar data={result.data} params={params} onToggle={toggleEvent} />
+        )}
+      </aside>
+    </div>
   );
 }
