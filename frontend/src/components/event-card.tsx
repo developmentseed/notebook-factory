@@ -7,7 +7,9 @@ import { analysisText, eventCardId } from '../lib/explore';
 interface EventCardProps {
   event: ExploreEvent;
   open: boolean;
+  selected?: boolean;
   onOpenChange: (open: boolean) => void;
+  onHover?: (id: string | null) => void;
 }
 
 /**
@@ -17,36 +19,59 @@ interface EventCardProps {
  * @param props - Event content, URL-derived open state, and the route's change handler.
  * @param props.event - Event metadata and matching published analyses from Django.
  * @param props.open - Whether this event's analysis links are currently visible.
+ * @param props.selected - Whether this card corresponds to the selected map marker.
  * @param props.onOpenChange - Updates the route when the disclosure is toggled.
+ * @param props.onHover - Highlights this event's map marker on pointer hover or keyboard focus.
  * @returns An event card that supports pointer and keyboard expansion.
  */
-export function EventCard({ event, open, onOpenChange }: EventCardProps) {
+export function EventCard({
+  event,
+  open,
+  selected = false,
+  onOpenChange,
+  onHover,
+}: EventCardProps) {
   return (
     <Collapsible.Root asChild open={open} onOpenChange={onOpenChange}>
-      <article className='event-card' id={eventCardId(event.id)}>
+      <article
+        className='event-card'
+        id={eventCardId(event.id)}
+        tabIndex={-1}
+        data-selected={selected}
+        onPointerEnter={(pointer) => {
+          if (pointer.pointerType !== 'touch') onHover?.(event.id);
+        }}
+        onPointerLeave={() => onHover?.(null)}
+        onFocusCapture={() => onHover?.(event.id)}
+        onBlurCapture={(focus) => {
+          if (!focus.currentTarget.contains(focus.relatedTarget)) onHover?.(null);
+        }}
+      >
+        {event.date ? (
+          <Text size='2' color='gray' className='event-date' asChild>
+            <time dateTime={event.date}>
+              {new Date(event.date).toLocaleDateString(undefined, {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+                timeZone: 'UTC',
+              })}
+            </time>
+          </Text>
+        ) : (
+          <Text size='2' color='gray' className='event-date'>
+            Date unavailable
+          </Text>
+        )}
         <Heading as='h3' size='5' weight='medium' className='event-title'>
           {event.title}
         </Heading>
         <div className='event-meta'>
           <Text as='p' size='2' className='event-purpose'>
-            {event.purposes.join(', ')}
+            {event.purposes.length === 1
+              ? event.purposes[0]
+              : `${event.purposes.length} analysis types`}
           </Text>
-          {event.date ? (
-            <Text size='2' color='gray' className='event-date' asChild>
-              <time dateTime={event.date}>
-                {new Date(event.date).toLocaleDateString(undefined, {
-                  day: 'numeric',
-                  month: 'short',
-                  year: 'numeric',
-                  timeZone: 'UTC',
-                })}
-              </time>
-            </Text>
-          ) : (
-            <Text size='2' color='gray' className='event-date'>
-              Date unavailable
-            </Text>
-          )}
         </div>
         <Collapsible.Trigger
           className='event-toggle'
@@ -66,7 +91,7 @@ export function EventCard({ event, open, onOpenChange }: EventCardProps) {
               <path d='m9 5 7 7-7 7' />
             </svg>
           </span>
-          <Text size='3' weight='bold'>
+          <Text size='2' weight='medium'>
             {event.analysis_count} {event.analysis_count === 1 ? 'analysis' : 'analyses'}
           </Text>
         </Collapsible.Trigger>
