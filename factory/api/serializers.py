@@ -332,6 +332,24 @@ class ExploreEventSerializer(serializers.Serializer):
     analyses = ExploreAnalysisSerializer(many=True)
 
 
+class ExploreMapEventSerializer(serializers.Serializer):
+    """A matching event's safe map position and the sidebar page containing its card."""
+
+    id = serializers.CharField()
+    title = serializers.CharField()
+    position = serializers.ListField(child=serializers.FloatField(), allow_null=True)
+    analysis_count = serializers.IntegerField()
+    page = serializers.IntegerField()
+
+
+class ExploreMapSerializer(serializers.Serializer):
+    """Matching markers across every sidebar page; events without locations are retained."""
+
+    count = serializers.IntegerField()
+    analysis_count = serializers.IntegerField()
+    results = ExploreMapEventSerializer(many=True)
+
+
 class EventRefsField(serializers.ListField):
     """Disaster IDs in any form `factory.events.refs.parse` accepts, stored as refs."""
 

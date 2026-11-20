@@ -2,7 +2,9 @@
 
 from collections import defaultdict
 from datetime import UTC, datetime
+from math import isfinite
 
+from django.contrib.gis.db.models.functions import PointOnSurface
 from django.db.models import Q
 from django.urls import reverse
 
@@ -26,7 +28,8 @@ def _stored_events(catalog=None):
     if catalog:
         queryset = queryset.filter(catalog__slug=catalog)
     items = list(
-        queryset.select_related("catalog")
+        queryset.annotate(map_point=PointOnSurface("geom"))
+        .select_related("catalog")
         .only(
             "catalog_id",
             "catalog__slug",
@@ -37,6 +40,7 @@ def _stored_events(catalog=None):
             "roles",
             "occurred_at",
             "event_refs",
+            "bbox",
         )
         .order_by("pk")
     )
@@ -111,6 +115,14 @@ def _stored_events(catalog=None):
             key = f"{catalog_id}:{identity}{suffix}"
             events[key] = {
                 "item": item,
+                "position": next(
+                    (
+                        position
+                        for member in [item, *component]
+                        if (position := event_position(member)) is not None
+                    ),
+                    None,
+                ),
                 "search_text": [text for i in component for text in (i.title, i.item_id, i.correlation_id)],
             }
             for member in component:
@@ -118,6 +130,26 @@ def _stored_events(catalog=None):
             for ref in refs:
                 by_ref[ref].add(key)
     return events, by_item, by_ref
+
+
+def event_position(item):
+    """Return a valid stored geometry point or bbox center; missing locations remain unmapped."""
+    if item.map_point is not None and not item.map_point.empty:
+        point = list(item.map_point.coords)[:2]
+    elif item.bbox and len(item.bbox) in (4, 6):
+        bounds = item.bbox if len(item.bbox) == 4 else [item.bbox[i] for i in (0, 1, 3, 4)]
+        if not all(isinstance(value, (int, float)) and isfinite(value) for value in bounds):
+            return None
+        west, south, east, north = bounds
+        if not (-180 <= west <= 180 and -180 <= east <= 180 and -90 <= south <= north <= 90):
+            return None
+        east = east + 360 if east < west else east
+        point = [((west + east) / 2 + 180) % 360 - 180, (south + north) / 2]
+    else:
+        return None
+    if len(point) != 2 or not all(isinstance(value, (int, float)) and isfinite(value) for value in point):
+        return None
+    return point if -180 <= point[0] <= 180 and -90 <= point[1] <= 90 else None
 
 
 def event_groups(runs, *, catalog=None, search_terms=(), search_fields=()):
@@ -214,3 +246,17 @@ def event_cards(runs, groups):
             }
         )
     return cards
+
+
+def map_events(groups, page_size):
+    """Return all matching event markers with sidebar page numbers, independently of pagination."""
+    return [
+        {
+            "id": group["id"],
+            "title": group["item"].title or group["item"].item_id,
+            "position": group["position"],
+            "analysis_count": len(group["run_ids"]),
+            "page": index // page_size + 1 if page_size else 1,
+        }
+        for index, group in enumerate(groups)
+    ]

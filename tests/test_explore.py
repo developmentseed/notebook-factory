@@ -345,3 +345,98 @@ def test_search_combines_event_metadata_with_matching_analysis_fields(client, ev
     assert data["analysis_count"] == 1
     assert data["results"][0]["analyses"][0]["id"] == str(first.pk)
     assert client.get(URL, {"search": "School Hospital"}).json()["count"] == 0
+
+
+MAP_URL = "/api/runs/event-map/"
+
+
+def test_map_uses_valid_stored_coordinates_and_same_filter_counts(client, event, make_run, hazards):
+    from django.contrib.gis.geos import Point
+
+    event.geom = Point(85.3, 27.7, srid=4326)
+    event.save()
+    run = make_run(event)
+    RunFacet.objects.create(run=run, option=hazards["flood"], source="manual")
+    for query in [{}, {"hazard": "flood"}, {"hazard": "earthquake"}, {"search": "Flood"}, {"country": "VNM"}]:
+        markers = client.get(MAP_URL, query).json()
+        cards = client.get(URL, {**query, "catalog": event.catalog.slug}).json()
+        assert (markers["count"], markers["analysis_count"]) == (cards["count"], cards["analysis_count"])
+        assert {m["id"] for m in markers["results"]} == {c["id"] for c in cards["results"]}
+    marker = client.get(MAP_URL).json()["results"][0]
+    assert marker["position"] == [85.3, 27.7] and marker["page"] == 1
+
+
+def test_map_returns_all_pages_and_correct_card_page(client, event, montandon, make_run, monkeypatch):
+    class SmallPage(PageNumberPagination):
+        page_size = 1
+
+    monkeypatch.setattr(NotebookRunViewSet, "pagination_class", SmallPage)
+    make_run(event)
+    another = StacItem.objects.create(catalog=montandon, collection="events", item_id="another")
+    make_run(another)
+    markers = client.get(MAP_URL, {"page": 2}).json()["results"]
+    assert len(markers) == 2 and [m["page"] for m in markers] == [1, 2]
+    for marker in markers:
+        cards = client.get(URL, {"page": marker["page"], "catalog": montandon.slug}).json()
+        assert cards["results"][0]["id"] == marker["id"]
+
+
+def test_map_retains_events_without_locations(client, event, make_run):
+    make_run(event)
+    data = client.get(MAP_URL).json()
+    assert data["count"] == 1 and data["results"][0]["position"] is None
+
+
+def test_map_location_stays_inside_a_concave_polygon(client, event, make_run):
+    from django.contrib.gis.geos import Point, Polygon
+
+    polygon = Polygon(((0, 0), (4, 0), (4, 4), (3, 4), (3, 1), (1, 1), (1, 4), (0, 4), (0, 0)), srid=4326)
+    event.geom = polygon
+    event.save()
+    make_run(event)
+    position = client.get(MAP_URL).json()["results"][0]["position"]
+    assert polygon.covers(Point(*position))
+    assert not polygon.covers(polygon.centroid)
+
+
+def test_map_bbox_fallback_handles_antimeridian(client, event, make_run):
+    event.bbox = [170, -10, -170, 10]
+    event.save()
+    make_run(event)
+    assert client.get(MAP_URL).json()["results"][0]["position"] == [-180, 0]
+
+
+def test_map_uses_one_active_montandon_source(client, event, make_run):
+    make_run(event)
+    other_catalog = StacCatalog.objects.create(name="Other", slug="other", profile="montandon")
+    other = StacItem.objects.create(catalog=other_catalog, collection="events", item_id="other")
+    make_run(other)
+    default = client.get(MAP_URL).json()
+    assert default["count"] == 1 and default["results"][0]["title"] == event.title
+    chosen = client.get(MAP_URL, {"catalog": "other"}).json()
+    assert chosen["count"] == 1 and chosen["results"][0]["title"] == "other"
+    other_catalog.is_active = False
+    other_catalog.save()
+    assert client.get(MAP_URL, {"catalog": "other"}).json()["count"] == 0
+
+
+def test_explore_options_reuse_registered_choices_without_credentials(
+    client, event, template, hazards, nepal
+):
+    event.catalog.api_key = "private-example-key"
+    event.catalog.save()
+    response = client.get("/api/runs/explore-options/")
+    data = response.json()
+    assert data["catalog"] == {"slug": event.catalog.slug, "name": event.catalog.name}
+    assert {"iso3": "NPL", "name": "Nepal"} in data["countries"]
+    assert {"key": "flood", "label": hazards["flood"].label} in data["hazards"]
+    assert {"slug": template.slug, "title": template.title} in data["templates"]
+    assert "private-example-key" not in response.content.decode()
+    assert "api_key" not in response.content.decode()
+
+
+def test_explore_options_and_map_are_empty_without_active_catalog(client, montandon):
+    montandon.is_active = False
+    montandon.save()
+    assert client.get("/api/runs/explore-options/").json()["catalog"] is None
+    assert client.get(MAP_URL).json() == {"count": 0, "analysis_count": 0, "results": []}
