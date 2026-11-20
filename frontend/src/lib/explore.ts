@@ -69,3 +69,71 @@ export function analysisText(analysis: EventAnalysis): { title: string; location
     ? { title: analysis.purpose, location: analysis.title.slice(prefix.length) }
     : { title: analysis.title, location: '' };
 }
+
+/**
+ * Build the marker request with exactly the sidebar's filters, excluding its page number.
+ *
+ * @param params - Current Explore URL state with the selected catalog applied.
+ * @returns An API URL for all matching event locations.
+ */
+export function exploreMapUrl(params: URLSearchParams): string {
+  const url = new URL(exploreEventsUrl(params), 'http://localhost');
+  url.searchParams.delete('page');
+  return `/api/runs/event-map/?${url.searchParams}`;
+}
+
+/**
+ * Change a filter without carrying a stale page or marker selection into the new results.
+ *
+ * @param params - Current route state.
+ * @param key - Country, hazard, purpose, or event-search filter to change.
+ * @param value - Selected value; an empty string clears this filter.
+ * @returns The next URL state, retaining other filters and the catalog.
+ */
+export function changeExploreFilter(
+  params: URLSearchParams,
+  key: string,
+  value: string,
+): URLSearchParams {
+  const next = new URLSearchParams(params);
+  if (key === 'purpose') {
+    next.delete('notebook');
+    next.delete('template');
+  }
+  if (key === 'q') next.delete('search');
+  if (value) next.set(key, value);
+  else next.delete(key);
+  for (const state of ['page', 'selected', 'expanded']) next.delete(state);
+  return next;
+}
+
+/**
+ * Select a map event and navigate to the sidebar page containing its card.
+ *
+ * @param params - Current filters and expanded cards.
+ * @param event - Marker identity and one-based sidebar page returned by Django.
+ * @param event.id - Catalog-scoped event key.
+ * @param event.page - Sidebar page that contains this event.
+ * @returns URL state that expands and selects the marker's corresponding event card.
+ */
+export function selectMapEvent(
+  params: URLSearchParams,
+  event: { id: string; page: number },
+): URLSearchParams {
+  const next = new URLSearchParams(params);
+  next.set('selected', event.id);
+  if (!next.getAll('expanded').includes(event.id)) next.append('expanded', event.id);
+  if (event.page === 1) next.delete('page');
+  else next.set('page', String(event.page));
+  return next;
+}
+
+/**
+ * Scale circle area with the matching analysis count while retaining a usable click target.
+ *
+ * @param count - Number of matching analyses for an event.
+ * @returns Marker radius in CSS pixels, bounded for readability at every zoom level.
+ */
+export function markerRadius(count: number): number {
+  return Math.min(22, 6 + Math.sqrt(Math.max(0, count)) * 3);
+}

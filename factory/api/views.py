@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.views.decorators.cache import cache_page
 from django_filters import rest_framework as filters
@@ -21,7 +21,7 @@ from factory.catalog import facets
 from factory.catalog.models import AdminArea, Country, Facet, FacetOption
 from factory.events import disasters as D
 from factory.events import refs as event_refs
-from factory.events.models import StacCatalog, StacItem, TriggerRule
+from factory.events.models import CatalogProfile, StacCatalog, StacItem, TriggerRule
 from factory.events.stac_client import StacClientError
 from factory.notebooks import explore
 from factory.notebooks import templates as T
@@ -330,12 +330,7 @@ class NotebookRunViewSet(
     def events(self, request):
         """Return paginated Montandon event cards, applying the existing run and facet filters."""
         runs = explore.event_runs(self.filter_queryset(self.get_queryset()))
-        groups = explore.event_groups(
-            runs,
-            catalog=request.query_params.get("catalog"),
-            search_terms=SearchFilter().get_search_terms(request),
-            search_fields=self.search_fields,
-        )
+        groups = self._explore_groups(runs, request)
         page = self.paginate_queryset(groups)
         cards = explore.event_cards(runs, page if page is not None else groups)
         data = S.ExploreEventSerializer(cards, many=True).data
@@ -344,6 +339,71 @@ class NotebookRunViewSet(
         response = self.get_paginated_response(data)
         response.data["analysis_count"] = len(set().union(*(group["run_ids"] for group in groups)))
         return response
+
+    def _explore_groups(self, runs, request, catalog=None):
+        """Keep map and sidebar membership, search semantics, and ordering identical."""
+        return explore.event_groups(
+            runs,
+            catalog=catalog or request.query_params.get("catalog"),
+            search_terms=SearchFilter().get_search_terms(request),
+            search_fields=self.search_fields,
+        )
+
+    @extend_schema(responses=S.ExploreMapSerializer, parameters=[OpenApiParameter("search", str)])
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="event-map",
+        filterset_class=ExploreRunFilter,
+        filter_backends=[filters.DjangoFilterBackend, OrderingFilter],
+    )
+    def event_map(self, request):
+        """Return matching markers from one Montandon catalog across all sidebar pages."""
+        source = self._explore_source(request)
+        runs = explore.event_runs(self.filter_queryset(self.get_queryset()))
+        groups = self._explore_groups(runs, request, source.slug) if source else []
+        page_size = self.paginator.get_page_size(request) if self.paginator else None
+        return Response(
+            S.ExploreMapSerializer(
+                {
+                    "count": len(groups),
+                    "analysis_count": len(set().union(*(group["run_ids"] for group in groups))),
+                    "results": explore.map_events(groups, page_size),
+                }
+            ).data
+        )
+
+    def _explore_source(self, request):
+        """Pick one active Montandon catalog without exposing its URL or credentials."""
+        sources = (
+            StacCatalog.objects.filter(profile=CatalogProfile.MONTANDON, is_active=True)
+            .only("id", "slug", "name")
+            .order_by("pk")
+        )
+        slug = request.query_params.get("catalog")
+        return sources.filter(slug=slug).first() if slug else sources.first()
+
+    @action(detail=False, methods=["get"], url_path="explore-options", filter_backends=[])
+    def explore_options(self, request):
+        """Reuse registered countries, hazard options, and templates for Explore controls."""
+        source = self._explore_source(request)
+        return Response(
+            {
+                "catalog": {"slug": source.slug, "name": source.name} if source else None,
+                "countries": list(Country.objects.order_by("name").values("iso3", "name")),
+                "hazards": list(
+                    FacetOption.objects.filter(facet__key="hazard")
+                    .order_by("order", "label")
+                    .values("key", "label")
+                ),
+                "templates": list(
+                    AnalysisNotebook.objects.filter(Q(is_active=True) | Q(runs__status="published"))
+                    .order_by("title")
+                    .values("slug", "title")
+                    .distinct()
+                ),
+            }
+        )
 
     def get_serializer_class(self):
         if self.action == "create":
