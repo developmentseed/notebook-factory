@@ -310,6 +310,28 @@ class NotebookRunDetailSerializer(NotebookRunSerializer):
         fields = NotebookRunSerializer.Meta.fields + ["log", "notify_emails"]
 
 
+class ExploreAnalysisSerializer(serializers.Serializer):
+    """A published analysis link inside a filtered Explore event card."""
+
+    id = serializers.UUIDField()
+    title = serializers.CharField()
+    purpose = serializers.CharField()
+    created_at = serializers.DateTimeField()
+    viewer_url = serializers.CharField()
+
+
+class ExploreEventSerializer(serializers.Serializer):
+    """Stored Montandon event metadata and its matching, published analyses."""
+
+    id = serializers.CharField()
+    title = serializers.CharField()
+    catalog = serializers.CharField()
+    date = serializers.DateTimeField(allow_null=True)
+    purposes = serializers.ListField(child=serializers.CharField())
+    analysis_count = serializers.IntegerField()
+    analyses = ExploreAnalysisSerializer(many=True)
+
+
 class EventRefsField(serializers.ListField):
     """Disaster IDs in any form `factory.events.refs.parse` accepts, stored as refs."""
 

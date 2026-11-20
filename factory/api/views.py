@@ -3,9 +3,10 @@ from django.db.models import Count
 from django.http import JsonResponse
 from django.views.decorators.cache import cache_page
 from django_filters import rest_framework as filters
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action, api_view
+from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import (
     SAFE_METHODS,
@@ -22,6 +23,7 @@ from factory.events import disasters as D
 from factory.events import refs as event_refs
 from factory.events.models import StacCatalog, StacItem, TriggerRule
 from factory.events.stac_client import StacClientError
+from factory.notebooks import explore
 from factory.notebooks import templates as T
 from factory.notebooks.bundles import inspect_template
 from factory.notebooks.models import AnalysisNotebook, NotebookRun, RunBatch, TriggerKind
@@ -281,6 +283,16 @@ class RunFilter(filters.FilterSet):
         return qs.filter(Q(area__country_id=value) | Q(stac_item__country_codes__contains=[value]))
 
 
+class ExploreRunFilter(RunFilter):
+    """Defer catalog filtering until reference-linked runs have been assigned to event cards."""
+
+    catalog = filters.CharFilter(method="filter_catalog")
+
+    def filter_catalog(self, qs, name, value):
+        """Keep reference-only runs eligible; the stored event index enforces the catalog scope."""
+        return qs
+
+
 class NotebookRunViewSet(
     FacetFilterMixin,
     mixins.CreateModelMixin,
@@ -302,6 +314,36 @@ class NotebookRunViewSet(
     ]
     ordering_fields = ["created_at", "finished_at", "status"]
     permission_classes = [IsAuthenticatedOrReadOnly]
+
+    @extend_schema(
+        responses=S.ExploreEventSerializer(many=True),
+        parameters=[
+            OpenApiParameter("search", str, description="Search event metadata and matching analyses.")
+        ],
+    )
+    @action(
+        detail=False,
+        methods=["get"],
+        filterset_class=ExploreRunFilter,
+        filter_backends=[filters.DjangoFilterBackend, OrderingFilter],
+    )
+    def events(self, request):
+        """Return paginated Montandon event cards, applying the existing run and facet filters."""
+        runs = explore.event_runs(self.filter_queryset(self.get_queryset()))
+        groups = explore.event_groups(
+            runs,
+            catalog=request.query_params.get("catalog"),
+            search_terms=SearchFilter().get_search_terms(request),
+            search_fields=self.search_fields,
+        )
+        page = self.paginate_queryset(groups)
+        cards = explore.event_cards(runs, page if page is not None else groups)
+        data = S.ExploreEventSerializer(cards, many=True).data
+        if page is None:
+            return Response(data)
+        response = self.get_paginated_response(data)
+        response.data["analysis_count"] = len(set().union(*(group["run_ids"] for group in groups)))
+        return response
 
     def get_serializer_class(self):
         if self.action == "create":
