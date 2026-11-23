@@ -6,6 +6,8 @@ from .frontend import frontend
 
 app_name = "web"
 urlpatterns = [
+    path("build/<slug:slug>/run", views.run_new, name="build-run"),
+    path("build/<slug:slug>/run/", views.run_new),
     re_path(r"^(?:explore|build)(?:/.*)?$", frontend, name="frontend"),
     path("", views.browse, name="browse"),
     path("templates/", views.template_list, name="template-list"),

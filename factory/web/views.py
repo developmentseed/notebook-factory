@@ -16,6 +16,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.safestring import mark_safe
+from django.views.decorators.cache import never_cache
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.http import require_POST
 from django.views.static import serve
@@ -249,9 +250,13 @@ def template_detail(request, slug):
 
 
 @login_required
+@never_cache
 def run_new(request, slug):
+    """Validate and queue runs for both the existing wizard and the public React run route."""
     nb = _visible_template(request, slug)
     initial = {}
+    if request.GET.get("country"):
+        initial["country"] = Country.objects.filter(pk=request.GET["country"].upper()).first()
     picker_params = request.POST if request.method == "POST" else {}
     stac_item = None
     if request.GET.get("stac_item"):
@@ -264,7 +269,8 @@ def run_new(request, slug):
                 "stac_item_id": stac_item.item_id,
                 "stac_show_all": "1",
             }
-            iso3 = (stac_item.country_codes or [None])[0]
+            codes = stac_item.country_codes or []
+            iso3 = codes[0] if codes and (len(codes) == 1 or not request.path.startswith("/build/")) else None
             if iso3:
                 initial["country"] = Country.objects.filter(pk=iso3).first()
     if request.GET.get("disaster"):
@@ -345,6 +351,11 @@ def run_new(request, slug):
         "tag_fields": _tag_fields(tag_facets, tags, allowed=template_groups),
         "pinned_tags": pinned,
     }
+    if request.path.startswith("/build/"):
+        from .frontend import render_frontend
+        from .run_frontend import run_config
+
+        return render_frontend(request, run=run_config(request, ctx))
     return render(request, "web/run_new.html", ctx)
 
 
