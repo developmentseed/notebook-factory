@@ -105,6 +105,11 @@ For hot reload, run `npm run dev --prefix frontend` in a separate terminal and s
 `FRONTEND_DEV_SERVER_URL=http://127.0.0.1:5173 uv run python manage.py runserver`.
 Open <http://127.0.0.1:8000/explore> or <http://127.0.0.1:8000/build>.
 
+Build cards open `/build/<slug>/run` to configure an analysis. This React workspace shares
+Django's run validation and queueing, supports whole-country or named-region selection, and
+accepts `country`, `area`, `stac_item` and `disaster` prefills. The original
+`/templates/<slug>/run/` form remains available.
+
 Run `npm run check --prefix frontend` for formatting, lint and type checks. Contributor conventions
 are in [AGENTS.md](AGENTS.md). Docker builds the frontend assets automatically.
 
