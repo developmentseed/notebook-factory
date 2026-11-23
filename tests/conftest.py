@@ -177,3 +177,23 @@ def _no_enqueue(settings, monkeypatch):
     """Never start real pipelines from tests; assert on the queued runs instead."""
     settings.CELERY_TASK_ALWAYS_EAGER = True
     monkeypatch.setattr("factory.notebooks.services.enqueue_run", lambda run: None)
+
+
+@pytest.fixture
+def frontend_assets(settings, tmp_path):
+    """Render React shells in Django tests without requiring a local Node build."""
+    settings.FRONTEND_DEV_SERVER_URL = ""
+    settings.FRONTEND_DIST_DIR = tmp_path
+    (tmp_path / ".vite").mkdir()
+    (tmp_path / ".vite" / "manifest.json").write_text(
+        json.dumps(
+            {
+                "src/main.tsx": {
+                    "file": "assets/main-test.js",
+                    "css": ["assets/main-test.css"],
+                    "imports": ["_shared.js"],
+                },
+                "_shared.js": {"file": "assets/shared-test.js", "css": ["assets/shared-test.css"]},
+            }
+        )
+    )

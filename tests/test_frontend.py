@@ -1,29 +1,8 @@
-import json
-
 import pytest
 from django.core.exceptions import ImproperlyConfigured
 from django.urls import resolve
 
 from factory.web.frontend import frontend
-
-
-@pytest.fixture
-def frontend_assets(settings, tmp_path):
-    settings.FRONTEND_DEV_SERVER_URL = ""
-    settings.FRONTEND_DIST_DIR = tmp_path
-    (tmp_path / ".vite").mkdir()
-    (tmp_path / ".vite" / "manifest.json").write_text(
-        json.dumps(
-            {
-                "src/main.tsx": {
-                    "file": "assets/main-test.js",
-                    "css": ["assets/main-test.css"],
-                    "imports": ["_shared.js"],
-                },
-                "_shared.js": {"file": "assets/shared-test.js", "css": ["assets/shared-test.css"]},
-            }
-        )
-    )
 
 
 @pytest.mark.parametrize("path", ["/explore", "/explore/", "/build", "/build/", "/build/templates/example"])
