@@ -1,5 +1,8 @@
+import type { RunConfig } from './run';
+
 /** Session identity and same-origin URLs provided by the Django HTML shell. */
 export interface FrontendConfig {
+  run: RunConfig | null;
   siteName: string;
   user: { username: string; isStaff: boolean } | null;
   csrfToken: string;
