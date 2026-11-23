@@ -10,7 +10,7 @@
     {% include "web/partials/run_table.html" with runs=runs %}
     {% if user.is_authenticated and templates %}
     <h3>Run an analysis</h3>
-    <p>{% for t in templates %}<a class="btn" href="{% url 'web:run-new' t.slug %}?stac_item={{ item.pk }}">{{ t.title }}</a> {% endfor %}</p>
+    <p>{% for t in templates %}<a class="btn" href="{% url 'web:build-run' t.slug %}?stac_item={{ item.pk }}">{{ t.title }}</a> {% endfor %}</p>
     {% endif %}
   </div>
   <aside class="side"><div class="panel"><dl class="facts">

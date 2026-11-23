@@ -11,7 +11,9 @@ import { config } from '../lib/config';
  * @returns The public header and an outlet for Explore or Build.
  */
 export function Layout() {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
+  const country = new URLSearchParams(search).get('country');
+  const buildUrl = country ? `/build?country=${encodeURIComponent(country)}` : '/build';
   const main = useRef<HTMLElement>(null);
   const previousPath = useRef(pathname);
 
@@ -31,7 +33,7 @@ export function Layout() {
         </NavLink>
         <nav aria-label='Primary'>
           <NavLink to='/explore'>Explore</NavLink>
-          <NavLink to='/build'>Build</NavLink>
+          <NavLink to={buildUrl}>Build</NavLink>
           <a href='/help/'>About</a>
         </nav>
         <div className='account'>

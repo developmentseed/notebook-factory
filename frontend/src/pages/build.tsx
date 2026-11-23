@@ -1,31 +1,28 @@
-import { Badge, Button, Card, Heading, Text, TextField } from '@radix-ui/themes';
+import { useSearchParams } from 'react-router';
+import { Button, Card, Heading, Text, TextField } from '@radix-ui/themes';
 import type { NotebookTemplate, Paginated } from '../lib/api';
 import { useApi } from '../lib/use-api';
 import { Loading, LoadError } from '../components/data-state';
 
 /**
- * List available notebook templates and provide published-analysis search.
- * Template details and run configuration continue through Django's existing pages.
+ * List available notebook templates and provide direct access to run configuration and published-analysis search.
+ * Run configuration uses the public React workspace; Django continues to validate and execute runs.
  *
  * @returns Template cards, request states, and a search form backed by Django browse.
  */
 export function Build() {
+  const [params] = useSearchParams();
+  const country = params.get('country');
+  const countryQuery = country ? `?country=${encodeURIComponent(country)}` : '';
   const result = useApi<Paginated<NotebookTemplate>>('/api/templates/');
 
   return (
     <>
       <div className='page-heading'>
-        <Text className='eyebrow'>Build an analysis</Text>
         <Heading size='8'>Start with a notebook</Heading>
-        <Text color='gray' size='3'>
-          Choose a template, select your inputs, and run an analysis.
-        </Text>
       </div>
-      <Heading as='h2' size='5' className='section-heading'>
-        Start from a template
-      </Heading>
       {result.status === 'loading' ? (
-        <Loading />
+        <Loading label='Loading templates' />
       ) : result.status === 'error' ? (
         <LoadError message={result.message} />
       ) : (
@@ -35,31 +32,31 @@ export function Build() {
               <Text>No templates are available yet.</Text>
             </Card>
           ) : (
-            <div className='card-grid'>
+            <div className='card-grid build-template-grid'>
               {result.data.results.map((template) => (
                 <Card key={template.slug} className='template-card'>
-                  <div className='template-meta'>
-                    {template.requires_area ? <Badge variant='soft'>Admin area</Badge> : null}
-                    {template.requires_stac_item ? (
-                      <Badge color='blue' variant='soft'>
-                        Event input
-                      </Badge>
-                    ) : null}
-                  </div>
-                  <Heading as='h3' size='5'>
+                  <Heading as='h2' size='5'>
                     {template.title}
                   </Heading>
                   <Text as='p' color='gray'>
                     {template.summary}
                   </Text>
-                  <Button asChild variant='soft'>
+                  <div className='template-actions'>
+                    <Button asChild>
+                      <a
+                        href={`/build/${template.slug}/run${countryQuery}`}
+                        aria-label={`Configure analysis: ${template.title}`}
+                      >
+                        Configure analysis
+                      </a>
+                    </Button>
                     <a
-                      href={`/templates/${template.slug}/`}
-                      aria-label={`View template: ${template.title}`}
+                      href={`/templates/${template.slug}/${countryQuery}`}
+                      aria-label={`View details: ${template.title}`}
                     >
-                      View template
+                      View details
                     </a>
-                  </Button>
+                  </div>
                 </Card>
               ))}
             </div>
@@ -75,9 +72,6 @@ export function Build() {
         <Heading as='h2' size='5'>
           Start from an existing analysis
         </Heading>
-        <Text as='p' color='gray'>
-          Search published analyses to find a starting point.
-        </Text>
         <form action='/' method='get' className='search-form'>
           <label htmlFor='analysis-search'>Search analyses</label>
           <div className='search-row'>
