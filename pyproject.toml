@@ -41,7 +41,7 @@ dependencies = [
     "markdown>=3.10.3",
     # 47+ wheels SIGILL on some arm64 VMs (Colima); see README "Known sharp edges"
     "cryptography>=42,<47",
-    "manywidgets[lonboard]>=0.1.0",
+    "manywidgets[lonboard]>=0.3.0",
     "azure-identity>=1.19",
     "rasterio>=1.5.2",
     "rasterstats>=0.21.0",

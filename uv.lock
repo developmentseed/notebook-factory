@@ -1395,16 +1395,16 @@ wheels = [
 
 [[package]]
 name = "manywidgets"
-version = "0.1.0"
+version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anywidget" },
     { name = "ipywidgets" },
     { name = "traitlets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/fa/93/4a27b7aebe9cbaa9ffcb2daab3d73474a1924986e800751f92f56a0e75ce/manywidgets-0.1.0.tar.gz", hash = "sha256:bcf36884a41b3fccccc0d41ab316486ffff8d687b826b6afef2e6c9552a10173", size = 218754, upload-time = "2026-07-14T05:08:26.173Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/80/cb/036a21b7ef79a6fa8febbae5f1248df06d3f1aededf861fa31d0b4bb297c/manywidgets-0.3.0.tar.gz", hash = "sha256:68352f3cc00154c86fb4ae0c2e69135e79d44096e92da63627afaff3a88836fc", size = 603127, upload-time = "2026-10-07T05:58:25.005Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9b/2b/91dc43f7d0c2e3caadb1f1050972953430b9745a32bd4449a4af17edfa37/manywidgets-0.1.0-py3-none-any.whl", hash = "sha256:696b85e55a1c5559728a4924860776361e635ceca38d2deebc3a6b1dac24f285", size = 228099, upload-time = "2026-07-14T05:08:24.525Z" },
+    { url = "https://files.pythonhosted.org/packages/31/70/64103836db40f734bd4753ab8208cb4beafebe2655b67347427d00a5c8db/manywidgets-0.3.0-py3-none-any.whl", hash = "sha256:92395e68e7ea29f81bb752b1abbc48d1b4fbb28ec906bf8d2a37431948cef718", size = 584501, upload-time = "2026-10-07T05:58:23.369Z" },
 ]
 
 [package.optional-dependencies]
@@ -1714,7 +1714,7 @@ requires-dist = [
     { name = "jinja2", specifier = ">=3.1" },
     { name = "jsonschema", specifier = ">=4.23" },
     { name = "lonboard", specifier = ">=0.10" },
-    { name = "manywidgets", extras = ["lonboard"], specifier = ">=0.1.0" },
+    { name = "manywidgets", extras = ["lonboard"], specifier = ">=0.3.0" },
     { name = "markdown", specifier = ">=3.10.3" },
     { name = "matplotlib", specifier = ">=3.9" },
     { name = "nbclient", specifier = ">=0.10" },
