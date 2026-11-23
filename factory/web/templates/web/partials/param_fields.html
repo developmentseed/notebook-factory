@@ -2,10 +2,15 @@
 <div class="param-grid">
 {% for f in fields %}
   {% with value=values|get:f.name error=param_errors|get:f.name %}
-  <div class="field {% if error %}has-error{% endif %}" data-param="{{ f.name }}" data-title="{{ f.title }}">
+  <div class="field {% if error %}has-error{% endif %}" data-widget="{{ f.widget }}" data-param="{{ f.name }}" data-title="{{ f.title }}">
+    {% if f.widget == 'radio' or f.widget == 'checkboxes' %}
+    <fieldset class="parameter-choice-group" {% if error %}aria-describedby="p_{{ f.name }}_error"{% endif %}>
+      <legend>{{ f.title }}{% if f.required %} <span class="req">*</span>{% endif %}</legend>
+    {% elif f.widget != 'checkbox' %}
     <label for="p_{{ f.name }}">{{ f.title }}{% if f.required %} <span class="req">*</span>{% endif %}</label>
+    {% endif %}
     {% if f.widget == 'select' %}
-      <select name="{{ f.name }}" id="p_{{ f.name }}">
+      <select name="{{ f.name }}" id="p_{{ f.name }}" {% if f.required %}required{% endif %} {% if error %}aria-invalid="true" aria-describedby="p_{{ f.name }}_error"{% endif %}>
         {% if not f.required %}<option value="">—</option>{% endif %}
         {% for v, label in f.choices %}<option value="{{ v }}" {% if value|stringformat:"s" == v|stringformat:"s" %}selected{% endif %}>{{ label }}</option>{% endfor %}
       </select>
@@ -14,16 +19,17 @@
     {% elif f.widget == 'checkboxes' %}
       <div class="choices">{% for v, label in f.choices %}<label class="check"><input type="checkbox" name="{{ f.name }}" value="{{ v }}" {% if v in value %}checked{% endif %}> {{ label }}</label>{% endfor %}</div>
     {% elif f.widget == 'checkbox' %}
-      <label class="check"><input type="checkbox" name="{{ f.name }}" id="p_{{ f.name }}" value="true" {% if value %}checked{% endif %}> {{ f.description|default:"Enabled" }}</label>
+      <label class="check"><input type="checkbox" name="{{ f.name }}" id="p_{{ f.name }}" value="true" {% if value %}checked{% endif %}> {{ f.title }}</label>
     {% elif f.widget == 'slider' %}
       <input type="range" name="{{ f.name }}" id="p_{{ f.name }}" value="{{ value|default:f.minimum }}" min="{{ f.minimum }}" max="{{ f.maximum }}" step="{{ f.step|default:1 }}" oninput="this.nextElementSibling.textContent=this.value"><output>{{ value|default:f.minimum }}</output>
     {% elif f.widget == 'textarea' %}
-      <textarea name="{{ f.name }}" id="p_{{ f.name }}" rows="3">{{ value|default:"" }}</textarea>
+      <textarea name="{{ f.name }}" id="p_{{ f.name }}" rows="3" {% if f.required %}required{% endif %} {% if error %}aria-invalid="true" aria-describedby="p_{{ f.name }}_error"{% endif %}>{{ value|default:"" }}</textarea>
     {% else %}
-      <input type="{{ f.input_type }}" name="{{ f.name }}" id="p_{{ f.name }}" value="{{ value|default_if_none:'' }}" {% if f.minimum is not None %}min="{{ f.minimum }}"{% endif %} {% if f.maximum is not None %}max="{{ f.maximum }}"{% endif %} {% if f.step %}step="{{ f.step }}"{% elif f.type == 'number' %}step="any"{% endif %} {% if f.required %}required{% endif %}>
+      <input type="{{ f.input_type }}" name="{{ f.name }}" id="p_{{ f.name }}" value="{{ value|default_if_none:'' }}" {% if f.minimum is not None %}min="{{ f.minimum }}"{% endif %} {% if f.maximum is not None %}max="{{ f.maximum }}"{% endif %} {% if f.step %}step="{{ f.step }}"{% elif f.type == 'number' %}step="any"{% endif %} {% if f.required %}required{% endif %} {% if error %}aria-invalid="true" aria-describedby="p_{{ f.name }}_error"{% endif %}>
     {% endif %}
-    {% if f.description and f.widget != 'checkbox' %}<small class="muted">{{ f.description }}</small>{% endif %}
-    {% if error %}<small class="error">{{ error }}</small>{% endif %}
+    {% if f.description %}<small class="muted">{{ f.description }}</small>{% endif %}
+    {% if error %}<small class="error" id="p_{{ f.name }}_error">{{ error }}</small>{% endif %}
+    {% if f.widget == 'radio' or f.widget == 'checkboxes' %}</fieldset>{% endif %}
   </div>
   {% endwith %}
 {% endfor %}
