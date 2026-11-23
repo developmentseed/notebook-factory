@@ -17,6 +17,7 @@ const Run = lazy(() => import('./pages/run').then((module) => ({ default: module
  */
 export function App() {
   const { pathname } = useLocation();
+
   useEffect(() => {
     const title = /\/build\/[^/]+\/run\/?$/.test(pathname)
       ? config.run?.title || 'Configure analysis'
@@ -25,6 +26,7 @@ export function App() {
         : /^\/build\/?$/.test(pathname)
           ? 'Build'
           : 'Page not found';
+
     document.title = `${title} | ${config.siteName}`;
   }, [pathname]);
 

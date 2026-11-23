@@ -68,7 +68,9 @@ function RunWorkspace({ run }: RunWorkspaceProps) {
       : [];
   const selectedSet = new Set(selected);
   const nameCounts = new Map<string, number>();
+
   for (const area of areas) nameCounts.set(area.name, (nameCounts.get(area.name) || 0) + 1);
+
   const names = areas.filter((area) => selectedSet.has(area.id));
   const visible = areas.filter((area) =>
     `${area.name} ${area.code}`.toLocaleLowerCase().includes(search.toLocaleLowerCase().trim()),
@@ -85,17 +87,22 @@ function RunWorkspace({ run }: RunWorkspaceProps) {
           : count
             ? `${count} ${count === 1 ? 'region' : 'regions'} in ${country.name}`
             : `Choose regions in ${country.name}`;
+
   useEffect(() => {
     if (run.errors.length) errors.current?.focus();
   }, [run.errors.length]);
+
   useEffect(() => {
     /** Restore the submit button when a browser back/forward cache restores the form. */
     function restore() {
       setSubmitting(false);
     }
+
     window.addEventListener('pageshow', restore);
+
     return () => window.removeEventListener('pageshow', restore);
   }, []);
+
   /**
    * Toggle only a currently loaded region; stale map features never affect the next country.
    *
@@ -103,13 +110,16 @@ function RunWorkspace({ run }: RunWorkspaceProps) {
    */
   function toggle(id: number) {
     if (isWhole || !areas.some((area) => area.id === id)) return;
+
     setSelectionError('');
+
     setChoice({
       key,
       all: false,
       ids: selectedSet.has(id) ? selected.filter((value) => value !== id) : [...selected, id],
     });
   }
+
   return (
     <div className='run-page'>
       <a
@@ -136,10 +146,13 @@ function RunWorkspace({ run }: RunWorkspaceProps) {
         onSubmit={(event) => {
           if (submitting) {
             event.preventDefault();
+
             return;
           }
+
           if (run.requiresArea && !count) {
             event.preventDefault();
+
             setSelectionError(
               !country
                 ? 'Choose a country before running your analysis.'
@@ -148,9 +161,12 @@ function RunWorkspace({ run }: RunWorkspaceProps) {
                       ? 'Your areas are still loading. Please try again in a moment.'
                       : 'Choose at least one region before running your analysis.'),
             );
+
             requestAnimationFrame(() => errors.current?.focus());
+
             return;
           }
+
           setSubmitting(true);
         }}
       >
@@ -186,6 +202,7 @@ function RunWorkspace({ run }: RunWorkspaceProps) {
                 country={country}
                 onChange={(id) => {
                   if (id === countryId) return;
+
                   setCountryId(id);
                   setWhole(true);
                   setSearch('');
@@ -291,6 +308,7 @@ function RunWorkspace({ run }: RunWorkspaceProps) {
                                       ? []
                                       : areas.map((area) => area.id),
                                 });
+
                                 setSelectionError('');
                               }}
                             >
@@ -480,6 +498,7 @@ function RunWorkspace({ run }: RunWorkspaceProps) {
 export function Run() {
   const { slug } = useParams();
   const run = config.run;
+
   return run && run.slug === slug ? (
     <RunWorkspace run={run} />
   ) : (

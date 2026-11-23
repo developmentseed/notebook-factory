@@ -99,6 +99,7 @@ export function EventCard({
           <ul className='event-analyses'>
             {event.analyses.map((analysis) => {
               const label = analysisText(analysis);
+
               return (
                 <li key={analysis.id}>
                   <Link asChild highContrast underline='none' className='event-analysis-link'>

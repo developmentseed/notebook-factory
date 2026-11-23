@@ -44,16 +44,21 @@ export function AreaMap({ country, level, areas, selected, onToggle }: AreaMapPr
   } | null>(null);
   const key = `${country}:${level}`;
   const ready = readyAttempt === retry;
+
   useEffect(() => {
     toggle.current = onToggle;
   }, [onToggle]);
+
   useEffect(() => {
     let disposed = false;
     let observer: ResizeObserver | undefined;
+
     void import('maplibre-gl')
       .then((lib) => {
         if (disposed || !container.current) return;
+
         lib.setWorkerUrl(mapWorkerUrl);
+
         const instance = new lib.Map({
           container: container.current,
           style: 'https://tiles.openfreemap.org/styles/bright',
@@ -61,15 +66,19 @@ export function AreaMap({ country, level, areas, selected, onToggle }: AreaMapPr
           zoom: 1.2,
           attributionControl: { compact: true },
         });
+
         map.current = instance;
         instance.scrollZoom.disable();
         instance.addControl(new lib.NavigationControl({ showCompass: false }), 'top-right');
+
         instance.on('load', () => {
           if (disposed) return;
+
           instance.addSource('areas', {
             type: 'geojson',
             data: { type: 'FeatureCollection', features: [] },
           });
+
           instance.addLayer({
             id: 'area-fill',
             type: 'fill',
@@ -79,6 +88,7 @@ export function AreaMap({ country, level, areas, selected, onToggle }: AreaMapPr
               'fill-opacity': ['case', ['get', 'selected'], 0.35, 0.08],
             },
           });
+
           instance.addLayer({
             id: 'area-outline',
             type: 'line',
@@ -88,32 +98,43 @@ export function AreaMap({ country, level, areas, selected, onToggle }: AreaMapPr
               'line-width': ['case', ['get', 'selected'], 2.5, 1],
             },
           });
+
           setMapError('');
           setReadyAttempt(retry);
         });
+
         instance.on('click', 'area-fill', (event) => {
           const id = Number(event.features?.[0]?.id);
+
           if (Number.isFinite(id)) toggle.current(id);
         });
+
         const tooltip = new lib.Popup({ closeButton: false, closeOnClick: false });
+
         instance.on('mousemove', 'area-fill', (event) => {
           const name = String(event.features?.[0]?.properties?.name || '');
+
           if (name) tooltip.setLngLat(event.lngLat).setText(name).addTo(instance);
+
           instance.getCanvas().style.cursor = 'pointer';
         });
+
         instance.on('mouseleave', 'area-fill', () => {
           tooltip.remove();
           instance.getCanvas().style.cursor = '';
         });
+
         instance.on('error', () => {
           if (!disposed) setMapError('Map preview unavailable. Use the area controls to continue.');
         });
+
         observer = new ResizeObserver(() => instance.resize());
         observer.observe(container.current);
       })
       .catch(() => {
         if (!disposed) setMapError('Map preview unavailable. Use the area controls to continue.');
       });
+
     return () => {
       disposed = true;
       observer?.disconnect();
@@ -121,8 +142,10 @@ export function AreaMap({ country, level, areas, selected, onToggle }: AreaMapPr
       map.current = null;
     };
   }, [retry]);
+
   useEffect(() => {
     const controller = new AbortController();
+
     getJson<FeatureCollection<Geometry>>(
       `/api/areas/geojson/?country=${encodeURIComponent(country)}&level=${level}`,
       controller.signal,
@@ -140,13 +163,17 @@ export function AreaMap({ country, level, areas, selected, onToggle }: AreaMapPr
           );
       },
     );
+
     return () => controller.abort();
   }, [country, level, key, retry]);
+
   useEffect(() => {
     if (!ready || !map.current) return;
+
     const ids = new Set(selected);
     const data =
       geometry?.key === key ? geometry.data : { type: 'FeatureCollection' as const, features: [] };
+
     (map.current.getSource('areas') as GeoJSONSource).setData({
       ...data,
       features: data.features.map((feature) => ({
@@ -155,10 +182,14 @@ export function AreaMap({ country, level, areas, selected, onToggle }: AreaMapPr
       })),
     });
   }, [geometry, key, selected, ready]);
+
   useEffect(() => {
     if (!ready || !map.current || !areas.length) return;
+
     const boxes = areas.flatMap((area) => (area.bbox ? [area.bbox] : []));
+
     if (!boxes.length) return;
+
     map.current.fitBounds(
       [
         [Math.min(...boxes.map((b) => b[0])), Math.min(...boxes.map((b) => b[1]))],
@@ -171,6 +202,7 @@ export function AreaMap({ country, level, areas, selected, onToggle }: AreaMapPr
       },
     );
   }, [areas, ready]);
+
   return (
     <div className='area-map-wrap'>
       <div className='area-map' ref={container} role='region' aria-label='Area map preview' />

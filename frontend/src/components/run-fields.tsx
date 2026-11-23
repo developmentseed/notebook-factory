@@ -22,6 +22,7 @@ export function DjangoFields({ html }: DjangoFieldsProps) {
       className='run-fields'
       onInput={(event) => {
         const input = event.target;
+
         if (
           input instanceof HTMLInputElement &&
           input.type === 'range' &&
@@ -50,34 +51,48 @@ export function RunEventPicker({ html: initialHtml }: DjangoFieldsProps) {
   const root = useRef<HTMLDivElement>(null);
   const request = useRef<AbortController | null>(null);
   const focusName = useRef('');
+
   useEffect(() => () => request.current?.abort(), []);
+
   useEffect(() => {
     if (focusName.current)
       root.current?.querySelector<HTMLElement>(`[name="${focusName.current}"]`)?.focus();
   }, [html]);
+
   /** Fetch replacement choices using the existing picker endpoint and current native inputs. */
   async function refresh() {
     const picker = root.current?.querySelector<HTMLElement>('#stac-picker');
     const form = picker?.closest('form');
     const url = picker?.getAttribute('hx-get');
+
     if (!form || !url) return;
+
     request.current?.abort();
+
     const controller = new AbortController();
+
     request.current = controller;
+
     const params = new URLSearchParams();
+
     new FormData(form).forEach((value, key) => {
       if (key.startsWith('stac_') && typeof value === 'string') params.append(key, value);
     });
+
     setLoading(true);
     setError('');
+
     try {
       const response = await fetch(`${url}?${params}`, {
         signal: controller.signal,
         credentials: 'same-origin',
         headers: { 'HX-Request': 'true' },
       });
+
       if (!response.ok || response.redirected) throw new Error('Picker unavailable');
+
       const markup = await response.text();
+
       if (!controller.signal.aborted) setHtml(markup);
     } catch {
       if (!controller.signal.aborted)
@@ -86,6 +101,7 @@ export function RunEventPicker({ html: initialHtml }: DjangoFieldsProps) {
       if (!controller.signal.aborted) setLoading(false);
     }
   }
+
   return (
     <div
       ref={root}
@@ -93,28 +109,41 @@ export function RunEventPicker({ html: initialHtml }: DjangoFieldsProps) {
       aria-busy={loading}
       onChange={(event) => {
         const target = event.target;
+
         if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
+
         if (!['stac_catalog', 'stac_collection', 'stac_show_all'].includes(target.name)) return;
+
         focusName.current = target.name;
+
         if (target.name !== 'stac_show_all') {
           const item = root.current?.querySelector<HTMLInputElement>('[name="stac_item_id"]');
           const search = root.current?.querySelector<HTMLInputElement>('[name="stac_q"]');
+
           if (item) item.value = '';
+
           if (search) search.value = '';
         }
+
         void refresh();
       }}
       onClick={(event) => {
         if (!(event.target instanceof Element)) return;
+
         const item = event.target.closest<HTMLElement>('[data-stac-item]');
+
         if (item) {
           const input = root.current?.querySelector<HTMLInputElement>('[name="stac_item_id"]');
+
           if (input) input.value = item.dataset.stacItem || '';
+
           root.current
             ?.querySelectorAll('.stac-items li')
             .forEach((row) => row.classList.remove('selected'));
+
           item.closest('li')?.classList.add('selected');
         }
+
         if (event.target.closest('#stac_search')) {
           event.preventDefault();
           focusName.current = 'stac_q';

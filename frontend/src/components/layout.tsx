@@ -19,6 +19,7 @@ export function Layout() {
 
   useEffect(() => {
     if (previousPath.current !== pathname) main.current?.focus();
+
     previousPath.current = pathname;
   }, [pathname]);
 

@@ -8,6 +8,7 @@ import { BrowserRouter } from 'react-router';
 import { App } from './app';
 
 const root = document.getElementById('react-root');
+
 if (!root) throw new Error('React root is missing.');
 
 createRoot(root).render(

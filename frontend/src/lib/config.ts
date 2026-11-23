@@ -12,6 +12,7 @@ export interface FrontendConfig {
 }
 
 const element = document.getElementById('frontend-config');
+
 if (!element?.textContent) throw new Error('Frontend configuration is missing.');
 
 export const config: FrontendConfig = JSON.parse(element.textContent);

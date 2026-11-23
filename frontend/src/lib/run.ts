@@ -62,22 +62,29 @@ export function useRunAreas(country: string, level: number, retry: number) {
     loading: true,
     error: '',
   });
+
   useEffect(() => {
     if (!country) return;
+
     const controller = new AbortController();
+
     /** Read all pages sequentially, preserving the API's complete ordered list. */
     async function read() {
       const areas: RunArea[] = [];
       let next: string | null = url;
+
       try {
         while (next) {
           const page: Paginated<RunArea> = await getJson(next, controller.signal);
+
           areas.push(...page.results);
+
           next = page.next
             ? new URL(page.next, location.origin).pathname +
               new URL(page.next, location.origin).search
             : null;
         }
+
         if (!controller.signal.aborted)
           setResult({ url: requestKey, areas, loading: false, error: '' });
       } catch {
@@ -90,9 +97,13 @@ export function useRunAreas(country: string, level: number, retry: number) {
           });
       }
     }
+
     void read();
+
     return () => controller.abort();
   }, [url, country, requestKey]);
+
   if (!country) return { url, areas: [], loading: false, error: '' };
+
   return result.url === requestKey ? result : { url, areas: [], loading: true, error: '' };
 }

@@ -13,15 +13,18 @@ def run_config(request, context):
     """
     form, notebook = context["form"], context["nb"]
     levels = {}
+
     for country, level in AdminArea.objects.order_by().values_list("country_id", "level").distinct():
         if not notebook.area_levels or level in notebook.area_levels:
             levels.setdefault(country, []).append(level)
+
     countries = [
         {"iso3": c.iso3, "name": c.name, "levels": sorted(levels[c.iso3])}
         for c in context["countries"]
         if c.iso3 in levels
     ]
     country = form["country"].value()
+
     return {
         "slug": notebook.slug,
         "title": notebook.title,
