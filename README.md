@@ -72,6 +72,7 @@ Useful commands:
 ```sh
 uv run python manage.py run_notebook demo-area-map --area NPL.1_1 -p label="Hi"   # run synchronously from the CLI
 uv run python manage.py import_gadm VNM UKR --levels 0,1,2     # more boundaries (GADM 4.1)
+uv run python manage.py import_gadm --all --skip-existing      # every GADM 4.1 country (--exclude USA,RUS)
 uv run python manage.py import_admin_areas file.gpkg --level 2 --source cod   # COD / custom boundaries
 uv run python manage.py sync_templates                          # import the example templates in notebook_templates/
 uv run python manage.py ingest_item --catalog montandon --file examples/stac_items/nepal-earthquake.json   # fake an item, fire rules

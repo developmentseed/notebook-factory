@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import io
 import logging
+import re
 import zipfile
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,7 +25,9 @@ from .models import AdminArea, AdminAreaSource, Country
 
 log = logging.getLogger(__name__)
 
-GADM_URL = "https://geodata.ucdavis.edu/gadm/gadm4.1/json/gadm41_{iso3}_{level}.json.zip"
+GADM_INDEX_URL = "https://geodata.ucdavis.edu/gadm/gadm4.1/json/"
+GADM_URL = GADM_INDEX_URL + "gadm41_{iso3}_{level}.json.zip"
+GADM_FILE_RE = re.compile(r"gadm41_([A-Z0-9]{3})_(\d)\.json\.zip")
 
 
 @dataclass
@@ -145,3 +149,16 @@ def download_gadm(iso3: str, level: int, dest_dir: Path) -> Path:
             raise RuntimeError(f"No JSON in {url}")
         target.write_bytes(zf.read(names[0]))
     return target
+
+
+def list_gadm_countries() -> dict[str, set[int]]:
+    """Read the GADM 4.1 JSON directory index and return the published levels per ISO3 code."""
+    with httpx.Client(timeout=120, follow_redirects=True) as client:
+        r = client.get(GADM_INDEX_URL)
+        r.raise_for_status()
+    available: dict[str, set[int]] = defaultdict(set)
+    for iso3, level in GADM_FILE_RE.findall(r.text):
+        available[iso3].add(int(level))
+    if not available:
+        raise RuntimeError(f"No GADM files listed at {GADM_INDEX_URL}")
+    return dict(available)
