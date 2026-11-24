@@ -2,14 +2,16 @@ title: Population & infrastructure risk exposure
 summary: How many people and which facilities are exposed to a hazard, before any event — a baseline for
   preparedness.
 description: '**Use Case 1 · Risk · before the event.** Compares a hazard raster against a threshold to
-  build a hazard mask, overlays population, health facilities and schools, and aggregates exposed population (per
-  return period and as an annual average) and facility counts per subdivision.
+  build a hazard mask, overlays population (WorldPop, 1 km), health facilities, schools, airports and ports,
+  and aggregates exposed population (per return period and as an annual average) and facility counts per
+  subdivision. Children under 5 and under 15 are broken out of the same population grid.
 
 
   > Needs the hazard rasters (flood, cyclone, earthquake) at `datasets_url`, a folder or URL. Population
-  (WorldPop 1 km) is downloaded once per country into a scratch cache; health facilities and
-  schools come from OpenStreetMap (Layercake). Hazards without data yet (wildfire, heatwave) and
-  airports and roads fail with a clear error instead of showing fake data.'
+  (WorldPop R2025A) is read through the WorldPop API: the `WORLDPOP_API_KEY` secret raises its limits
+  (without a key an area is limited to 100,000 km², larger areas are requested in tiles). Facilities are
+  OpenStreetMap features from HOT''s per-country extracts, one point (the centroid) each. Hazards without
+  data (wildfire, heatwave) are not offered.'
 filters:
   use_case:
   - uc1
@@ -17,11 +19,11 @@ filters:
   - flood
   - cyclone
   - earthquake
-  - wildfire
-  - heatwave
-version: '0.3'
+version: '0.4'
 requires_area: true
 estimated_runtime_minutes: 3
+secrets:
+- WORLDPOP_API_KEY
 parameters:
   type: object
   properties:
@@ -32,15 +34,11 @@ parameters:
       - flood
       - cyclone
       - earthquake
-      - wildfire
-      - heatwave
       default: flood
       x-enum-labels:
         flood: Riverine flood
         cyclone: Tropical cyclone
         earthquake: Earthquake
-        wildfire: Wildfire
-        heatwave: Heatwave
     intensity_threshold:
       type: number
       title: Hazard intensity threshold
@@ -70,6 +68,13 @@ parameters:
         current: Current
         future: Future
       description: Flood and cyclone only.
+    population_year:
+      type: integer
+      title: Population year (WorldPop)
+      minimum: 2015
+      maximum: 2030
+      default: 2025
+      description: WorldPop R2025A year. Years after the present are projections.
     aggregation_level:
       type: integer
       title: Aggregation subdivisions
@@ -92,12 +97,12 @@ parameters:
         - health
         - schools
         - airports
-        - roads
+        - ports
         x-enum-labels:
           health: Health facilities
-          schools: Schools (incl. kindergartens, colleges, universities)
-          airports: Airports (no data yet)
-          roads: Primary roads (no data yet)
+          schools: Schools (amenity=school)
+          airports: Airports (aeroway=aerodrome)
+          ports: Ports (industrial=port, harbour=yes, landuse=port or harbour)
     datasets_url:
       type: string
       title: Hazard datasets location
