@@ -1,0 +1,7 @@
+{% if pinned_tags %}<p>From this template: {% include "web/partials/facet_pills.html" with groups=pinned_tags %}</p>{% endif %}
+{% if tag_fields %}<div class="param-grid">{% include "web/partials/tag_inputs.html" %}</div>{% endif %}
+{% include "web/partials/form_field.html" with field=form.event_refs %}
+<label for="run-notify">Also notify</label>
+<input id="run-notify" type="text" name="notify_emails" value="{{ form.notify_emails.value|default:'' }}" placeholder="colleague@example.org" aria-describedby="run-notify-help{% if form.notify_emails.errors %} run-notify-error{% endif %}" {% if form.notify_emails.errors %}aria-invalid="true"{% endif %} autocapitalize="none" spellcheck="false">
+<small id="run-notify-help">Email addresses, separated by commas.</small>
+{% if form.notify_emails.errors %}<p class="error" id="run-notify-error">{{ form.notify_emails.errors|join:" " }}</p>{% endif %}

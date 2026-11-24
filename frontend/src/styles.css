@@ -129,14 +129,6 @@ a {
   padding-block-start: 1rem;
   inline-size: 100%;
 }
-.template-card > a {
-  margin-block-start: auto;
-}
-.template-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
 .empty-state {
   padding: 2rem;
 }
@@ -166,7 +158,14 @@ a {
   min-inline-size: 0;
 }
 .loading {
-  max-inline-size: 20rem;
+  display: grid;
+  place-items: center;
+  inline-size: 100%;
+  min-block-size: 12rem;
+  color: var(--gray-11);
+}
+.loading-page {
+  min-block-size: calc(100dvh - 13rem);
 }
 @media (width < 45rem) {
   .app-header {
@@ -197,5 +196,46 @@ a {
 @media (forced-colors: active) {
   .app-header nav a[aria-current='page'] {
     border-block-end-color: Highlight;
+  }
+}
+
+.template-card > :where(h2, p) {
+  max-inline-size: 100%;
+  overflow-wrap: anywhere;
+}
+.template-card h2 {
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+.template-card .template-actions > a:not(.rt-Button) {
+  color: var(--accent-11);
+  font-size: var(--font-size-2);
+  text-underline-offset: 0.2em;
+}
+.template-card .template-actions > a:not(.rt-Button):hover {
+  color: var(--accent-12);
+}
+.template-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+  margin-block-start: auto;
+}
+
+.build-template-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (width < 45rem) {
+  .build-template-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (pointer: coarse) {
+  .template-actions > a {
+    display: inline-flex;
+    align-items: center;
+    min-block-size: 3rem;
   }
 }

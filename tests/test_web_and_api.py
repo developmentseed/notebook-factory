@@ -55,8 +55,9 @@ def test_run_pages(client, published_run):
     assert r.json()["status"] == "published"
 
 
-def test_run_wizard_requires_login_and_creates_runs(client, user, template, nepal):
-    url = reverse("web:run-new", args=[template.slug])
+@pytest.mark.parametrize("route", ["web:run-new", "web:build-run"])
+def test_run_wizard_requires_login_and_creates_runs(client, user, template, nepal, route, frontend_assets):
+    url = reverse(route, args=[template.slug])
     assert client.get(url).status_code == 302
     client.force_login(user)
     assert client.get(url).status_code == 200
@@ -88,11 +89,12 @@ def test_run_wizard_requires_login_and_creates_runs(client, user, template, nepa
     assert NotebookRun.objects.count() == 5
 
 
-def test_run_wizard_reports_parameter_errors(client, user, template, nepal):
+@pytest.mark.parametrize("route", ["web:run-new", "web:build-run"])
+def test_run_wizard_reports_parameter_errors(client, user, template, nepal, route, frontend_assets):
     client.force_login(user)
     a = AdminArea.objects.get(code="NPL.1_1")
     r = client.post(
-        reverse("web:run-new", args=[template.slug]),
+        reverse(route, args=[template.slug]),
         {"country": "NPL", "level": 1, "area_ids": str(a.pk), "hazard": "flood", "threshold": "7"},
     )
     assert r.status_code == 200 and b"greater than the maximum" in r.content
@@ -288,11 +290,14 @@ def test_stac_picker_applies_soft_hints(client, user, item_template, montandon, 
     assert fake_stac.searches[-1][1]["ids"] == ["nope"]
 
 
-def test_run_form_fetches_picked_item(client, user, nepal, hazards, item_template, montandon, fake_stac):
+@pytest.mark.parametrize("route", ["web:run-new", "web:build-run"])
+def test_run_form_fetches_picked_item(
+    client, user, nepal, hazards, item_template, montandon, fake_stac, route, frontend_assets
+):
     from factory.events.models import StacItem
 
     client.force_login(user)
-    url = reverse("web:run-new", args=[item_template.slug])
+    url = reverse(route, args=[item_template.slug])
     assert client.get(url).status_code == 200
     data = {
         "area_ids": str(nepal["root"].pk),
@@ -310,7 +315,8 @@ def test_run_form_fetches_picked_item(client, user, nepal, hazards, item_templat
     assert StacItem.objects.count() == 1
     # prefill from an item page goes straight to that item
     r = client.get(url, {"stac_item": run.stac_item.pk})
-    assert b'value="example-event-npl-earthquake-2026"' in r.content
+    body = r.context["frontend_config"]["run"]["stacHtml"] if route == "web:build-run" else r.content.decode()
+    assert 'value="example-event-npl-earthquake-2026"' in body
     # unknown item → form error, no run
     r = client.post(url, {**data, "stac_item_id": "missing"})
     assert r.status_code == 200 and b"Could not fetch missing" in r.content
@@ -421,14 +427,18 @@ def test_facet_in_use_cannot_be_deleted(client, staff, published_run):
     assert Facet.objects.filter(key="hazard").exists() and b"not deleted" in r.content
 
 
-def test_run_form_offers_unpinned_facets_and_saves_manual_tags(client, user, nepal, template, facets):
+@pytest.mark.parametrize("route", ["web:run-new", "web:build-run"])
+def test_run_form_offers_unpinned_facets_and_saves_manual_tags(
+    client, user, nepal, template, facets, route, frontend_assets
+):
     from factory.catalog.models import Facet, FacetOption
 
     sector = Facet.objects.create(key="sector", label="Sector", multiple=True)
     FacetOption.objects.create(facet=sector, key="health", label="Health")
     client.force_login(user)
-    url = reverse("web:run-new", args=[template.slug])
-    body = client.get(url).content.decode()
+    url = reverse(route, args=[template.slug])
+    response = client.get(url)
+    body = response.context["frontend_config"]["run"]["optionsHtml"] if route == "web:build-run" else response.content.decode()
     # hazard comes from the parameter and use case is pinned by the template: neither is asked
     assert 'name="facet_sector"' in body and 'name="facet_hazard"' not in body
     assert 'name="facet_use_case"' not in body and "Risk exposure" in body

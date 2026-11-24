@@ -25,10 +25,13 @@ export function exploreEventsUrl(params: URLSearchParams): string {
     'until',
     'page',
   ]);
+
   for (const [key, value] of params) {
     const target = aliases[key] ?? key;
+
     if (supported.has(target) && value.trim()) query.append(target, value);
   }
+
   return `/api/runs/events/?${query}`;
 }
 
@@ -41,8 +44,10 @@ export function exploreEventsUrl(params: URLSearchParams): string {
  */
 export function explorePageUrl(params: URLSearchParams, page: number): string {
   const next = new URLSearchParams(params);
+
   if (page === 1) next.delete('page');
   else next.set('page', String(page));
+
   return `/explore${next.size ? `?${next}` : ''}`;
 }
 
@@ -65,6 +70,7 @@ export function eventCardId(id: string): string {
  */
 export function analysisText(analysis: EventAnalysis): { title: string; location: string } {
   const prefix = `${analysis.purpose} \u00b7 `;
+
   return analysis.title.startsWith(prefix)
     ? { title: analysis.purpose, location: analysis.title.slice(prefix.length) }
     : { title: analysis.title, location: '' };
@@ -78,7 +84,9 @@ export function analysisText(analysis: EventAnalysis): { title: string; location
  */
 export function exploreMapUrl(params: URLSearchParams): string {
   const url = new URL(exploreEventsUrl(params), 'http://localhost');
+
   url.searchParams.delete('page');
+
   return `/api/runs/event-map/?${url.searchParams}`;
 }
 
@@ -96,14 +104,19 @@ export function changeExploreFilter(
   value: string,
 ): URLSearchParams {
   const next = new URLSearchParams(params);
+
   if (key === 'purpose') {
     next.delete('notebook');
     next.delete('template');
   }
+
   if (key === 'q') next.delete('search');
+
   if (value) next.set(key, value);
   else next.delete(key);
+
   for (const state of ['page', 'selected', 'expanded']) next.delete(state);
+
   return next;
 }
 
@@ -121,10 +134,13 @@ export function selectMapEvent(
   event: { id: string; page: number },
 ): URLSearchParams {
   const next = new URLSearchParams(params);
+
   next.set('selected', event.id);
   if (!next.getAll('expanded').includes(event.id)) next.append('expanded', event.id);
+
   if (event.page === 1) next.delete('page');
   else next.set('page', String(event.page));
+
   return next;
 }
 

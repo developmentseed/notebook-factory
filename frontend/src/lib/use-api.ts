@@ -24,6 +24,7 @@ export function useApi<T>(url: string, keepPreviousData = false): Result<T> {
 
   useEffect(() => {
     const controller = new AbortController();
+
     getJson<T>(url, controller.signal).then(
       (data) => {
         if (!controller.signal.aborted) setResult({ url, value: { status: 'success', data } });
@@ -40,10 +41,12 @@ export function useApi<T>(url: string, keepPreviousData = false): Result<T> {
         }
       },
     );
+
     return () => controller.abort();
   }, [url]);
 
   if (result.url === url) return result.value;
+
   return {
     status: 'loading',
     data: keepPreviousData && result.value.status === 'success' ? result.value.data : undefined,

@@ -40,3 +40,46 @@ test('does not require JSDoc on inline callbacks', async () => {
   const source = 'export const doubled = [1, 2].map((value) => value * 2);';
   assert.equal((await missingDocumentation(source)).length, 0);
 });
+
+test('requires spacing around guards, effects and returns', async () => {
+  const source = `function preview() {
+  const country = 'NPL';
+  if (!country) return;
+  console.log(country);
+  console.log(
+    country,
+  );
+  console.log(
+    country,
+  );
+  return country;
+}`;
+  const [result] = await eslint.lintText(source, { filePath: 'src/lib/lint-policy-probe.ts' });
+  const spacing = result.messages.filter(
+    (message) => message.ruleId === '@stylistic/padding-line-between-statements',
+  );
+  assert.deepEqual(
+    spacing.map((message) => message.line),
+    [3, 4, 5, 8, 11],
+  );
+  assert.ok(spacing.every((message) => message.fix));
+});
+
+test('keeps related declarations and short calls together', async () => {
+  const source = `function preview() {
+  const country = 'NPL';
+  const level = 0;
+
+  console.log(country);
+  console.log(level);
+
+  return country;
+}`;
+  const [result] = await eslint.lintText(source, { filePath: 'src/lib/lint-policy-probe.ts' });
+  assert.equal(
+    result.messages.filter(
+      (message) => message.ruleId === '@stylistic/padding-line-between-statements',
+    ).length,
+    0,
+  );
+});

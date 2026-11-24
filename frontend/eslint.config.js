@@ -4,6 +4,7 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 import jsdoc from 'eslint-plugin-jsdoc';
 import globals from 'globals';
+import stylistic from '@stylistic/eslint-plugin';
 import { defineConfig } from 'eslint/config';
 
 export default defineConfig(
@@ -13,12 +14,23 @@ export default defineConfig(
   {
     files: ['src/**/*.{ts,tsx}'],
     languageOptions: { globals: globals.browser },
+    plugins: { '@stylistic': stylistic },
     extends: [
       reactHooks.configs.flat.recommended,
       reactRefresh.configs.vite,
       jsdoc.configs['flat/recommended-typescript-error'],
     ],
     rules: {
+      '@stylistic/padding-line-between-statements': [
+        'error',
+        { blankLine: 'always', prev: ['const', 'let'], next: '*' },
+        { blankLine: 'always', prev: '*', next: ['const', 'let'] },
+        { blankLine: 'any', prev: ['const', 'let'], next: ['const', 'let'] },
+        { blankLine: 'always', prev: '*', next: ['block-like', 'multiline-expression'] },
+        { blankLine: 'always', prev: ['block-like', 'multiline-expression'], next: '*' },
+        { blankLine: 'always', prev: 'if', next: '*' },
+        { blankLine: 'always', prev: '*', next: ['return', 'throw'] },
+      ],
       'jsdoc/require-jsdoc': [
         'error',
         {

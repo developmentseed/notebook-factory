@@ -30,18 +30,21 @@ export function Explore() {
   const options = useApi<ExploreOptions>(
     `/api/runs/explore-options/${catalog ? `?catalog=${encodeURIComponent(catalog)}` : ''}`,
   );
+
   if (options.status === 'loading')
     return (
       <div className='event-state'>
         <Loading />
       </div>
     );
+
   if (options.status === 'error')
     return (
       <div className='event-state'>
         <LoadError message={options.message} />
       </div>
     );
+
   if (!options.data.catalog)
     return (
       <div className='event-state'>
@@ -52,6 +55,7 @@ export function Explore() {
         <a href='/explore'>Reset Explore</a>
       </div>
     );
+
   return <ExploreWorkspace options={options.data} />;
 }
 
@@ -65,7 +69,9 @@ export function Explore() {
 function ExploreWorkspace({ options }: { options: ExploreOptions }) {
   const [params, setParams] = useSearchParams();
   const effective = new URLSearchParams(params);
+
   effective.set('catalog', options.catalog!.slug);
+
   const cards = useApi<ExploreEventsPage>(exploreEventsUrl(effective), true);
   const markers = useApi<ExploreMapData>(exploreMapUrl(effective), true);
   const selected = params.get('selected');
@@ -75,8 +81,11 @@ function ExploreWorkspace({ options }: { options: ExploreOptions }) {
 
   useEffect(() => {
     if (cards.status !== 'success' || !selected) return;
+
     const card = document.getElementById(eventCardId(selected));
+
     card?.focus({ preventScroll: true });
+
     card?.scrollIntoView({
       block: 'nearest',
       behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
@@ -94,10 +103,13 @@ function ExploreWorkspace({ options }: { options: ExploreOptions }) {
       (current) => {
         const next = new URLSearchParams(current);
         const expanded = new Set(next.getAll('expanded'));
+
         if (open) expanded.add(id);
         else expanded.delete(id);
+
         next.delete('expanded');
         for (const value of expanded) next.append('expanded', value);
+
         return next;
       },
       { replace: true, preventScrollReset: true },
@@ -128,6 +140,7 @@ function ExploreWorkspace({ options }: { options: ExploreOptions }) {
    */
   function selectEvent(event: MapEvent) {
     if (markers.status !== 'success') return;
+
     setParams(selectMapEvent(effective, event), { replace: true, preventScrollReset: true });
   }
 

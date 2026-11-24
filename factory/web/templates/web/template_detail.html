@@ -40,7 +40,7 @@
         <dt>Updated</dt><dd>{{ nb.updated_at|date:"Y-m-d" }}</dd>
       </dl>
       {% if not nb.is_active %}<p class="msg warning small">Inactive: only template editors see and can run it (test runs).</p>{% endif %}
-      <a class="btn primary block" href="{% url 'web:run-new' nb.slug %}">{% if nb.is_active %}Run this analysis{% else %}Test run{% endif %} →</a>
+      <a class="btn primary block" href="{% url 'web:build-run' nb.slug %}{% if request.GET.country %}?country={{ request.GET.country|urlencode }}{% endif %}">{% if nb.is_active %}Run this analysis{% else %}Test run{% endif %} →</a>
       {% if can_edit %}<p class="small" style="margin-top:.6rem"><a href="{% url 'web:template-edit' nb.slug %}">Edit template</a> · <a href="{% url 'web:template-versions' nb.slug %}">Versions</a> · <a href="{% url 'web:template-download' nb.slug %}">Download</a></p>{% endif %}
     </div>
   </aside>

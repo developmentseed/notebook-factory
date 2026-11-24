@@ -1,0 +1,572 @@
+.run-page {
+  max-inline-size: 72rem;
+  margin-inline: auto;
+}
+.run-back {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 2rem;
+  margin-block-end: var(--space-4);
+  color: var(--gray-11);
+  font-size: var(--font-size-2);
+  text-underline-offset: 0.2em;
+}
+.run-back:hover {
+  color: var(--accent-11);
+}
+.run-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+  margin-block-end: var(--space-6);
+}
+.run-heading h1 {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+.run-heading > a {
+  flex-shrink: 0;
+  color: var(--accent-11);
+  font-size: var(--font-size-2);
+  text-underline-offset: 0.2em;
+}
+.run-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 18rem;
+  align-items: start;
+  gap: var(--space-6);
+}
+.run-main {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  gap: var(--space-5);
+}
+.run-section {
+  container: run-section / inline-size;
+  min-inline-size: 0;
+  padding: var(--space-5);
+  border: 1px solid var(--gray-6);
+  border-radius: var(--radius-4);
+  background: var(--color-panel-solid);
+}
+.run-section-heading {
+  margin-block-end: var(--space-4);
+}
+.run-country-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.run-country-field > .rt-SelectTrigger {
+  inline-size: min(100%, 26rem);
+}
+.run-country-menu {
+  min-inline-size: var(--radix-select-trigger-width);
+}
+.run-scope {
+  margin: var(--space-5) 0 0;
+  padding: 0;
+  border: 0;
+}
+.run-scope legend {
+  margin-block-end: var(--space-3);
+  font-size: var(--font-size-2);
+  font-weight: 500;
+}
+.run-scope .rt-RadioGroupRoot {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+}
+.run-scope .rt-RadioGroupItem {
+  min-block-size: 2rem;
+}
+.run-area-workspace {
+  display: grid;
+  grid-template-columns: minmax(14rem, 43%) minmax(0, 1fr);
+  margin-block-start: var(--space-5);
+  overflow: hidden;
+  border: 1px solid var(--gray-6);
+  border-radius: var(--radius-3);
+}
+.run-area-whole {
+  grid-template-columns: minmax(0, 1fr);
+}
+.run-region-picker {
+  min-inline-size: 0;
+  border-inline-end: 1px solid var(--gray-6);
+  background: var(--color-panel-solid);
+}
+.run-region-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+.run-region-field {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  gap: var(--space-2);
+}
+.run-region-field > .rt-SelectTrigger {
+  inline-size: 100%;
+}
+.run-region-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-block-size: 2rem;
+  font-variant-numeric: tabular-nums;
+}
+.run-region-list {
+  block-size: 16rem;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  border-block-start: 1px solid var(--gray-5);
+}
+.run-region-list fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.run-region-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-block-size: 3rem;
+  padding: var(--space-3) var(--space-4);
+  border-block-end: 1px solid var(--gray-4);
+  cursor: pointer;
+  font-size: var(--font-size-2);
+  touch-action: manipulation;
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 3rem;
+}
+.run-region-row > span {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+.run-region-row:hover {
+  background: var(--gray-3);
+}
+.run-region-row[data-selected='true'] {
+  background: var(--accent-2);
+}
+.run-region-row[data-selected='true']:hover {
+  background: var(--accent-3);
+}
+.run-region-row small {
+  display: block;
+  margin-block-start: var(--space-1);
+  color: var(--gray-11);
+  font-size: var(--font-size-1);
+}
+.run-region-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  color: var(--gray-11);
+  font-size: var(--font-size-2);
+}
+.area-map-wrap {
+  position: relative;
+  min-inline-size: 0;
+  min-block-size: 23rem;
+  background: var(--gray-3);
+}
+.area-map-wrap > .area-map {
+  position: absolute;
+  inset: 0;
+}
+.run-area-whole .area-map-wrap {
+  min-block-size: 18rem;
+}
+.area-map-message {
+  position: absolute;
+  inset: auto var(--space-3) 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-2);
+  background: var(--color-panel-solid);
+  box-shadow: var(--shadow-2);
+}
+.run-map-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  min-block-size: 18rem;
+  background: var(--gray-2);
+  font-size: var(--font-size-2);
+}
+.run-area-feedback {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-block-start: var(--space-3);
+}
+.run-selected-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  max-block-size: 10rem;
+  margin-block-start: var(--space-4);
+  padding: var(--space-1);
+  overflow-y: auto;
+}
+.run-selected-chips .rt-Button {
+  max-inline-size: 100%;
+  block-size: auto;
+  min-block-size: 2rem;
+  padding-block: var(--space-1);
+  white-space: normal;
+  text-align: start;
+}
+.run-selected-chips .rt-Button > span:first-child {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+.run-selected-chips .rt-Button > svg {
+  flex-shrink: 0;
+}
+.run-review {
+  position: sticky;
+  inset-block-start: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-inline-size: 0;
+  padding: var(--space-5);
+  border: 1px solid var(--gray-6);
+  border-radius: var(--radius-4);
+  background: var(--color-panel-solid);
+}
+.run-review-area {
+  padding-block: var(--space-4);
+  border-block: 1px solid var(--gray-5);
+}
+.run-review-area p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.run-review-area p + p {
+  margin-block-start: var(--space-2);
+}
+.run-review-count {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-variant-numeric: tabular-nums;
+}
+.run-review > p {
+  margin: 0;
+  line-height: 1.6;
+}
+.run-review > button {
+  inline-size: 100%;
+}
+.run-error-summary {
+  grid-column: 1 / -1;
+  padding: var(--space-4);
+  border: 1px solid var(--red-7);
+  border-radius: var(--radius-3);
+  color: var(--red-11);
+  background: var(--red-2);
+}
+.run-error-summary p {
+  margin-block: var(--space-2);
+}
+.run-fields {
+  font-size: var(--font-size-2);
+  line-height: 1.6;
+}
+.run-fields .param-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4) var(--space-5);
+}
+.run-fields .field {
+  min-inline-size: 0;
+}
+.run-fields .field[data-widget='checkbox'] {
+  grid-column: 1 / -1;
+}
+.run-fields label:not(.check) {
+  display: block;
+  margin-block-end: var(--space-2);
+  font-weight: 500;
+}
+.run-fields :where(input:not([type='checkbox'], [type='radio'], [type='range']), select, textarea) {
+  inline-size: 100%;
+  min-block-size: 2.5rem;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-2);
+  box-shadow: inset 0 0 0 1px var(--gray-a7);
+  color: var(--gray-12);
+  background-color: var(--color-surface);
+  font: inherit;
+  font-size: var(--font-size-3);
+}
+.run-fields
+  :where(input:not([type='checkbox'], [type='radio'], [type='range']), select, textarea):hover:not(
+    :disabled
+  ) {
+  box-shadow: inset 0 0 0 1px var(--gray-a8);
+}
+.run-fields select {
+  appearance: none;
+  padding-inline-end: var(--space-6);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' viewBox='0 0 12 12'%3E%3Cpath d='m3 4.5 3 3 3-3' stroke='%23687076' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--space-3) center;
+}
+.run-fields textarea {
+  resize: vertical;
+}
+.run-fields :where(input, select, textarea):focus-visible {
+  outline: 2px solid var(--accent-9);
+  outline-offset: 2px;
+}
+.run-fields :where(input, select, textarea):user-invalid,
+.run-fields .has-error :where(input, select, textarea) {
+  box-shadow: inset 0 0 0 1px var(--red-8);
+}
+.run-fields :where(input[type='checkbox'], input[type='radio']) {
+  accent-color: var(--accent-9);
+  inline-size: 1rem;
+  block-size: 1rem;
+  flex-shrink: 0;
+}
+.run-fields input[type='checkbox'] {
+  appearance: none;
+  border: 1px solid var(--gray-7);
+  border-radius: var(--radius-1);
+  background-color: var(--color-surface);
+  cursor: pointer;
+}
+.run-fields input[type='checkbox']:hover:not(:checked, :disabled) {
+  border-color: var(--gray-8);
+}
+.run-fields input[type='checkbox']:checked {
+  border-color: var(--accent-9);
+  background-color: var(--accent-9);
+  background-image: url('../assets/radix-check.svg');
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100%;
+}
+.run-fields .check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: 2.5rem;
+  cursor: pointer;
+}
+.run-fields small {
+  display: block;
+  margin-block-start: var(--space-1);
+  color: var(--gray-11);
+}
+.run-fields .error {
+  color: var(--red-11);
+}
+.run-fields .area-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  margin-block-end: var(--space-4);
+}
+.run-fields .area-controls > label {
+  min-inline-size: 0;
+  margin-block-end: 0;
+}
+.run-fields .area-controls > label.check {
+  grid-column: 1 / -1;
+}
+.run-fields .stac-picker label:not(.check) > :where(input, select) {
+  margin-block-start: var(--space-2);
+}
+.run-fields .stac-picker > label:last-child {
+  margin-block-end: 0;
+}
+.run-fields .inline-filters {
+  display: flex;
+  gap: var(--space-2);
+}
+.run-fields button {
+  min-block-size: 2.5rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--gray-6);
+  border-radius: var(--radius-2);
+  color: var(--gray-12);
+  background: var(--gray-2);
+  cursor: pointer;
+  font: inherit;
+}
+.run-fields button:hover:not(:disabled) {
+  background: var(--gray-3);
+}
+.run-fields :where(input, select, textarea, button):disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.run-fields .stac-items {
+  max-block-size: 20rem;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.run-fields .stac-items li {
+  padding: var(--space-3);
+  border-block-end: 1px solid var(--gray-5);
+  overflow-wrap: anywhere;
+}
+.run-fields .stac-items li.selected {
+  border-inline-start: 3px solid var(--accent-9);
+  background: var(--accent-2);
+}
+.run-event-fields {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.run-options {
+  margin-block-start: var(--space-5);
+  padding-block-start: var(--space-3);
+  border-block-start: 1px solid var(--gray-5);
+}
+.run-options-trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: 2.75rem;
+  padding: var(--space-2) 0;
+  border: 0;
+  background: transparent;
+  color: var(--gray-12);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-2);
+  text-align: start;
+  touch-action: manipulation;
+}
+.run-options-trigger:hover {
+  color: var(--accent-11);
+}
+.run-options-chevron {
+  flex-shrink: 0;
+  color: var(--gray-11);
+}
+.run-options-trigger[data-state='open'] .run-options-chevron {
+  transform: rotate(90deg);
+}
+.run-options-content[data-state='closed'] {
+  display: none;
+}
+.run-options-content[data-state='open'] {
+  padding-block-start: var(--space-3);
+}
+.run-options .run-fields > .field,
+.run-options .run-fields > .param-grid {
+  margin-block-end: var(--space-4);
+}
+.run-sr-only {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.run-fields .parameter-choice-group {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.run-fields .parameter-choice-group legend {
+  margin-block-end: var(--space-2);
+  padding: 0;
+  font-weight: 500;
+}
+@container run-section (width >= 30rem) {
+  .run-fields .param-grid,
+  .run-fields .area-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (width < 65rem) {
+  .run-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .run-review {
+    position: static;
+  }
+}
+@media (width < 45rem) {
+  .run-section,
+  .run-review {
+    padding: var(--space-4);
+  }
+  .run-area-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .run-region-picker {
+    border-inline-end: 0;
+    border-block-end: 1px solid var(--gray-6);
+  }
+  .run-region-list {
+    block-size: 14rem;
+  }
+  .area-map-wrap,
+  .run-area-whole .area-map-wrap {
+    min-block-size: 16rem;
+  }
+}
+@media (pointer: coarse) {
+  .run-fields :where(input:not([type='checkbox'], [type='radio'], [type='range']), select, button),
+  .run-fields .check,
+  .run-selected-chips .rt-Button,
+  .run-scope .rt-RadioGroupItem,
+  .run-country-field > .rt-SelectTrigger,
+  .run-options-trigger,
+  .run-region-field .rt-TextFieldRoot,
+  .run-region-field > .rt-SelectTrigger,
+  .run-review > .rt-Button {
+    min-block-size: 3rem;
+  }
+}
+@media (forced-colors: active) {
+  .run-fields input[type='checkbox'] {
+    appearance: auto;
+    background-image: none;
+  }
+  .run-region-row[data-selected='true'] {
+    outline: 1px solid Highlight;
+    outline-offset: -1px;
+  }
+  .run-fields :where(input, select, textarea) {
+    border: 1px solid ButtonText;
+  }
+  .run-fields select {
+    appearance: auto;
+    background-image: none;
+  }
+}

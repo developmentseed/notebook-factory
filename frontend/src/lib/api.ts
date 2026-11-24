@@ -63,7 +63,9 @@ export async function getJson<T>(url: string, signal: AbortSignal): Promise<T> {
     credentials: 'same-origin',
     headers: { Accept: 'application/json' },
   });
+
   if (!response.ok) throw new Error(`Could not load data (${response.status}).`);
+
   return response.json() as Promise<T>;
 }
 

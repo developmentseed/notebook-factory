@@ -17,7 +17,7 @@
     <label>Collection
       <select name="stac_collection">
         <option value="">— choose —</option>
-        {% for c in p.collections %}<option value="{{ c.id }}" {% if c.id == p.collection %}selected{% endif %}>{{ c.title }}{% if c.title != c.id %} ({{ c.id }}){% endif %}</option>{% endfor %}
+        {% for c in p.collections %}<option value="{{ c.id }}" {% if c.id == p.collection %}selected{% endif %}>{{ c.title }}</option>{% endfor %}
       </select>
     </label>
     {% if p.hints %}
@@ -26,6 +26,7 @@
   </div>
   {% if p.error %}<p class="error">{{ p.error }}</p>{% endif %}
   {% if p.collection %}
+  <label for="stac_q">Find an event by item id</label>
   <div class="inline-filters">
     <input type="search" name="stac_q" id="stac_q" value="{{ p.query }}" placeholder="Find by item id">
     <button class="btn" type="button" id="stac_search" hx-get="{{ p.url }}" hx-include="#stac-picker" hx-target="#stac-picker" hx-swap="outerHTML">Search</button>

@@ -129,13 +129,17 @@ export function ExploreMap({
   );
 
   const currentLayers = useRef(layers);
+
   useEffect(() => {
     let disposed = false;
     let observer: ResizeObserver | undefined;
+
     void Promise.all([import('maplibre-gl'), import('@deck.gl/maplibre')])
       .then(([maplibre, deckModule]) => {
         if (disposed || !container.current) return;
+
         maplibre.setWorkerUrl(mapWorkerUrl);
+
         const instance = new maplibre.Map({
           container: container.current,
           style: BASEMAP_STYLE,
@@ -147,7 +151,9 @@ export function ExploreMap({
           dragRotate: false,
           attributionControl: { compact: true },
         });
+
         map.current = instance;
+
         const deck = new deckModule.MapLibreOverlay({
           interleaved: true,
           layers: currentLayers.current,
@@ -168,22 +174,29 @@ export function ExploreMap({
             );
           },
         });
+
         overlay.current = deck;
+
         instance.once('load', () => {
           if (disposed) return;
+
           instance.addControl(deck);
           setReady(true);
         });
+
         instance.on('error', () =>
           setError('The basemap could not load. You can still browse the event list.'),
         );
+
         instance.addControl(new maplibre.NavigationControl({ showCompass: false }), 'top-right');
+
         instance
           .getCanvas()
           .setAttribute(
             'aria-label',
             'World map of events with published analyses. Use the event list for keyboard access to results.',
           );
+
         observer = new ResizeObserver(() => instance.resize());
         observer.observe(container.current);
       })
@@ -193,6 +206,7 @@ export function ExploreMap({
             'The map is unavailable in this browser. All results are available in the event list.',
           );
       });
+
     return () => {
       disposed = true;
       observer?.disconnect();
@@ -210,8 +224,10 @@ export function ExploreMap({
   /** Zoom to the matching event locations without changing their filters or selected card. */
   function fitEvents() {
     if (!map.current || !located.length) return;
+
     const longitudes = located.map((event) => event.position[0]);
     const latitudes = located.map((event) => event.position[1]);
+
     map.current.fitBounds(
       [
         [Math.min(...longitudes), Math.min(...latitudes)],
@@ -226,6 +242,7 @@ export function ExploreMap({
   }
 
   const unlocated = events.length - located.length;
+
   return (
     <div className='explore-map' aria-label='Event map' aria-busy={loading || (!ready && !error)}>
       <div ref={container} className='explore-map-canvas' />

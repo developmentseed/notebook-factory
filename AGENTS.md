@@ -30,6 +30,9 @@
 ## Checks and formatting
 
 - Use ESLint for TypeScript, React hooks, and JSDoc checks; Prettier owns frontend formatting.
+- Separate logical steps with blank lines: declarations, effects, control flow, and returns should
+  be easy to scan. Keep related declarations together. ESLint enforces statement spacing; use
+  `npm run lint:fix --prefix frontend` to apply it, then Prettier for the remaining formatting.
 - Run `npm run check --prefix frontend` and `npm run build --prefix frontend` after frontend changes.
 - Use Ruff and focused pytest checks when changing the Django integration.
 - Lefthook formats and re-stages matching staged frontend files before lint and type checks on commit.
