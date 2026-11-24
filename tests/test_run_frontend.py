@@ -129,3 +129,63 @@ def test_public_run_hides_inactive_templates_from_regular_users(client, user, te
 def test_template_details_link_to_public_configuration(client, template):
     response = client.get(template.get_absolute_url(), {"country": "NPL"})
     assert (reverse("web:build-run", args=[template.slug]) + "?country=NPL").encode() in response.content
+
+
+@pytest.mark.parametrize("route", ["web:build-run", "web:run-new"])
+def test_prefilled_event_can_run_without_refetching(
+    client, user, item_template, nepal, montandon, sample_item, monkeypatch, route
+):
+    """Both forms reuse a stored event even when its catalog is temporarily unavailable."""
+    from factory.events.matching import upsert_item
+    from factory.events.stac_client import StacClientError
+
+    item, *_ = upsert_item(montandon, sample_item)
+    client.force_login(user)
+    url = reverse(route, args=[item_template.slug])
+
+    def unavailable_catalog(*args, **kwargs):
+        raise StacClientError("Catalog unavailable")
+
+    def unexpected_fetch(*args, **kwargs):
+        pytest.fail("An unchanged stored event must not be fetched again")
+
+    monkeypatch.setattr("factory.web.stac_picker.catalog_collections", unavailable_catalog)
+    monkeypatch.setattr("factory.web.forms.fetch_item", unexpected_fetch)
+    response = client.get(url, {"stac_item": item.pk})
+    assert response.status_code == 200
+    if route == "web:build-run":
+        config = response.context["frontend_config"]["run"]
+        assert config["stacItem"] == str(item.pk)
+        assert "Catalog unavailable" in config["stacHtml"]
+    else:
+        assert f'name="stac_item" value="{item.pk}"'.encode() in response.content
+
+    response = client.post(
+        url,
+        {
+            "country": "NPL",
+            "level": 0,
+            "area_ids": nepal["root"].pk,
+            "radius": 10,
+            "stac_item": item.pk,
+            "stac_catalog": montandon.pk,
+            "stac_collection": item.collection,
+            "stac_item_id": item.item_id,
+        },
+    )
+    assert response.status_code == 302
+    assert NotebookRun.objects.get().stac_item == item
+
+
+@pytest.mark.parametrize("route", ["web:build-run", "web:run-new"])
+def test_area_optional_templates_do_not_need_boundaries(client, user, template, route):
+    """The new workspace preserves the original ability to queue an analysis without an area."""
+    client.force_login(user)
+    template.requires_area = False
+    template.save()
+    response = client.post(
+        reverse(route, args=[template.slug]),
+        {"hazard": "flood", "threshold": "0.5"},
+    )
+    assert response.status_code == 302
+    assert NotebookRun.objects.get().area is None

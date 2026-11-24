@@ -8,6 +8,11 @@ interface DjangoFieldsProps {
   html: string;
 }
 
+/** Picker markup and an existing stored event that can be reused until the selection changes. */
+interface RunEventPickerProps extends DjangoFieldsProps {
+  stacItem: string;
+}
+
 /**
  * Reuse Django's schema-driven fields and bound values without reimplementing parameter widgets.
  * This slot accepts trusted same-origin template output, never raw user or catalog HTML.
@@ -42,10 +47,12 @@ export function DjangoFields({ html }: DjangoFieldsProps) {
  *
  * @param props - Initial autoescaped picker markup from Django.
  * @param props.html - Catalog picker HTML produced by Django.
+ * @param props.stacItem - Stored event identifier reused while the initial selection stays unchanged.
  * @returns Catalog and event inputs with request feedback and retry support.
  */
-export function RunEventPicker({ html: initialHtml }: DjangoFieldsProps) {
+export function RunEventPicker({ html: initialHtml, stacItem }: RunEventPickerProps) {
   const [html, setHtml] = useState(initialHtml);
+  const [storedItem, setStoredItem] = useState(stacItem);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const root = useRef<HTMLDivElement>(null);
@@ -112,6 +119,9 @@ export function RunEventPicker({ html: initialHtml }: DjangoFieldsProps) {
 
         if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
 
+        if (['stac_catalog', 'stac_collection', 'stac_item_id'].includes(target.name))
+          setStoredItem('');
+
         if (!['stac_catalog', 'stac_collection', 'stac_show_all'].includes(target.name)) return;
 
         focusName.current = target.name;
@@ -136,6 +146,8 @@ export function RunEventPicker({ html: initialHtml }: DjangoFieldsProps) {
           const input = root.current?.querySelector<HTMLInputElement>('[name="stac_item_id"]');
 
           if (input) input.value = item.dataset.stacItem || '';
+
+          setStoredItem('');
 
           root.current
             ?.querySelectorAll('.stac-items li')
@@ -165,6 +177,7 @@ export function RunEventPicker({ html: initialHtml }: DjangoFieldsProps) {
     >
       <fieldset disabled={loading} className='run-event-fields'>
         <legend className='run-sr-only'>Event source and item</legend>
+        {storedItem ? <input type='hidden' name='stac_item' value={storedItem} /> : null}
         <div dangerouslySetInnerHTML={{ __html: html }} />
       </fieldset>
       {loading ? (

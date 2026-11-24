@@ -61,10 +61,11 @@ function RunWorkspace({ run }: RunWorkspaceProps) {
   const key = `${countryId}:${level}`;
   const result = useRunAreas(run.requiresArea ? countryId : '', level, retry);
   const areas = country && !result.loading && !result.error ? result.areas : [];
+  const choiceIds = new Set(choice.ids);
   const selected = isWhole
     ? areas.slice(0, 1).map((area) => area.id)
     : choice.key === key
-      ? areas.filter((area) => choice.all || choice.ids.includes(area.id)).map((area) => area.id)
+      ? areas.filter((area) => choice.all || choiceIds.has(area.id)).map((area) => area.id)
       : [];
   const selectedSet = new Set(selected);
   const nameCounts = new Map<string, number>();
@@ -146,6 +147,14 @@ function RunWorkspace({ run }: RunWorkspaceProps) {
         onSubmit={(event) => {
           if (submitting) {
             event.preventDefault();
+
+            return;
+          }
+
+          if (event.currentTarget.querySelector('.run-event-picker[aria-busy="true"]')) {
+            event.preventDefault();
+            setSelectionError('Wait for the event choices to finish loading, then try again.');
+            requestAnimationFrame(() => errors.current?.focus());
 
             return;
           }
@@ -432,7 +441,7 @@ function RunWorkspace({ run }: RunWorkspaceProps) {
                   Event
                 </Heading>
               </div>
-              <RunEventPicker html={run.stacHtml} />
+              <RunEventPicker html={run.stacHtml} stacItem={run.stacItem} />
             </section>
           ) : null}
           <section className='run-section'>
