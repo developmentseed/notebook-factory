@@ -469,6 +469,7 @@ Runs are scoped to **admin areas**: countries (level 0) and their subdivisions (
 ```sh
 python manage.py import_gadm NPL VNM               # levels 0,1,2 by default
 python manage.py import_gadm UKR --levels 0,1,2,3
+python manage.py import_gadm --all --skip-existing  # every country GADM publishes
 ```
 
 **From OCHA COD or your own files** (any GDAL-readable file: GeoJSON, GeoPackage, Shapefile):
@@ -554,7 +555,7 @@ To debug a template outside the web app, `python manage.py run_notebook <slug> -
 | Command | Purpose |
 |---|---|
 | `seed_demo [--countries NPL,VNM] [--levels 0,1,2] [--skip-boundaries]` | Demo setup: filters, boundaries, templates, the Montandon catalog and example rules. |
-| `import_gadm ISO3 [ISO3 …] [--levels 0,1,2] [--cache-dir DIR]` | Download and import GADM 4.1 boundaries. |
+| `import_gadm [ISO3 …] [--all] [--levels 0,1,2] [--exclude ISO3,…] [--skip-existing] [--cache-dir DIR]` | Download and import GADM 4.1 boundaries. |
 | `import_admin_areas PATH --level N [--source gadm|cod|custom] [--country ISO3] [--code-field F --name-field F --parent-field F] [--layer N]` | Import boundaries from a file. |
 | `sync_templates [--dir DIR] [--dry-run] [--only-missing] [--force] [--overwrite-metadata] [--convert] [--deactivate-missing]` | Import template folders (new templates, or new versions when changed). |
 | `run_notebook SLUG [--area CODE|ID] [--stac-item PK|ID] [--catalog SLUG --collection ID --item ID] [-p key=value …] [--async]` | Run a template from the CLI (inline, or queued with `--async`). |
