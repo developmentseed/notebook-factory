@@ -76,6 +76,108 @@ export function analysisText(analysis: EventAnalysis): { title: string; location
     : { title: analysis.title, location: '' };
 }
 
+/** One analysis link's visible text inside an expanded event card. */
+export interface AnalysisRow {
+  id: string;
+  href: string;
+  title: string;
+  detail: string;
+  /** Parameters and notebook version that differ from other runs of the same notebook. */
+  differences: string;
+  summary: string;
+  /** Notebook title announced to screen readers when the visible title is the run date. */
+  context: string;
+}
+
+/**
+ * Format a timestamp as a short calendar date in UTC, in the visitor's locale.
+ *
+ * @param value - ISO 8601 timestamp from the API.
+ * @returns Day, abbreviated month and year.
+ */
+export function formatDate(value: string): string {
+  return new Date(value).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+/**
+ * List what sets one run apart from the other runs of its notebook on the same card.
+ * Settings shared by all of them are left out, since they do not help to choose between runs.
+ *
+ * @param analysis - The run being described.
+ * @param analyses - Every analysis on the card, including this one.
+ * @returns Differing parameters as "label: value", then the version if versions differ.
+ */
+function runDifferences(analysis: EventAnalysis, analyses: EventAnalysis[]): string {
+  const peers = analyses.filter((peer) => peer.purpose === analysis.purpose);
+  const parts = analysis.parameters
+    .filter((parameter) => {
+      const values = peers.map(
+        (peer) => peer.parameters.find((other) => other.name === parameter.name)?.value,
+      );
+
+      return new Set(values).size > 1;
+    })
+    .map((parameter) => `${parameter.label}: ${parameter.value}`);
+  const versions = new Set(peers.map((peer) => peer.template_version));
+
+  if (versions.size > 1 && analysis.template_version !== null)
+    parts.push(`Version ${analysis.template_version}`);
+
+  return parts.join('; ');
+}
+
+/**
+ * Describe each analysis so that re-runs can be told apart.
+ * When every row has the same notebook and area, the run date leads, because the notebook is
+ * already named on the card. The time is added only for matching rows that ran on the same day.
+ * Admin levels appear only when the card's analyses cover different areas.
+ *
+ * @param analyses - One event's published analyses, in display order.
+ * @returns Link text for each analysis, keeping the given order.
+ */
+export function analysisRows(analyses: EventAnalysis[]): AnalysisRow[] {
+  const rows = analyses.map((analysis) => {
+    const text = analysisText(analysis);
+    const area = analysis.area?.name ?? '';
+    // Custom titles carry no area suffix, so take the area from the API unless the title names it.
+    const location = text.location || (text.title.includes(area) ? '' : area);
+    const label = { title: text.title, location };
+    const day = formatDate(analysis.created_at);
+    const subject = JSON.stringify([label.title, label.location]);
+
+    return { analysis, label, day, subject };
+  });
+  const repeated = rows.length > 1 && new Set(rows.map((row) => row.subject)).size === 1;
+  const areas = new Set(analyses.map(({ area }) => JSON.stringify([area?.name, area?.level])));
+
+  return rows.map(({ analysis, label, day, subject }) => {
+    const sharesDay = rows.filter((row) => row.subject === subject && row.day === day).length > 1;
+    const time = new Date(analysis.created_at).toLocaleTimeString(undefined, {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'UTC',
+    });
+    const run = `Run ${day}${sharesDay ? `, ${time} UTC` : ''}`;
+    const level = areas.size > 1 ? analysis.area?.level_label : '';
+    const detail = [label.location, level, repeated ? '' : run].filter(Boolean).join(' \u00b7 ');
+
+    return {
+      id: analysis.id,
+      href: analysis.viewer_url,
+      title: repeated ? run : label.title,
+      detail,
+      differences: runDifferences(analysis, analyses),
+      summary: analysis.summary,
+      context: repeated ? label.title : '',
+    };
+  });
+}
+
 /**
  * Build the marker request with exactly the sidebar's filters, excluding its page number.
  *

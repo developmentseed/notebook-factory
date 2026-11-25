@@ -2,6 +2,20 @@
   font-family: system-ui, sans-serif;
   color: #20252a;
   background: #fafafa;
+  /* Shared page container: header, pages and the Explore column align to it. */
+  --page-max: 87.5rem;
+  --page-gutter: 1.5rem;
+  --page-edge: max(var(--page-gutter), calc((100vw - var(--page-max)) / 2 + var(--page-gutter)));
+}
+@media (width >= 112.5rem) {
+  :root {
+    --page-max: 105rem;
+  }
+}
+@media (width < 45rem) {
+  :root {
+    --page-gutter: 1rem;
+  }
 }
 body {
   margin: 0;
@@ -40,7 +54,8 @@ a {
   align-items: center;
   flex-wrap: wrap;
   gap: 1.5rem;
-  padding: 0 2rem;
+  /* Percentages, unlike 100vw, ignore a page scrollbar, so this stays aligned with .page. */
+  padding: 0 max(var(--page-gutter), calc((100% - var(--page-max)) / 2 + var(--page-gutter)));
   min-block-size: 5rem;
   border-block-end: 1px solid #e0e3e5;
   background: white;
@@ -77,9 +92,9 @@ a {
   margin-inline-start: auto;
 }
 .page {
-  max-inline-size: 80rem;
+  max-inline-size: var(--page-max);
   margin-inline: auto;
-  padding: 3rem 2rem 5rem;
+  padding: 3rem var(--page-gutter) 5rem;
 }
 .page:focus {
   outline: none;
