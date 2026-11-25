@@ -93,6 +93,35 @@ def schema_fields(schema: dict) -> list[Field]:
     return out
 
 
+def display_values(schema: dict, params: dict) -> list[dict[str, str]]:
+    """Describe a run's parameters for people, using the titles and enum labels of its schema.
+
+    Returns ``{name, label, value}`` rows sorted by parameter name, because stored JSON does not keep
+    the order a schema was written in. Blank values and empty lists are left out.
+    """
+    declared = {f.name: f for f in schema_fields(schema)}
+    params = params or {}
+    rows = []
+    for name in sorted(params):
+        value = params[name]
+        if value is None or value == "" or value == []:
+            continue
+        spec = declared.get(name)
+        labels = {str(choice): label for choice, label in (spec.choices if spec else [])}
+        shown = [
+            ("Yes" if item else "No") if isinstance(item, bool) else labels.get(str(item), str(item))
+            for item in (value if isinstance(value, list) else [value])
+        ]
+        rows.append(
+            {
+                "name": name,
+                "label": spec.title if spec else name.replace("_", " ").capitalize(),
+                "value": ", ".join(shown),
+            }
+        )
+    return rows
+
+
 def defaults(schema: dict) -> dict[str, Any]:
     return {f.name: f.default for f in schema_fields(schema) if f.default is not None}
 

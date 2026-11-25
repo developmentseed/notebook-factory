@@ -58,3 +58,28 @@ def test_validate_missing_required():
     with pytest.raises(P.ParameterError) as exc:
         P.validate(schema, {})
     assert "note" in exc.value.errors
+
+
+def test_display_values_use_schema_titles_and_labels_in_name_order():
+    schema = {
+        "properties": {
+            "hazard": {
+                "type": "string",
+                "title": "Hazard",
+                "enum": ["flood"],
+                "x-enum-labels": {"flood": "Riverine flood"},
+            },
+            "layers": {"type": "array", "items": {"enum": ["a", "b"], "x-enum-labels": {"a": "Schools"}}},
+            "detailed": {"type": "boolean"},
+            "note": {"type": "string"},
+        }
+    }
+    rows = P.display_values(
+        schema, {"extra_value": 3, "detailed": False, "layers": ["a", "b"], "hazard": "flood", "note": ""}
+    )
+    assert [(row["label"], row["value"]) for row in rows] == [
+        ("Detailed", "No"),
+        ("Extra value", "3"),
+        ("Hazard", "Riverine flood"),
+        ("Layers", "Schools, b"),
+    ]

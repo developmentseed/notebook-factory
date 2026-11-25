@@ -10,6 +10,7 @@ from django.urls import reverse
 
 from factory.events import refs as event_refs
 from factory.events.models import CatalogProfile, EventLinkOverride, LinkVerdict, StacItem
+from factory.notebooks import parameters as run_parameters
 
 
 def event_runs(queryset):
@@ -232,20 +233,52 @@ def event_cards(runs, groups):
                 "catalog": item.catalog.slug,
                 "date": item.occurred_at,
                 "purposes": purposes,
+                "hazards": card_hazards(analyses),
                 "analysis_count": len(analyses),
-                "analyses": [
-                    {
-                        "id": run.pk,
-                        "title": run.title,
-                        "purpose": run.notebook.title if run.notebook else "Uploaded analysis",
-                        "created_at": run.created_at,
-                        "viewer_url": reverse("web:run-view", args=[run.pk]),
-                    }
-                    for run in analyses
-                ],
+                "analyses": [analysis_row(run) for run in analyses],
             }
         )
     return cards
+
+
+def card_hazards(runs):
+    """Return the hazards tagged on these runs, once each, in the order staff gave the filter options.
+
+    Relies on ``run_facets__option__facet`` being prefetched, as ``NotebookRun.objects.with_related()`` does.
+    """
+    options = {
+        tag.option.pk: tag.option
+        for run in runs
+        for tag in run.run_facets.all()
+        if tag.option.facet.key == "hazard"
+    }
+    return [
+        {"key": option.key, "label": option.label}
+        for option in sorted(options.values(), key=lambda option: (option.order, option.label))
+    ]
+
+
+def analysis_row(run):
+    """Describe one published run, including what sets it apart from re-runs of the same notebook.
+
+    Parameter titles come from the template version that ran, falling back to the template's current
+    schema for runs made before versioning. Uploaded notebooks have neither.
+    """
+    source = run.template_version or run.notebook
+    area = run.area
+    return {
+        "id": run.pk,
+        "title": run.title,
+        "purpose": run.notebook.title if run.notebook else "Uploaded analysis",
+        "created_at": run.created_at,
+        "viewer_url": reverse("web:run-view", args=[run.pk]),
+        "area": {"name": area.name, "level": area.level, "level_label": area.display_level} if area else None,
+        "template_version": run.template_version.number if run.template_version else None,
+        "summary": run.summary,
+        "parameters": run_parameters.display_values(
+            source.parameter_schema if source else {}, run.parameters
+        ),
+    }
 
 
 def map_events(groups, page_size):
