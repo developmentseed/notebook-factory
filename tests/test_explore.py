@@ -5,7 +5,13 @@ from rest_framework.pagination import PageNumberPagination
 
 from factory.api.views import NotebookRunViewSet
 from factory.events.models import EventLinkOverride, StacCatalog, StacItem
-from factory.notebooks.models import AnalysisNotebook, NotebookRun, RunFacet, RunStatus
+from factory.notebooks.models import (
+    AnalysisNotebook,
+    NotebookRun,
+    RunFacet,
+    RunStatus,
+    TemplateVersion,
+)
 
 pytestmark = pytest.mark.django_db
 URL = "/api/runs/events/"
@@ -440,3 +446,67 @@ def test_explore_options_and_map_are_empty_without_active_catalog(client, montan
     montandon.save()
     assert client.get("/api/runs/explore-options/").json()["catalog"] is None
     assert client.get(MAP_URL).json() == {"count": 0, "analysis_count": 0, "results": []}
+
+
+def test_cards_describe_each_analysis_so_reruns_can_be_told_apart(client, event, make_run, template, nepal):
+    # The run's own version titles its parameters, not the template's newer schema.
+    version = TemplateVersion.objects.create(
+        notebook=template,
+        number=3,
+        notebook_path="exposure/notebook.ipynb",
+        parameter_schema={"properties": {"threshold": {"type": "number", "title": "Cut-off"}}},
+    )
+    make_run(event, template_version=version, summary="Second pass", parameters={"threshold": 2})
+    row = client.get(URL).json()["results"][0]["analyses"][0]
+    area = nepal["a1"]
+    assert row["area"] == {"name": area.name, "level": 1, "level_label": "Admin 1"}
+    assert row["template_version"] == 3
+    assert row["summary"] == "Second pass"
+    assert row["parameters"] == [{"name": "threshold", "label": "Cut-off", "value": "2"}]
+
+
+def test_runs_from_before_versioning_use_the_template_schema(client, event, make_run, template):
+    make_run(event, parameters={"threshold": 0.5, "verbose": True})
+    row = client.get(URL).json()["results"][0]["analyses"][0]
+    assert row["template_version"] is None
+    shown = [(row["label"], row["value"]) for row in row["parameters"]]
+    assert shown == [("Threshold", "0.5"), ("Verbose", "Yes")]
+
+
+def test_analyses_without_area_version_or_parameters_stay_explicit(client, event, template):
+    NotebookRun.objects.create(
+        notebook=template,
+        stac_item=event,
+        status=RunStatus.PUBLISHED,
+        output_url="/published/example/index.html",
+    )
+    row = client.get(URL).json()["results"][0]["analyses"][0]
+    assert row["area"] is None and row["template_version"] is None
+    assert row["summary"] == "" and row["parameters"] == []
+
+
+def test_card_hazards_follow_matching_analyses_in_option_order(client, event, make_run, hazards):
+    flood, quake = make_run(event), make_run(event)
+    RunFacet.objects.create(run=flood, option=hazards["flood"], source="manual")
+    RunFacet.objects.create(run=quake, option=hazards["flood"], source="manual")
+    RunFacet.objects.create(run=quake, option=hazards["earthquake"], source="manual")
+    expected = [
+        {"key": option.key, "label": option.label}
+        for option in sorted(hazards.values(), key=lambda option: (option.order, option.label))
+    ]
+    assert client.get(URL).json()["results"][0]["hazards"] == expected
+    filtered = client.get(URL, {"hazard": "earthquake"}).json()["results"][0]
+    assert {hazard["key"] for hazard in filtered["hazards"]} == {"flood", "earthquake"}
+
+
+def test_card_details_do_not_add_queries_per_analysis(
+    client, event, make_run, hazards, django_assert_max_num_queries
+):
+    for _ in range(2):
+        RunFacet.objects.create(run=make_run(event), option=hazards["flood"], source="manual")
+    with django_assert_max_num_queries(100) as small:
+        client.get(URL)
+    for _ in range(8):
+        RunFacet.objects.create(run=make_run(event), option=hazards["flood"], source="manual")
+    with django_assert_max_num_queries(len(small.captured_queries)):
+        client.get(URL)

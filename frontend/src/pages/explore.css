@@ -4,15 +4,31 @@
 }
 .explore-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(24rem, 29%);
-  min-block-size: calc(100dvh - 5rem);
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  grid-template-rows: minmax(0, 1fr);
+  block-size: calc(100dvh - 5rem);
+  min-block-size: 32rem;
+}
+/* Filters and cards scroll here, starting on the same edge as the page header. */
+.explore-content {
+  container: explore-content / inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-inline-size: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scroll-padding-block: 4rem var(--space-4);
+  padding-block: var(--space-5);
+  padding-inline: var(--page-edge) var(--page-gutter);
+  background: var(--gray-2);
 }
 .explore-workspace {
   position: relative;
   container: explore-workspace / inline-size;
-  block-size: calc(100dvh - 5rem);
-  min-block-size: 32rem;
+  min-block-size: 0;
   min-inline-size: 0;
+  border-inline-start: 1px solid var(--gray-6);
   background: var(--color-panel-solid);
 }
 .explore-sr-only {
@@ -25,18 +41,95 @@
 }
 .event-sidebar {
   min-inline-size: 0;
-  block-size: calc(100dvh - 5rem);
-  overflow-y: auto;
-  scrollbar-gutter: stable;
-  overscroll-behavior-y: contain;
-  scroll-padding-block: 4rem var(--space-4);
-  border-inline-start: 1px solid var(--gray-6);
-  background: var(--color-panel-solid);
+}
+.event-list {
+  display: grid;
+  gap: var(--space-3);
 }
 .event-card {
-  padding: var(--space-5);
-  border-block-end: 1px solid var(--gray-5);
-  scroll-margin-block: var(--space-4);
+  /* The hazard tile and disclosure chevron share one column; all card text starts after it. */
+  --event-rail: 2.75rem;
+  --event-rail-gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--gray-6);
+  border-radius: var(--radius-4);
+  background: var(--color-panel-solid);
+}
+.event-header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--event-rail-gap);
+}
+.event-heading {
+  min-inline-size: 0;
+}
+.hazard-tiles {
+  display: grid;
+  flex-shrink: 0;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hazard-tile {
+  display: grid;
+  place-items: center;
+  inline-size: var(--event-rail);
+  block-size: var(--event-rail);
+  border-radius: var(--radius-3);
+  background: var(--gray-4);
+  color: var(--gray-12);
+}
+/* One Radix colour per hazard; the icon stays legible on each fill. */
+.hazard-tile[data-hazard='flood'] {
+  background: var(--blue-9);
+  color: white;
+}
+.hazard-tile[data-hazard='cyclone'] {
+  background: var(--violet-9);
+  color: white;
+}
+.hazard-tile[data-hazard='heatwave'] {
+  background: var(--orange-9);
+  color: white;
+}
+.hazard-tile[data-hazard='drought'] {
+  background: var(--yellow-9);
+  color: var(--yellow-12);
+}
+.hazard-tile[data-hazard='wildfire'] {
+  background: var(--red-9);
+  color: white;
+}
+.hazard-tile[data-hazard='earthquake'] {
+  background: var(--slate-11);
+  color: white;
+}
+.hazard-tile[data-hazard='landslide'] {
+  background: var(--green-9);
+  color: white;
+}
+.hazard-tile[data-hazard='tsunami'] {
+  background: var(--teal-9);
+  color: white;
+}
+.hazard-tile[data-hazard='volcano'] {
+  background: var(--pink-9);
+  color: white;
+}
+.hazard-icon {
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  background: currentColor;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+}
+@media (forced-colors: active) {
+  .hazard-icon {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
 }
 .event-title {
   margin: 0;
@@ -48,35 +141,34 @@
   overflow-wrap: anywhere;
   text-wrap: balance;
 }
-.event-meta {
+.event-purposes {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  column-gap: var(--space-4);
-  row-gap: var(--space-1);
-  margin-block-start: var(--space-2);
-  color: var(--gray-11);
-  font-size: var(--font-size-2);
-  line-height: 1.6;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
 }
-.event-purpose {
+.event-purposes > li {
   min-inline-size: 0;
-  margin: 0;
-  font-size: inherit;
-  line-height: inherit;
+}
+/* Long notebook titles wrap inside the pill instead of overflowing narrow cards. */
+.event-purpose.rt-Badge {
+  white-space: normal;
   overflow-wrap: anywhere;
 }
 .event-date {
   display: block;
-  margin-block-end: var(--space-2);
+  /* Pull the line box up so the top of the lettering meets the top of the tile. */
+  margin-block: -0.125rem var(--space-2);
   font-size: var(--font-size-2);
-  line-height: 1.5;
+  line-height: 1;
   white-space: nowrap;
 }
 .event-toggle {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--event-rail-gap);
   inline-size: 100%;
   min-block-size: 2.75rem;
   margin-block-start: var(--space-2);
@@ -95,7 +187,8 @@
 }
 .event-chevron {
   display: inline-flex;
-  flex: 0 0 1.125rem;
+  flex: 0 0 var(--event-rail);
+  justify-content: center;
   color: var(--gray-11);
 }
 .event-toggle > .rt-Text {
@@ -107,7 +200,8 @@
 .event-analyses {
   list-style: none;
   margin: 0;
-  padding: 0 0 0 calc(1.125rem + var(--space-2));
+  padding: 0;
+  padding-inline-start: calc(var(--event-rail) + var(--event-rail-gap));
 }
 .event-analysis-link {
   display: flex;
@@ -129,11 +223,13 @@
   min-inline-size: 0;
 }
 .event-analysis-title {
+  font-variant-numeric: tabular-nums;
   line-height: 1.4;
   font-weight: 550;
   overflow-wrap: anywhere;
 }
-.event-analysis-location {
+.event-analysis-detail {
+  font-variant-numeric: tabular-nums;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -161,6 +257,10 @@
 .event-state {
   padding: var(--space-5);
 }
+.event-empty {
+  border: 1px dashed var(--gray-7);
+  border-radius: var(--radius-4);
+}
 .event-empty p {
   line-height: 1.6;
   margin-block: var(--space-3) var(--space-5);
@@ -171,7 +271,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-3);
-  padding: var(--space-5);
+  padding-block: var(--space-4);
 }
 @media (prefers-reduced-motion: no-preference) {
   .event-chevron {
@@ -187,9 +287,8 @@
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
-  border-block-end: 1px solid var(--gray-5);
-  background: var(--color-panel-solid);
+  padding-block: var(--space-2) var(--space-3);
+  background: var(--gray-2);
 }
 .event-sidebar-heading h2 {
   margin: 0;
@@ -207,23 +306,15 @@
 .explore-toolbar {
   --explore-action-size: 2.25rem;
   --explore-control-height: 2.5rem;
-  position: absolute;
-  inset-block-start: var(--space-5);
-  inset-inline-start: var(--space-5);
-  inline-size: fit-content;
-  max-inline-size: calc(100% - 2 * var(--space-5));
-  z-index: 3;
   display: grid;
-  grid-template-columns: minmax(0, 10rem) minmax(0, 10rem) minmax(0, 15rem) auto;
+  flex-shrink: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.5fr) auto;
   align-items: center;
   gap: var(--space-2) var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--gray-5);
-  border-radius: var(--radius-3);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--gray-6);
+  border-radius: var(--radius-4);
   background: var(--color-panel-solid);
-  box-shadow:
-    0 2px 6px rgb(30 36 30 / 6%),
-    0 8px 24px rgb(30 36 30 / 7%);
 }
 .explore-filter {
   display: flex;
@@ -395,7 +486,7 @@
 .map-notice,
 .map-data-error {
   position: absolute;
-  inset-block-start: 8rem;
+  inset-block-start: var(--space-5);
   inset-inline: var(--space-5);
   margin: 0;
   padding: var(--space-3);
@@ -408,7 +499,9 @@
 }
 .event-card[data-selected='true'],
 .event-card:focus-visible {
-  box-shadow: inset 5px 0 var(--accent-9);
+  border-color: var(--accent-9);
+  /* Inset, so the sticky heading and scrolling column cannot clip one edge of the ring. */
+  box-shadow: inset 0 0 0 1px var(--accent-9);
 }
 .event-card:focus {
   outline: none;
@@ -416,22 +509,26 @@
 @media (forced-colors: active) {
   .event-card[data-selected='true'],
   .event-card:focus-visible {
-    border-inline-start: 5px solid Highlight;
+    border: 3px solid Highlight;
   }
 }
 @media (width < 60rem) {
   .explore-layout {
     grid-template-columns: 1fr;
-    min-block-size: auto;
-  }
-  .event-sidebar {
+    grid-template-rows: auto;
     block-size: auto;
-    border-inline-start: 0;
-    border-block-start: 1px solid var(--gray-6);
-  }
-  .explore-workspace {
-    block-size: max(32rem, 65dvh);
     min-block-size: 0;
+  }
+  .explore-content {
+    overflow: visible;
+    padding: var(--page-gutter);
+  }
+  /* Stacked screens lead with the map. */
+  .explore-workspace {
+    order: -1;
+    block-size: 22.5rem;
+    border-inline-start: 0;
+    border-block-end: 1px solid var(--gray-6);
   }
 }
 
@@ -449,11 +546,8 @@
   inset-block-end: 5rem;
   inset-inline-end: var(--space-4);
 }
-@container explore-workspace (width < 40rem) {
+@container explore-content (width < 40rem) {
   .explore-toolbar {
-    inset: var(--space-3) var(--space-3) auto;
-    inline-size: auto;
-    max-inline-size: none;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
     gap: var(--space-2) var(--space-3);
     padding: var(--space-3);
@@ -483,6 +577,19 @@
     grid-column: 1 / -1;
     grid-row: 3;
   }
+}
+@container explore-content (width < 30rem) {
+  .event-card {
+    --event-rail: 2.25rem;
+    --event-rail-gap: var(--space-3);
+    padding-inline: var(--space-4);
+  }
+  .hazard-icon {
+    inline-size: 1.5rem;
+    block-size: 1.5rem;
+  }
+}
+@container explore-workspace (width < 40rem) {
   .map-legend {
     inset-inline-start: var(--space-3);
     inset-block-end: 4rem;

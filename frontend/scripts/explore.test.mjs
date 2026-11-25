@@ -19,6 +19,7 @@ const {
   changeExploreFilter,
   selectMapEvent,
   markerRadius,
+  analysisRows,
 } = await server.ssrLoadModule('/src/lib/explore.ts');
 const { EventCard } = await server.ssrLoadModule('/src/components/event-card.tsx');
 const { EventSidebar } = await server.ssrLoadModule('/src/components/event-sidebar.tsx');
@@ -29,6 +30,7 @@ const event = {
   catalog: 'montandon',
   date: '2026-08-25T00:00:00Z',
   purposes: ['Post-disaster impact'],
+  hazards: [{ key: 'flood', label: 'Flood' }],
   analysis_count: 1,
   analyses: [
     {
@@ -37,6 +39,10 @@ const event = {
       purpose: 'Post-disaster impact',
       created_at: '2026-08-26T00:00:00Z',
       viewer_url: '/runs/analysis-1/view/',
+      area: null,
+      template_version: 1,
+      summary: '',
+      parameters: [],
     },
   ],
 };
@@ -183,6 +189,100 @@ test('custom analysis titles remain complete', () => {
     title: 'Assessment for Central',
     location: '',
   });
+});
+
+const rerun = (id, createdAt, title = 'Post-disaster impact \u00b7 Nepal', extra = {}) => ({
+  id,
+  title,
+  purpose: 'Post-disaster impact',
+  created_at: createdAt,
+  viewer_url: `/runs/${id}/view/`,
+  area: { name: title.split(' \u00b7 ')[1], level: 1, level_label: 'Admin 1' },
+  template_version: 1,
+  summary: '',
+  parameters: [],
+  ...extra,
+});
+
+test('re-runs of one notebook and area are led by their run date', () => {
+  const rows = analysisRows([
+    rerun('b', '2026-09-03T10:00:00Z'),
+    rerun('a', '2026-09-02T10:00:00Z'),
+  ]);
+  assert.match(rows[0].title, /^Run .*3/);
+  assert.notEqual(rows[0].title, rows[1].title);
+  assert.equal(rows[0].detail, 'Nepal');
+  assert.equal(rows[0].context, 'Post-disaster impact');
+  assert.doesNotMatch(rows[0].title, /UTC/);
+});
+
+test('re-runs on the same day add the time', () => {
+  const rows = analysisRows([
+    rerun('b', '2026-09-02T14:24:00Z'),
+    rerun('a', '2026-09-02T14:21:00Z'),
+  ]);
+  assert.match(rows[0].title, /UTC$/);
+  assert.notEqual(rows[0].title, rows[1].title);
+});
+
+test('analyses of different areas keep their title and add the run date below', () => {
+  const rows = analysisRows([
+    rerun('b', '2026-09-02T14:24:00Z'),
+    rerun('a', '2026-09-02T14:21:00Z', 'Post-disaster impact \u00b7 Central'),
+  ]);
+  assert.equal(rows[0].title, 'Post-disaster impact');
+  assert.match(rows[0].detail, /^Nepal \u00b7 Admin 1 \u00b7 Run /);
+  assert.doesNotMatch(rows[0].detail, /UTC/);
+  assert.equal(rows[0].context, '');
+});
+
+test('rows show only the parameters and versions that differ between re-runs', () => {
+  const settings = (steps) => [
+    { name: 'source', label: 'Population data', value: 'WorldPop' },
+    { name: 'steps', label: 'Time steps', value: steps },
+  ];
+  const rows = analysisRows([
+    rerun('b', '2026-09-03T10:00:00Z', undefined, {
+      parameters: settings('2'),
+      template_version: 2,
+      summary: 'Updated extent',
+    }),
+    rerun('a', '2026-09-02T10:00:00Z', undefined, { parameters: settings('3') }),
+  ]);
+  assert.equal(rows[0].differences, 'Time steps: 2; Version 2');
+  assert.equal(rows[1].differences, 'Time steps: 3; Version 1');
+  assert.equal(rows[0].summary, 'Updated extent');
+});
+
+test('different notebooks are not compared with each other', () => {
+  const rows = analysisRows([
+    rerun('b', '2026-09-03T10:00:00Z', undefined, {
+      parameters: [{ name: 'top', label: 'Top areas', value: '10' }],
+    }),
+    rerun('a', '2026-09-02T10:00:00Z', undefined, { purpose: 'Response', template_version: 4 }),
+  ]);
+  assert.deepEqual(
+    rows.map((row) => row.differences),
+    ['', ''],
+  );
+});
+
+test('event cards name every hazard and show a neutral tile when none is tagged', () => {
+  const render = (hazards) =>
+    renderToStaticMarkup(
+      React.createElement(EventCard, {
+        event: { ...event, hazards },
+        open: false,
+        onOpenChange: () => {},
+      }),
+    );
+  const tagged = render([
+    { key: 'flood', label: 'Flood' },
+    { key: 'custom', label: 'Dust storm' },
+  ]);
+  assert.match(tagged, /data-hazard="flood"/);
+  assert.match(tagged, /Dust storm/);
+  assert.match(render([]), /class="hazard-tiles" aria-hidden="true"/);
 });
 
 test('map uses sidebar filters without pagination or selection state', () => {

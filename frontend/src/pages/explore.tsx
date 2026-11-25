@@ -64,7 +64,7 @@ export function Explore() {
  *
  * @param props - Registered controls and the resolved single-catalog configuration.
  * @param props.options - Django-provided choices, including the selected Montandon source.
- * @returns A filtered map and independently scrollable event sidebar.
+ * @returns A scrolling column of filters and event cards beside the filtered map.
  */
 function ExploreWorkspace({ options }: { options: ExploreOptions }) {
   const [params, setParams] = useSearchParams();
@@ -149,13 +149,39 @@ function ExploreWorkspace({ options }: { options: ExploreOptions }) {
       <Heading as='h1' className='explore-sr-only'>
         Explore analyses
       </Heading>
-      <div className='explore-workspace'>
+      <div className='explore-content'>
         <ExploreFilters
           options={options}
           params={params}
           onChange={changeFilter}
           onClear={clearFilters}
         />
+        <aside
+          className='event-sidebar'
+          aria-labelledby={cardData ? 'events-heading' : undefined}
+          aria-label={!cardData ? 'Event analyses' : undefined}
+          aria-busy={cards.status === 'loading'}
+        >
+          {cards.status === 'loading' && !cardData ? (
+            <div className='event-state'>
+              <Loading />
+            </div>
+          ) : cards.status === 'error' ? (
+            <div className='event-state'>
+              <LoadError message={cards.message} />
+            </div>
+          ) : cardData ? (
+            <EventSidebar
+              data={cardData}
+              params={params}
+              onToggle={toggleEvent}
+              onHover={setHovered}
+              loading={cards.status === 'loading'}
+            />
+          ) : null}
+        </aside>
+      </div>
+      <div className='explore-workspace'>
         <Suspense
           fallback={
             <div className='event-state'>
@@ -177,30 +203,6 @@ function ExploreWorkspace({ options }: { options: ExploreOptions }) {
           </div>
         ) : null}
       </div>
-      <aside
-        className='event-sidebar'
-        aria-labelledby={cardData ? 'events-heading' : undefined}
-        aria-label={!cardData ? 'Event analyses' : undefined}
-        aria-busy={cards.status === 'loading'}
-      >
-        {cards.status === 'loading' && !cardData ? (
-          <div className='event-state'>
-            <Loading />
-          </div>
-        ) : cards.status === 'error' ? (
-          <div className='event-state'>
-            <LoadError message={cards.message} />
-          </div>
-        ) : cardData ? (
-          <EventSidebar
-            data={cardData}
-            params={params}
-            onToggle={toggleEvent}
-            onHover={setHovered}
-            loading={cards.status === 'loading'}
-          />
-        ) : null}
-      </aside>
     </div>
   );
 }

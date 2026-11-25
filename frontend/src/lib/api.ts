@@ -24,6 +24,26 @@ export interface NotebookRun {
   created_at: string;
 }
 
+/** A hazard tagged on at least one of an event card's analyses. */
+export interface EventHazard {
+  key: string;
+  label: string;
+}
+
+/** The administrative area an analysis covers. */
+export interface AnalysisArea {
+  name: string;
+  level: number;
+  level_label: string;
+}
+
+/** One run parameter, titled and formatted for display by Django. */
+export interface AnalysisParameter {
+  name: string;
+  label: string;
+  value: string;
+}
+
 /** A published analysis belonging to a filtered Montandon event card. */
 export interface EventAnalysis {
   id: string;
@@ -31,6 +51,10 @@ export interface EventAnalysis {
   purpose: string;
   created_at: string;
   viewer_url: string;
+  area: AnalysisArea | null;
+  template_version: number | null;
+  summary: string;
+  parameters: AnalysisParameter[];
 }
 
 /** Catalog-scoped event identity, metadata, and all matching published analyses. */
@@ -40,6 +64,7 @@ export interface ExploreEvent {
   catalog: string;
   date: string | null;
   purposes: string[];
+  hazards: EventHazard[];
   analysis_count: number;
   analyses: EventAnalysis[];
 }

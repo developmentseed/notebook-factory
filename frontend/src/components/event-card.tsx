@@ -1,7 +1,8 @@
 import * as Collapsible from '@radix-ui/react-collapsible';
-import { Heading, Link, Text } from '@radix-ui/themes';
+import { Badge, Heading, Link, Text } from '@radix-ui/themes';
 import type { ExploreEvent } from '../lib/api';
-import { analysisText, eventCardId } from '../lib/explore';
+import { analysisRows, eventCardId, formatDate } from '../lib/explore';
+import { HazardTiles } from './hazard-tiles';
 
 /** Input contract for an event disclosure controlled by the Explore route. */
 interface EventCardProps {
@@ -47,31 +48,38 @@ export function EventCard({
           if (!focus.currentTarget.contains(focus.relatedTarget)) onHover?.(null);
         }}
       >
-        {event.date ? (
-          <Text size='2' color='gray' className='event-date' asChild>
-            <time dateTime={event.date}>
-              {new Date(event.date).toLocaleDateString(undefined, {
-                day: 'numeric',
-                month: 'short',
-                year: 'numeric',
-                timeZone: 'UTC',
-              })}
-            </time>
-          </Text>
-        ) : (
-          <Text size='2' color='gray' className='event-date'>
-            Date unavailable
-          </Text>
-        )}
-        <Heading as='h3' size='5' weight='medium' className='event-title'>
-          {event.title}
-        </Heading>
-        <div className='event-meta'>
-          <Text as='p' size='2' className='event-purpose'>
-            {event.purposes.length === 1
-              ? event.purposes[0]
-              : `${event.purposes.length} analysis types`}
-          </Text>
+        <div className='event-header'>
+          <HazardTiles hazards={event.hazards} />
+          <div className='event-heading'>
+            {event.date ? (
+              <Text size='2' color='gray' className='event-date' asChild>
+                <time dateTime={event.date}>{formatDate(event.date)}</time>
+              </Text>
+            ) : (
+              <Text size='2' color='gray' className='event-date'>
+                Date unavailable
+              </Text>
+            )}
+            <Heading as='h3' size='5' weight='medium' className='event-title'>
+              {event.title}
+            </Heading>
+            <ul className='event-purposes' aria-label='Notebooks'>
+              {event.purposes.map((purpose) => (
+                <li key={purpose}>
+                  <Badge
+                    className='event-purpose'
+                    color='gray'
+                    variant='soft'
+                    radius='full'
+                    size='2'
+                    highContrast
+                  >
+                    {purpose}
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
         <Collapsible.Trigger
           className='event-toggle'
@@ -97,41 +105,46 @@ export function EventCard({
         </Collapsible.Trigger>
         <Collapsible.Content className='event-content'>
           <ul className='event-analyses'>
-            {event.analyses.map((analysis) => {
-              const label = analysisText(analysis);
-
-              return (
-                <li key={analysis.id}>
-                  <Link asChild highContrast underline='none' className='event-analysis-link'>
-                    <a href={analysis.viewer_url} aria-label={analysis.title}>
-                      <span className='event-analysis-copy'>
-                        <Text as='span' size='3' weight='medium' className='event-analysis-title'>
-                          {label.title}
-                        </Text>
-                        {label.location ? (
-                          <Text as='span' size='2' color='gray' className='event-analysis-location'>
-                            {label.location}
+            {analysisRows(event.analyses).map((row) => (
+              <li key={row.id}>
+                <Link asChild highContrast underline='none' className='event-analysis-link'>
+                  <a href={row.href}>
+                    <span className='event-analysis-copy'>
+                      {row.context ? <span className='explore-sr-only'>{row.context}</span> : null}
+                      <Text as='span' size='3' weight='medium' className='event-analysis-title'>
+                        {row.title}
+                      </Text>
+                      {[row.detail, row.differences, row.summary].map((line, index) =>
+                        line ? (
+                          <Text
+                            key={index}
+                            as='span'
+                            size='2'
+                            color='gray'
+                            className='event-analysis-detail'
+                          >
+                            {line}
                           </Text>
-                        ) : null}
-                      </span>
-                      <svg
-                        width='18'
-                        height='18'
-                        viewBox='0 0 24 24'
-                        fill='none'
-                        stroke='currentColor'
-                        strokeWidth='1.5'
-                        strokeLinecap='round'
-                        strokeLinejoin='round'
-                        aria-hidden='true'
-                      >
-                        <path d='m9 5 7 7-7 7' />
-                      </svg>
-                    </a>
-                  </Link>
-                </li>
-              );
-            })}
+                        ) : null,
+                      )}
+                    </span>
+                    <svg
+                      width='18'
+                      height='18'
+                      viewBox='0 0 24 24'
+                      fill='none'
+                      stroke='currentColor'
+                      strokeWidth='1.5'
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                      aria-hidden='true'
+                    >
+                      <path d='m9 5 7 7-7 7' />
+                    </svg>
+                  </a>
+                </Link>
+              </li>
+            ))}
           </ul>
         </Collapsible.Content>
       </article>

@@ -310,6 +310,29 @@ class NotebookRunDetailSerializer(NotebookRunSerializer):
         fields = NotebookRunSerializer.Meta.fields + ["log", "notify_emails"]
 
 
+class ExploreHazardSerializer(serializers.Serializer):
+    """A hazard tagged on at least one of an event card's analyses."""
+
+    key = serializers.CharField()
+    label = serializers.CharField()
+
+
+class ExploreAreaSerializer(serializers.Serializer):
+    """The administrative area an analysis covers, without its geometry."""
+
+    name = serializers.CharField()
+    level = serializers.IntegerField()
+    level_label = serializers.CharField()
+
+
+class ExploreParameterSerializer(serializers.Serializer):
+    """One run parameter, already titled and formatted for display."""
+
+    name = serializers.CharField()
+    label = serializers.CharField()
+    value = serializers.CharField()
+
+
 class ExploreAnalysisSerializer(serializers.Serializer):
     """A published analysis link inside a filtered Explore event card."""
 
@@ -318,6 +341,10 @@ class ExploreAnalysisSerializer(serializers.Serializer):
     purpose = serializers.CharField()
     created_at = serializers.DateTimeField()
     viewer_url = serializers.CharField()
+    area = ExploreAreaSerializer(allow_null=True)
+    template_version = serializers.IntegerField(allow_null=True)
+    summary = serializers.CharField(allow_blank=True)
+    parameters = ExploreParameterSerializer(many=True)
 
 
 class ExploreEventSerializer(serializers.Serializer):
@@ -328,6 +355,7 @@ class ExploreEventSerializer(serializers.Serializer):
     catalog = serializers.CharField()
     date = serializers.DateTimeField(allow_null=True)
     purposes = serializers.ListField(child=serializers.CharField())
+    hazards = ExploreHazardSerializer(many=True)
     analysis_count = serializers.IntegerField()
     analyses = ExploreAnalysisSerializer(many=True)
 
